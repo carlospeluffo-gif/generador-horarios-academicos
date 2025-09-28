@@ -554,108 +554,108 @@ def exportar_horario(asignaciones):
 # ========================================================
 
 def main():
-    # Configuración de la página
-st.set_page_config(
-    page_title="Generador de Horarios Académicos",
-    page_icon="📅",
-    layout="wide"
-)
-
-# ======== PANTALLA DE BIENVENIDA ========
-st.markdown(
-    """
-    <div style='text-align: center; margin-top:50px;'>
-        <h1 style='color: #2E86C1; font-size: 60px; font-weight:bold;'>
-            GENERACIÓN DE HORARIOS ACADÉMICOS
-        </h1>
-        <h3 style='color: #5D6D7E; font-size:28px;'>
-            CON ALGORITMOS GENÉTICOS
-        </h3>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-
-st.markdown("<br><br>", unsafe_allow_html=True)
-
-# Input para sigla del departamento
-usuario = st.text_input(
-    "Ingrese la sigla de su departamento (ej: MATE, QUIM, FIS)", 
-    max_chars=10
-)
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-# Mostrar botones tipo card para seleccionar programa
-programas = [
-    "Ingeniería Matemática",
-    "Licenciatura en Física",
-    "Química Industrial",
-    "Biología",
-    "Ingeniería Química",
-    "Matemática Aplicada"
-]
-
-st.markdown("### Seleccione su programa académico:")
-col1, col2, col3 = st.columns(3)
-
-programa_seleccionado = None
-for i, prog in enumerate(programas):
-    col = [col1, col2, col3][i % 3]
-    if col.button(prog, key=f"prog_{i}", help=f"Selecciona {prog}"):
-        programa_seleccionado = prog
-
-# Confirmación de selección
-if usuario and programa_seleccionado:
-    st.success(f"✅ Departamento: **{usuario}** | Programa: **{programa_seleccionado}**")
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.info("Ahora puedes continuar para cargar tu archivo Excel y generar horarios.")
-    st.title("📅 Generador de Horarios Académicos")
-    st.markdown("### Sistema de optimización con Algoritmos Genéticos")
-    
-    # Sidebar para configuración
-    st.sidebar.header("⚙️ Configuración")
-    
-    # Upload del archivo Excel
-    uploaded_file = st.sidebar.file_uploader(
-        "📁 Cargar archivo Excel con datos de profesores y cursos",
-        type=['xlsx', 'xls'],
-        help="El archivo debe contener columnas como: Profesor, Curso/Materia, Créditos, Estudiantes"
+    st.set_page_config(
+        page_title="Generador de Horarios con Algoritmos Genéticos",
+        page_icon="📅",
+        layout="wide"
     )
     
-    if uploaded_file is not None:
-        # Guardar archivo temporalmente
-        with open("temp_excel.xlsx", "wb") as f:
-            f.write(uploaded_file.getbuffer())
-        
-        # Inicializar configuración
-        global config, bloques
-        config = ConfiguracionSistema("temp_excel.xlsx")
-        bloques = generar_bloques()
-        
-        if config.profesores_config:
-            st.success("✅ Archivo cargado correctamente")
+    # ======== PANTALLA DE BIENVENIDA ========
+    st.markdown(
+        """
+        <div style='text-align: center; margin-top:50px;'>
+            <h1 style='color: #2E86C1; font-size: 60px; font-weight:bold;'>
+                GENERACIÓN DE HORARIOS ACADÉMICOS
+            </h1>
+            <h3 style='color: #5D6D7E; font-size:28px;'>
+                CON ALGORITMOS GENÉTICOS
+            </h3>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.markdown("<br><br>", unsafe_allow_html=True)
+
+    # Input para sigla del departamento
+    usuario = st.text_input(
+        "Ingrese la sigla de su departamento (ej: MATE, QUIM, FIS)", 
+        max_chars=10
+    )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Botones tipo card para seleccionar programa
+    programas = [
+        "Ingeniería Matemática",
+        "Licenciatura en Física",
+        "Química Industrial",
+        "Biología",
+        "Ingeniería Química",
+        "Matemática Aplicada"
+    ]
+
+    st.markdown("### Seleccione su programa académico:")
+    col1, col2, col3 = st.columns(3)
+    
+    # Variable para guardar selección
+    if 'programa_seleccionado' not in st.session_state:
+        st.session_state.programa_seleccionado = None
+
+    for i, prog in enumerate(programas):
+        col = [col1, col2, col3][i % 3]
+        if col.button(prog, key=f"prog_{i}", help=f"Selecciona {prog}"):
+            st.session_state.programa_seleccionado = prog
+
+    # Botón “Siguiente” que desbloquea carga de Excel
+    if st.button("➡️ Siguiente"):
+        if not usuario:
+            st.warning("⚠️ Ingresa la sigla de tu departamento antes de continuar.")
+        elif st.session_state.programa_seleccionado is None:
+            st.warning("⚠️ Selecciona un programa antes de continuar.")
+        else:
+            st.success(f"✅ Departamento: **{usuario}** | Programa: **{st.session_state.programa_seleccionado}**")
             
-            # Mostrar resumen de datos cargados
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("👨‍🏫 Profesores", len(config.profesores_config))
-            with col2:
-                total_cursos = sum(len(prof['cursos']) for prof in config.profesores_config.values())
-                st.metric("📚 Cursos", total_cursos)
-            with col3:
-                st.metric("🏫 Salones", len(config.salones))
+            # ======== SECCIÓN EXISTENTE DE CARGA DE EXCEL ========
+            uploaded_file = st.file_uploader(
+                "📁 Cargar archivo Excel con datos de profesores y cursos",
+                type=['xlsx', 'xls'],
+                help="El archivo debe contener columnas como: Profesor, Curso/Materia, Créditos, Estudiantes"
+            )
             
-            # Mostrar datos cargados
-            with st.expander("📋 Ver datos cargados"):
-                for profesor, data in config.profesores_config.items():
-                    st.write(f"**{profesor}** ({data['creditos_totales']} créditos)")
-                    for curso in data['cursos']:
-                        st.write(f"  - {curso['nombre']} ({curso['creditos']} créditos, {curso['estudiantes']} estudiantes)")
-            
-            # Configuración de parámetros
-            st.sidebar.subheader("🎯 Parámetros de Optimización")
-            intentos = st.sidebar.slider("Número de iteraciones", 50, 500, 200, 50)
+            if uploaded_file is not None:
+                # Guardar archivo temporalmente
+                with open("temp_excel.xlsx", "wb") as f:
+                    f.write(uploaded_file.getbuffer())
+                
+                # Inicializar configuración
+                global config, bloques
+                config = ConfiguracionSistema("temp_excel.xlsx")
+                bloques = generar_bloques()
+                
+                if config.profesores_config:
+                    st.success("✅ Archivo cargado correctamente")
+                    
+                    # Mostrar resumen de datos cargados
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("👨‍🏫 Profesores", len(config.profesores_config))
+                    with col2:
+                        total_cursos = sum(len(prof['cursos']) for prof in config.profesores_config.values())
+                        st.metric("📚 Cursos", total_cursos)
+                    with col3:
+                        st.metric("🏫 Salones", len(config.salones))
+                    
+                    # Mostrar datos cargados
+                    with st.expander("📋 Ver datos cargados"):
+                        for profesor, data in config.profesores_config.items():
+                            st.write(f"**{profesor}** ({data['creditos_totales']} créditos)")
+                            for curso in data['cursos']:
+                                st.write(f"  - {curso['nombre']} ({curso['creditos']} créditos, {curso['estudiantes']} estudiantes)")
+                    
+                    # Configuración de parámetros
+                    st.sidebar.subheader("🎯 Parámetros de Optimización")
+                    intentos = st.sidebar.slider("Número de iteraciones", 50, 500, 200, 50)
             
             # Configuración de restricciones
             with st.sidebar.expander("🔒 Restricciones Globales"):
