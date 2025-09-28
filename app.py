@@ -3,50 +3,241 @@ import pandas as pd
 import random
 import json
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
+import copy
 import io
 
 # ========================================================
-# CONFIGURACIÓN Y UTILIDADES
+# CONFIGURACIÓN DEL SISTEMA - CARGA DESDE EXCEL
 # ========================================================
 
-def generar_salones_por_defecto():
-    return {
-        "QUIM": [f"Química {i+1}" for i in range(40)],
-        "MATE": [f"Matemática {i+1}" for i in range(33)],
-        "FIS": [f"Física {i+1}" for i in range(28)],
-        "BIO": [f"Biología {i+1}" for i in range(25)],
-    }
+class ConfiguracionSistema:
+    def __init__(self, archivo_excel=None):
+        self.archivo_excel = archivo_excel
+        self.profesores_config = {}
+        self.salones = []
+        self.cursos_df = None
+        
+        # Configuración por defecto de restricciones globales
+        self.restricciones_globales = {
+            "horarios_prohibidos": {
+                "Ma": [("10:30", "12:30")],
+                "Ju": [("10:30", "12:30")]
+            },
+            "hora_inicio_min": "07:30",
+            "hora_fin_max": "19:30",
+            "creditos_max_profesor": 15,
+            "creditos_min_profesor": 8,
+            "estudiantes_max_salon": 50,
+            "horas_max_dia": 8,
+            "dias_max_profesor": 5
+        }
+        
+        # Pesos para restricciones suaves
+        self.pesos_restricciones = {
+            "horario_preferido": 30,
+            "compactacion_horario": 20,
+            "equilibrio_creditos": 25,
+            "utilizacion_salones": 15,
+            "estudiantes_por_salon": 10,
+            "horas_consecutivas": 18,
+            "distribucion_semanal": 12,
+            "evitar_horas_pico": 8
+        }
+        
+        if archivo_excel:
+            self.cargar_desde_excel()
+    
+    def cargar_desde_excel(self):
+        """Carga la configuración desde el archivo Excel"""
+        try:
+            # Leer todas las hojas del Excel
+            excel_data = pd.read_excel(self.archivo_excel, sheet_name=None)
+            
+            st.write(f"📊 Hojas disponibles en el Excel: {list(excel_data.keys())}")
+            
+            # Buscar la hoja que contiene los datos de cursos
+            hoja_cursos = None
+            for nombre_hoja, df in excel_data.items():
+                st.write(f"\n🔍 Analizando hoja '{nombre_hoja}':")
+                st.write(f"Columnas: {list(df.columns)}")
+                
+                # Verificar si esta hoja contiene información de cursos
+                columnas_df = [col.lower().strip() for col in df.columns]
+                
+                if any('profesor' in col or 'docente' in col for col in columnas_df) and any('curso' in col or 'materia' in col or 'asignatura' in col for col in columnas_df):
+                    hoja_cursos = df
+                    st.success(f"✅ Hoja '{nombre_hoja}' seleccionada como fuente de datos")
+                    break
+            
+            if hoja_cursos is None:
+                st.error("❌ No se encontró una hoja con datos de cursos válidos")
+                return
+            
+            self.cursos_df = hoja_cursos
+            self.procesar_datos_excel()
+            
+        except Exception as e:
+            st.error(f"❌ Error al cargar el archivo Excel: {e}")
+            st.info("ℹ️ Usando configuración por defecto")
+    
+    def procesar_datos_excel(self):
+        """Procesa los datos del Excel y crea la configuración de profesores"""
+        if self.cursos_df is None:
+            return
+        
+        df = self.cursos_df.copy()
+        
+        # Normalizar nombres de columnas
+        df.columns = [col.lower().strip().replace(' ', '_') for col in df.columns]
+        
+        # Mapear columnas comunes
+        mapeo_columnas = {
+            'profesor': ['profesor', 'docente', 'teacher', 'instructor'],
+            'curso': ['curso', 'materia', 'asignatura', 'subject', 'course'],
+            'creditos': ['creditos', 'créditos', 'credits', 'horas'],
+            'estudiantes': ['estudiantes', 'alumnos', 'students', 'enrollment', 'seccion']
+        }
+        
+        columnas_finales = {}
+        for campo, posibles in mapeo_columnas.items():
+            for col in df.columns:
+                if any(pos in col for pos in posibles):
+                    columnas_finales[campo] = col
+                    break
+        
+        st.write(f"🔗 Mapeo de columnas: {columnas_finales}")
+        
+        # Verificar que tenemos las columnas mínimas necesarias
+        if 'profesor' not in columnas_finales or 'curso' not in columnas_finales:
+            st.error("❌ Error: No se encontraron las columnas básicas (profesor, curso)")
+            return
+        
+        # Asignar valores por defecto si faltan columnas
+        if 'creditos' not in columnas_finales:
+            df['creditos_default'] = 3
+            columnas_finales['creditos'] = 'creditos_default'
+            st.warning("⚠️ No se encontró columna de créditos, usando 3 por defecto")
+        
+        if 'estudiantes' not in columnas_finales:
+            df['estudiantes_default'] = 30
+            columnas_finales['estudiantes'] = 'estudiantes_default'
+            st.warning("⚠️ No se encontró columna de estudiantes, usando 30 por defecto")
+        
+        # Limpiar datos
+        df = df.dropna(subset=[columnas_finales['profesor'], columnas_finales['curso']])
+        
+        # Procesar cada profesor
+        profesores_unicos = df[columnas_finales['profesor']].unique()
+        st.info(f"👨‍🏫 Profesores encontrados: {len(profesores_unicos)}")
+        
+        for profesor in profesores_unicos:
+            if pd.isna(profesor) or str(profesor).strip() == '':
+                continue
+                
+            profesor = str(profesor).strip()
+            cursos_profesor = df[df[columnas_finales['profesor']] == profesor]
+            
+            cursos_lista = []
+            creditos_totales = 0
+            
+            for _, fila in cursos_profesor.iterrows():
+                curso_nombre = str(fila[columnas_finales['curso']]).strip()
+                
+                # Manejar créditos
+                try:
+                    creditos = int(float(fila[columnas_finales['creditos']]))
+                except (ValueError, TypeError):
+                    creditos = 3
+                
+                # Manejar estudiantes
+                try:
+                    estudiantes = int(float(fila[columnas_finales['estudiantes']]))
+                except (ValueError, TypeError):
+                    estudiantes = 30
+                
+                if curso_nombre and curso_nombre != 'nan':
+                    cursos_lista.append({
+                        "nombre": curso_nombre,
+                        "creditos": creditos,
+                        "estudiantes": estudiantes
+                    })
+                    creditos_totales += creditos
+            
+            if cursos_lista:
+                self.profesores_config[profesor] = {
+                    "cursos": cursos_lista,
+                    "creditos_totales": creditos_totales,
+                    "horario_preferido": {},
+                    "horario_no_disponible": {}
+                }
+                
+                st.write(f"📚 {profesor}: {len(cursos_lista)} cursos, {creditos_totales} créditos totales")
+        
+        # Generar salones automáticamente basado en el número de cursos
+        total_cursos = sum(len(config['cursos']) for config in self.profesores_config.values())
+        num_salones = max(3, min(10, total_cursos // 3))
+        self.salones = [f"Salon {i+1}" for i in range(num_salones)]
+        
+        st.success(f"✅ Configuración completada: {len(self.profesores_config)} profesores, {num_salones} salones")
 
-def cargar_salones_desde_excel(file):
-    salones_por_depto = {}
-    df = pd.read_excel(file)
-    columnas = {c.lower().strip(): c for c in df.columns}
+# Generador de bloques según especificaciones
+def generar_bloques():
+    bloques = []
+    id_counter = 1
 
-    col_departamento = columnas.get("departamento")
-    col_salon = columnas.get("salon") or columnas.get("salón") or columnas.get("room")
+    # Bloques de 4 créditos (4 días, 1 hora cada día)
+    combinaciones_4dias = [
+        ["Lu","Ma","Mi","Ju"],
+        ["Lu","Ma","Mi","Vi"],
+        ["Lu","Ma","Ju","Vi"],
+        ["Lu","Mi","Ju","Vi"],
+        ["Ma","Mi","Ju","Vi"],
+    ]
+    for dias in combinaciones_4dias:
+        bloques.append({"id": id_counter, "dias": dias, "horas": [1]*4, "creditos": 4})
+        id_counter += 1
 
-    if not col_departamento or not col_salon:
-        st.warning("No se encontraron columnas 'Departamento' y 'Salon' en el Excel. Se usarán los salones por defecto.")
-        return salones_por_depto
+    # Bloques de 4 créditos (2 días, 2 horas cada día)
+    combinaciones_2dias = [
+        ["Lu","Mi"],
+        ["Lu","Vi"],
+        ["Ma","Ju"],
+        ["Mi","Vi"],
+    ]
+    for dias in combinaciones_2dias:
+        bloques.append({"id": id_counter, "dias": dias, "horas": [2,2], "creditos": 4})
+        id_counter += 1
 
-    for _, row in df.iterrows():
-        depto = str(row[col_departamento]).strip().upper()
-        salon = str(row[col_salon]).strip()
-        if depto and salon:
-            salones_por_depto.setdefault(depto, []).append(salon)
+    # Bloques de 3 créditos
+    bloques.append({"id": id_counter, "dias": ["Lu","Mi","Vi"], "horas": [1,1,1], "creditos": 3})
+    id_counter += 1
+    bloques.append({"id": id_counter, "dias": ["Ma","Ju"], "horas": [1.5,1.5], "creditos": 3})
+    id_counter += 1
 
-    return salones_por_depto
+    # Bloques de 5 créditos
+    combinaciones_5creditos = [
+        (["Lu","Mi","Vi"], [2,2,1]),
+        (["Lu","Ma","Mi","Vi"], [1,1,1,2]),
+        (["Lu","Ma","Ju","Vi"], [1,1,1,2]),
+        (["Lu","Mi","Ju","Vi"], [1,1,1,2]),
+        (["Ma","Mi","Ju","Vi"], [1,1,1,2]),
+        (["Ma","Ju","Vi"], [1.5,1.5,2]),
+        (["Lu","Ma","Mi","Ju","Vi"], [1,1,1,1,1]),
+        (["Lu","Ma","Mi"], [2,1,2]),
+    ]
+    for dias, horas in combinaciones_5creditos:
+        bloques.append({"id": id_counter, "dias": dias, "horas": horas, "creditos": 5})
+        id_counter += 1
 
-def a_minutos(hhmm):
-    h, m = map(int, hhmm.split(":"))
-    return h * 60 + m
+    # Bloques de 3 créditos (un solo día con 3 horas)
+    for dia in ["Lu","Ma","Mi","Ju","Vi"]:
+        bloques.append({"id": id_counter, "dias": [dia], "horas": [3], "creditos": 3})
+        id_counter += 1
 
-def es_bloque_tres_horas_valido(dia, hora_inicio, duracion, creditos):
-    if creditos == 3 and duracion == 3 and dia in ["Lu", "Ma", "Mi", "Ju", "Vi"]:
-        return a_minutos(hora_inicio) >= a_minutos("15:30")
-    return True
+    return bloques
 
+# Tabla de créditos adicionales por tamaño de sección
 tabla_creditos = {
     1: [(1,44,0),(45,74,0.5),(75,104,1),(105,134,1.5),(135,164,2),(165,194,2.5),
         (195,224,3),(225,254,3.5),(255,284,4),(285,314,4.5),(315,344,5),(345,374,5.5),
@@ -69,54 +260,14 @@ tabla_creditos = {
 }
 
 def calcular_creditos_adicionales(horas_contacto, estudiantes):
-    rangos = tabla_creditos.get(horas_contacto, [])
-    for minimo, maximo, creditos in rangos:
+    if horas_contacto not in tabla_creditos:
+        return 0
+    for minimo, maximo, creditos in tabla_creditos[horas_contacto]:
         if minimo <= estudiantes <= maximo:
             return creditos
     return 0
 
-def generar_bloques():
-    bloques = []
-    id_counter = 1
-    combinaciones_4dias = [
-        ["Lu","Ma","Mi","Ju"],
-        ["Lu","Ma","Mi","Vi"],
-        ["Lu","Ma","Ju","Vi"],
-        ["Lu","Mi","Ju","Vi"],
-        ["Ma","Mi","Ju","Vi"],
-    ]
-    for dias in combinaciones_4dias:
-        bloques.append({"id": id_counter, "dias": dias, "horas": [1]*4, "creditos": 4})
-        id_counter += 1
-
-    combinaciones_2dias = [["Lu","Mi"],["Lu","Vi"],["Ma","Ju"],["Mi","Vi"]]
-    for dias in combinaciones_2dias:
-        bloques.append({"id": id_counter, "dias": dias, "horas": [2,2], "creditos": 4})
-        id_counter += 1
-
-    bloques.append({"id": id_counter, "dias": ["Lu","Mi","Vi"], "horas": [1,1,1], "creditos": 3}); id_counter += 1
-    bloques.append({"id": id_counter, "dias": ["Ma","Ju"], "horas": [1.5,1.5], "creditos": 3}); id_counter += 1
-
-    combinaciones_5creditos = [
-        (["Lu","Mi","Vi"], [2,2,1]),
-        (["Lu","Ma","Mi","Vi"], [1,1,1,2]),
-        (["Lu","Ma","Ju","Vi"], [1,1,1,2]),
-        (["Lu","Mi","Ju","Vi"], [1,1,1,2]),
-        (["Ma","Mi","Ju","Vi"], [1,1,1,2]),
-        (["Ma","Ju","Vi"], [1.5,1.5,2]),
-        (["Lu","Ma","Mi","Ju","Vi"], [1,1,1,1,1]),
-        (["Lu","Ma","Mi"], [2,1,2]),
-    ]
-    for dias, horas in combinaciones_5creditos:
-        bloques.append({"id": id_counter, "dias": dias, "horas": horas, "creditos": 5})
-        id_counter += 1
-
-    for dia in ["Lu","Ma","Mi","Ju","Vi"]:
-        bloques.append({"id": id_counter, "dias": [dia], "horas": [3], "creditos": 3})
-        id_counter += 1
-
-    return bloques
-
+# Horario de 7:00 a 19:20 en intervalos de 30 minutos
 horas_inicio = []
 for h in range(7, 20):
     for m in [0, 30]:
@@ -124,178 +275,76 @@ for h in range(7, 20):
             break
         horas_inicio.append(f"{h:02d}:{m:02d}")
 
-# ========================================================
-# CONFIGURACIÓN DEL SISTEMA
-# ========================================================
+def a_minutos(hhmm):
+    h, m = map(int, hhmm.split(":"))
+    return h * 60 + m
 
-class ConfiguracionSistema:
-    def __init__(self):
-        self.profesores_config = {}
-        self.salones = []
-        self.cursos_df = None
-        self.restricciones_globales = {
-            "horarios_prohibidos": {"Ma": [("10:30", "12:30")], "Ju": [("10:30", "12:30")]},
-            "hora_inicio_min": "07:30",
-            "hora_fin_max": "19:30",
-            "creditos_max_profesor": 15,
-            "creditos_min_profesor": 8,
-            "estudiantes_max_salon": 50,
-            "horas_max_dia": 8,
-            "dias_max_profesor": 5
-        }
-        self.pesos_restricciones = {
-            "horario_preferido": 30,
-            "compactacion_horario": 20,
-            "equilibrio_creditos": 25,
-            "utilizacion_salones": 15,
-            "estudiantes_por_salon": 10,
-            "horas_consecutivas": 18,
-            "distribucion_semanal": 12,
-            "evitar_horas_pico": 8
-        }
-
-    def cargar_cursos(self, archivo_excel, depto, programa):
-        try:
-            excel_data = pd.read_excel(archivo_excel, sheet_name=None)
-            hoja_cursos = None
-            for nombre_hoja, df in excel_data.items():
-                columnas_lower = [c.lower().strip() for c in df.columns]
-                if any("profesor" in c or "docente" in c for c in columnas_lower) and \
-                   any("curso" in c or "materia" in c or "asignatura" in c for c in columnas_lower):
-                    hoja_cursos = df.copy()
-                    break
-
-            if hoja_cursos is None:
-                st.error("No se encontró una hoja válida con datos de cursos.")
+def es_bloque_tres_horas_valido(dia, hora_inicio, duracion, creditos):
+    """Restricción: Las clases de 3 créditos con 3 horas consecutivas 
+    SOLO pueden programarse después de las 15:30 (3:30 PM) de lunes a viernes."""
+    if creditos == 3 and duracion == 3:
+        dias_semana = ["Lu", "Ma", "Mi", "Ju", "Vi"]
+        if dia in dias_semana:
+            inicio_minutos = a_minutos(hora_inicio)
+            restriccion_minutos = a_minutos("15:30")
+            if inicio_minutos < restriccion_minutos:
                 return False
-
-            hoja_cursos.columns = [c.lower().strip().replace(" ", "_") for c in hoja_cursos.columns]
-            mapeo = {
-                "profesor": ["profesor", "docente", "teacher", "instructor"],
-                "curso": ["curso", "materia", "asignatura", "subject", "course"],
-                "creditos": ["creditos", "créditos", "credits", "horas"],
-                "estudiantes": ["estudiantes", "alumnos", "students", "enrollment", "seccion"],
-                "departamento": ["departamento", "department", "area", "siglas"],
-                "programa": ["programa", "program", "carrera", "major"]
-            }
-
-            cols = {}
-            for campo, opciones in mapeo.items():
-                for col in hoja_cursos.columns:
-                    if any(op in col for op in opciones):
-                        cols[campo] = col
-                        break
-
-            if "profesor" not in cols or "curso" not in cols:
-                st.error("No se encontraron columnas básicas (Profesor, Curso).")
-                return False
-
-            if "creditos" not in cols:
-                hoja_cursos["creditos_default"] = 3
-                cols["creditos"] = "creditos_default"
-
-            if "estudiantes" not in cols:
-                hoja_cursos["estudiantes_default"] = 30
-                cols["estudiantes"] = "estudiantes_default"
-
-            hoja_cursos = hoja_cursos.dropna(subset=[cols["profesor"], cols["curso"]])
-            hoja_cursos[cols["profesor"]] = hoja_cursos[cols["profesor"]].astype(str).str.strip()
-            hoja_cursos[cols["curso"]] = hoja_cursos[cols["curso"]].astype(str).str.strip()
-
-            if "departamento" in cols:
-                hoja_cursos[cols["departamento"]] = hoja_cursos[cols["departamento"]].astype(str).str.strip().str.upper()
-                hoja_cursos = hoja_cursos[hoja_cursos[cols["departamento"]] == depto]
-
-            if "programa" in cols and programa:
-                hoja_cursos[cols["programa"]] = hoja_cursos[cols["programa"]].astype(str).str.strip().str.upper()
-                hoja_cursos = hoja_cursos[hoja_cursos[cols["programa"]] == programa]
-
-            programas_detectados = []
-            if "programa" in cols:
-                programas_detectados = sorted(hoja_cursos[cols["programa"]].dropna().unique())
-
-            if hoja_cursos.empty:
-                st.error("No se encontraron cursos que coincidan con el filtro.")
-                return False
-
-            self.profesores_config = {}
-            for profesor, df_prof in hoja_cursos.groupby(cols["profesor"]):
-                cursos = []
-                creditos_totales = 0
-                for _, row in df_prof.iterrows():
-                    try:
-                        creditos = int(float(row[cols["creditos"]]))
-                    except (ValueError, TypeError):
-                        creditos = 3
-                    try:
-                        estudiantes = int(float(row[cols["estudiantes"]]))
-                    except (ValueError, TypeError):
-                        estudiantes = 30
-                    nombre = str(row[cols["curso"]]).strip()
-                    if nombre:
-                        cursos.append({"nombre": nombre, "creditos": creditos, "estudiantes": estudiantes})
-                        creditos_totales += creditos
-                if cursos:
-                    self.profesores_config[profesor] = {
-                        "cursos": cursos,
-                        "creditos_totales": creditos_totales,
-                        "horario_preferido": {},
-                        "horario_no_disponible": {}
-                    }
-
-            if not self.profesores_config:
-                st.error("No se pudieron construir configuraciones para profesores.")
-                return False
-
-            total_cursos = sum(len(cfg["cursos"]) for cfg in self.profesores_config.values())
-            num_salones = max(3, min(10, total_cursos // 3))
-            self.salones = [f"Salón {i+1}" for i in range(num_salones)]
-            self.cursos_df = hoja_cursos
-            return True, programas_detectados
-        except Exception as e:
-            st.error(f"Error al cargar cursos: {e}")
-            return False
-
-    def establecer_salones(self, salones):
-        self.salones = salones
-
-def horario_valido(dia, hora_inicio, duracion, config, profesor=None, creditos=None):
-    ini_min = a_minutos(hora_inicio)
-    fin_min = ini_min + int(duracion * 60)
-
-    if fin_min > a_minutos(config.restricciones_globales["hora_fin_max"]):
-        return False
-    if ini_min < a_minutos(config.restricciones_globales["hora_inicio_min"]):
-        return False
-    if creditos and not es_bloque_tres_horas_valido(dia, hora_inicio, duracion, creditos):
-        return False
-
-    restriccion_dia = config.restricciones_globales["horarios_prohibidos"].get(dia, [])
-    for r_ini, r_fin in restriccion_dia:
-        if not (fin_min <= a_minutos(r_ini) or ini_min >= a_minutos(r_fin)):
-            return False
-
-    if profesor and profesor in config.profesores_config:
-        prof_conf = config.profesores_config[profesor]["horario_no_disponible"]
-        if dia in prof_conf:
-            for r_ini, r_fin in prof_conf[dia]:
-                if not (fin_min <= a_minutos(r_ini) or ini_min >= a_minutos(r_fin)):
-                    return False
-
     return True
 
-def cumple_horario_preferido(dia, hora_inicio, duracion, config, profesor):
-    prof_conf = config.profesores_config.get(profesor, {})
-    preferencias = prof_conf.get("horario_preferido", {}).get(dia, [])
-    if not preferencias:
+def horario_valido(dia, hora_inicio, duracion, profesor=None, creditos=None):
+    """Verifica si un horario es válido según las restricciones fuertes"""
+    ini_min = a_minutos(hora_inicio)
+    fin_min = ini_min + int(duracion * 60)
+    
+    if fin_min > a_minutos(config.restricciones_globales["hora_fin_max"]):
         return False
-    ini = a_minutos(hora_inicio)
-    fin = ini + int(duracion * 60)
-    for pref_ini, pref_fin in preferencias:
-        if ini >= a_minutos(pref_ini) and fin <= a_minutos(pref_fin):
+    
+    if ini_min < a_minutos(config.restricciones_globales["hora_inicio_min"]):
+        return False
+    
+    if creditos and not es_bloque_tres_horas_valido(dia, hora_inicio, duracion, creditos):
+        return False
+    
+    restricciones_horario = config.restricciones_globales["horarios_prohibidos"]
+    if dia in restricciones_horario:
+        for r_ini, r_fin in restricciones_horario[dia]:
+            r_ini_min = a_minutos(r_ini)
+            r_fin_min = a_minutos(r_fin)
+            if not (fin_min <= r_ini_min or ini_min >= r_fin_min):
+                return False
+    
+    if profesor and profesor in config.profesores_config:
+        prof_config = config.profesores_config[profesor]
+        if dia in prof_config["horario_no_disponible"]:
+            for r_ini, r_fin in prof_config["horario_no_disponible"][dia]:
+                r_ini_min = a_minutos(r_ini)
+                r_fin_min = a_minutos(r_fin)
+                if not (fin_min <= r_ini_min or ini_min >= r_fin_min):
+                    return False
+    
+    return True
+
+def cumple_horario_preferido(dia, hora_inicio, duracion, profesor):
+    """Verifica si un horario cumple las preferencias del profesor"""
+    if profesor not in config.profesores_config:
+        return False
+    
+    prof_config = config.profesores_config[profesor]
+    if dia not in prof_config["horario_preferido"]:
+        return False
+    
+    ini_min = a_minutos(hora_inicio)
+    fin_min = ini_min + int(duracion * 60)
+    
+    for pref_ini, pref_fin in prof_config["horario_preferido"][dia]:
+        pref_ini_min = a_minutos(pref_ini)
+        pref_fin_min = a_minutos(pref_fin)
+        if ini_min >= pref_ini_min and fin_min <= pref_fin_min:
             return True
+    
     return False
 
+# Clase para representar una asignación de clase
 class AsignacionClase:
     def __init__(self, curso_info, profesor, bloque, hora_inicio, salon):
         self.curso_nombre = curso_info["nombre"]
@@ -307,13 +356,16 @@ class AsignacionClase:
         self.creditos = curso_info["creditos"]
         self.horas_contacto = int(sum(bloque["horas"]))
         self.creditos_extra = calcular_creditos_adicionales(self.horas_contacto, self.estudiantes)
-
+        
     def get_horario_detallado(self):
+        """Retorna lista de horarios detallados para cada día del bloque"""
         horarios = []
         for dia, duracion in zip(self.bloque["dias"], self.bloque["horas"]):
-            fin_min = a_minutos(self.hora_inicio) + int(duracion * 60)
-            hora_fin = f"{fin_min//60:02d}:{fin_min%60:02d}"
-            es_tres_horas = (self.creditos == 3 and duracion == 3)
+            hora_fin_min = a_minutos(self.hora_inicio) + int(duracion * 60)
+            hora_fin = f"{hora_fin_min//60:02d}:{hora_fin_min%60:02d}"
+            
+            es_tres_horas_consecutivas = (self.creditos == 3 and duracion == 3)
+            
             horarios.append({
                 "Curso": self.curso_nombre,
                 "Profesor": self.profesor,
@@ -326,268 +378,373 @@ class AsignacionClase:
                 "Créditos Extra": self.creditos_extra,
                 "Estudiantes": self.estudiantes,
                 "Salon": self.salon,
-                "3h Consecutivas": "SÍ" if es_tres_horas else "NO",
-                "Restricción 15:30": "CUMPLE" if (not es_tres_horas or a_minutos(self.hora_inicio) >= a_minutos("15:30")) else "VIOLA"
+                "3h Consecutivas": "SÍ" if es_tres_horas_consecutivas else "NO",
+                "Restricción 15:30": "CUMPLE" if (not es_tres_horas_consecutivas or a_minutos(self.hora_inicio) >= a_minutos("15:30")) else "VIOLA"
             })
         return horarios
 
-def hay_conflictos(nueva_asignacion, asignaciones):
-    for asignacion in asignaciones:
-        for dia_nuevo, dur_nuevo in zip(nueva_asignacion.bloque["dias"], nueva_asignacion.bloque["horas"]):
-            ini_nuevo = a_minutos(nueva_asignacion.hora_inicio)
-            fin_nuevo = ini_nuevo + int(dur_nuevo * 60)
-            for dia_exist, dur_exist in zip(asignacion.bloque["dias"], asignacion.bloque["horas"]):
-                if dia_nuevo != dia_exist:
-                    continue
-                ini_exist = a_minutos(asignacion.hora_inicio)
-                fin_exist = ini_exist + int(dur_exist * 60)
-                if not (fin_nuevo <= ini_exist or ini_nuevo >= fin_exist):
-                    if nueva_asignacion.profesor == asignacion.profesor or nueva_asignacion.salon == asignacion.salon:
-                        return True
-    return False
-
-def generar_horario_valido(config, bloques):
+# Generador de horarios con restricciones fuertes
+def generar_horario_valido():
+    """Genera un horario que cumple todas las restricciones fuertes"""
     asignaciones = []
-    for profesor, datos in config.profesores_config.items():
+    
+    for profesor, prof_config in config.profesores_config.items():
         cursos_asignados = 0
         intentos = 0
         max_intentos = 3000
-        while cursos_asignados < len(datos["cursos"]) and intentos < max_intentos:
+        
+        while cursos_asignados < len(prof_config["cursos"]) and intentos < max_intentos:
             intentos += 1
-            curso_info = datos["cursos"][cursos_asignados]
-            compatibles = [b for b in bloques if b["creditos"] == curso_info["creditos"]]
-            if not compatibles:
-                compatibles = sorted(bloques, key=lambda x: abs(x["creditos"] - curso_info["creditos"]))[:5]
-            bloque = random.choice(compatibles)
-            hora = random.choice(horas_inicio)
+            
+            curso_info = prof_config["cursos"][cursos_asignados]
+            
+            bloques_compatibles = [b for b in bloques if b["creditos"] == curso_info["creditos"]]
+            
+            if not bloques_compatibles:
+                bloques_compatibles = sorted(bloques, key=lambda x: abs(x["creditos"] - curso_info["creditos"]))[:5]
+            
+            bloque = random.choice(bloques_compatibles)
+            hora_inicio = random.choice(horas_inicio)
             salon = random.choice(config.salones)
-            if all(horario_valido(d, hora, dur, config, profesor, curso_info["creditos"]) for d, dur in zip(bloque["dias"], bloque["horas"])):
-                nueva = AsignacionClase(curso_info, profesor, bloque, hora, salon)
-                if not hay_conflictos(nueva, asignaciones):
-                    asignaciones.append(nueva)
-                    cursos_asignados += 1
-        if cursos_asignados < len(datos["cursos"]):
+            
+            valido = True
+            for dia, duracion in zip(bloque["dias"], bloque["horas"]):
+                if not horario_valido(dia, hora_inicio, duracion, profesor, curso_info["creditos"]):
+                    valido = False
+                    break
+            
+            if not valido:
+                continue
+            
+            nueva_asignacion = AsignacionClase(curso_info, profesor, bloque, hora_inicio, salon)
+            
+            if not hay_conflictos(nueva_asignacion, asignaciones):
+                asignaciones.append(nueva_asignacion)
+                cursos_asignados += 1
+        
+        if cursos_asignados < len(prof_config["cursos"]):
             return None
+    
     return asignaciones
 
-def evaluar_horario(config, asignaciones):
+def hay_conflictos(nueva_asignacion, asignaciones_existentes):
+    """Verifica si hay conflictos de profesor o salón"""
+    for asignacion in asignaciones_existentes:
+        for dia_nuevo, dur_nuevo in zip(nueva_asignacion.bloque["dias"], nueva_asignacion.bloque["horas"]):
+            ini_nuevo = a_minutos(nueva_asignacion.hora_inicio)
+            fin_nuevo = ini_nuevo + int(dur_nuevo * 60)
+            
+            for dia_exist, dur_exist in zip(asignacion.bloque["dias"], asignacion.bloque["horas"]):
+                if dia_nuevo == dia_exist:
+                    ini_exist = a_minutos(asignacion.hora_inicio)
+                    fin_exist = ini_exist + int(dur_exist * 60)
+                    
+                    if not (fin_nuevo <= ini_exist or ini_nuevo >= fin_exist):
+                        if nueva_asignacion.profesor == asignacion.profesor:
+                            return True
+                        if nueva_asignacion.salon == asignacion.salon:
+                            return True
+    
+    return False
+
+# Función de evaluación
+def evaluar_horario(asignaciones):
+    """Evalúa un horario considerando restricciones fuertes y suaves configurables"""
     if asignaciones is None:
-        return -float("inf")
+        return -float('inf')
+    
     penalizacion = 0
     bonus = 0
-    for profesor, datos in config.profesores_config.items():
-        asignados = sum(1 for a in asignaciones if a.profesor == profesor)
-        if asignados != len(datos["cursos"]):
-            penalizacion += abs(asignados - len(datos["cursos"])) * 2000
-    creditos_prof = {}
-    for a in asignaciones:
-        creditos_prof[a.profesor] = creditos_prof.get(a.profesor, 0) + a.creditos
-    for profesor, datos in config.profesores_config.items():
-        actual = creditos_prof.get(profesor, 0)
-        objetivo = datos["creditos_totales"]
-        if actual > config.restricciones_globales["creditos_max_profesor"]:
-            penalizacion += (actual - config.restricciones_globales["creditos_max_profesor"]) * 1000
-        if actual < config.restricciones_globales["creditos_min_profesor"]:
-            penalizacion += (config.restricciones_globales["creditos_min_profesor"] - actual) * 1000
-        if actual != objetivo:
-            penalizacion += abs(actual - objetivo) * 200
-    for i in range(len(asignaciones)):
-        for j in range(i+1, len(asignaciones)):
-            if hay_conflictos(asignaciones[i], [asignaciones[j]]):
-                penalizacion += 5000
+    
+    # Verificar que cada profesor tenga todos sus cursos asignados
+    for profesor, prof_config in config.profesores_config.items():
+        cursos_asignados = sum(1 for asig in asignaciones if asig.profesor == profesor)
+        cursos_requeridos = len(prof_config["cursos"])
+        if cursos_asignados != cursos_requeridos:
+            penalizacion += abs(cursos_asignados - cursos_requeridos) * 2000
+    
+    # Verificar límite de créditos por profesor
+    creditos_por_prof = {}
     for asig in asignaciones:
-        for dia, dur in zip(asig.bloque["dias"], asig.bloque["horas"]):
-            if not es_bloque_tres_horas_valido(dia, asig.hora_inicio, dur, asig.creditos):
+        creditos_por_prof.setdefault(asig.profesor, 0)
+        creditos_por_prof[asig.profesor] += asig.creditos
+    
+    for profesor, prof_config in config.profesores_config.items():
+        creditos_actuales = creditos_por_prof.get(profesor, 0)
+        creditos_objetivo = prof_config["creditos_totales"]
+        
+        if creditos_actuales > config.restricciones_globales["creditos_max_profesor"]:
+            penalizacion += (creditos_actuales - config.restricciones_globales["creditos_max_profesor"]) * 1000
+        
+        if creditos_actuales < config.restricciones_globales["creditos_min_profesor"]:
+            penalizacion += (config.restricciones_globales["creditos_min_profesor"] - creditos_actuales) * 1000
+        
+        if creditos_actuales != creditos_objetivo:
+            penalizacion += abs(creditos_actuales - creditos_objetivo) * 200
+    
+    # Verificar conflictos de horario
+    for i, asig1 in enumerate(asignaciones):
+        for j, asig2 in enumerate(asignaciones):
+            if i >= j:
+                continue
+            if hay_conflictos(asig1, [asig2]):
+                penalizacion += 5000
+    
+    # Verificar cumplimiento de restricción de 3 horas
+    for asig in asignaciones:
+        for dia, duracion in zip(asig.bloque["dias"], asig.bloque["horas"]):
+            if not es_bloque_tres_horas_valido(dia, asig.hora_inicio, duracion, asig.creditos):
                 penalizacion += 10000
-            if cumple_horario_preferido(dia, asig.hora_inicio, dur, config, asig.profesor):
-                bonus += config.pesos_restricciones["horario_preferido"]
+    
+    # Restricciones suaves
+    pesos = config.pesos_restricciones
+    
+    for asig in asignaciones:
+        for dia, duracion in zip(asig.bloque["dias"], asig.bloque["horas"]):
+            if cumple_horario_preferido(dia, asig.hora_inicio, duracion, asig.profesor):
+                bonus += pesos["horario_preferido"]
+        
         if asig.estudiantes > config.restricciones_globales["estudiantes_max_salon"]:
-            penalizacion += config.pesos_restricciones["estudiantes_por_salon"] * (asig.estudiantes - config.restricciones_globales["estudiantes_max_salon"])
+            penalizacion += pesos["estudiantes_por_salon"] * (asig.estudiantes - config.restricciones_globales["estudiantes_max_salon"])
+    
     return bonus - penalizacion
 
-def buscar_mejor_horario(config, bloques, intentos, progress_placeholder):
+def buscar_mejor_horario(intentos=200):
+    """Genera varios horarios y retorna el mejor según la evaluación"""
     mejor_asignaciones = None
-    mejor_score = -float("inf")
+    mejor_score = -float('inf')
+    
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
     for i in range(intentos):
-        progress_placeholder.progress((i + 1) / intentos)
-        progress_placeholder.text(f"Generando horarios... {i + 1}/{intentos}")
-        asignaciones = generar_horario_valido(config, bloques)
-        score = evaluar_horario(config, asignaciones)
+        progress_bar.progress((i + 1) / intentos)
+        status_text.text(f"🔄 Generando horarios... {i+1}/{intentos}")
+        
+        asignaciones = generar_horario_valido()
+        score = evaluar_horario(asignaciones)
         if score > mejor_score:
             mejor_score = score
             mejor_asignaciones = asignaciones
-    progress_placeholder.text(f"Generación completada. Mejor puntuación: {mejor_score}")
+    
+    status_text.text(f"✅ Generación completada. Mejor puntuación: {mejor_score}")
     return mejor_asignaciones, mejor_score
 
 def exportar_horario(asignaciones):
+    """Convierte las asignaciones a un DataFrame para visualización"""
     registros = []
     for asig in asignaciones:
         registros.extend(asig.get_horario_detallado())
-    return pd.DataFrame(registros)
+    df = pd.DataFrame(registros)
+    return df
 
 # ========================================================
 # INTERFAZ STREAMLIT
 # ========================================================
 
 def main():
-    st.set_page_config(page_title="Generador de Horarios", page_icon="📅", layout="wide")
+    st.set_page_config(
+        page_title="Generador de Horarios con Algoritmos Genéticos",
+        page_icon="📅",
+        layout="wide"
+    )
+    
     st.title("📅 Generador de Horarios Académicos")
-    st.markdown("### Sistema de optimización con Algoritmos Heurísticos")
-
-    if "paso" not in st.session_state:
-        st.session_state.paso = "login"
-
-    if "salones_catalogo" not in st.session_state:
-        st.session_state.salones_catalogo = generar_salones_por_defecto()
-
-    config = st.session_state.get("configuracion") or ConfiguracionSistema()
-
-    if st.session_state.paso == "login":
-        st.subheader("Identificación")
-        siglas = st.text_input("Siglas del departamento", max_chars=10, placeholder="Ej: QUIM").upper()
-        programa = st.text_input("Programa", max_chars=60, placeholder="Ej: INGENIERÍA QUÍMICA").upper()
-
-        if st.button("Continuar"):
-            if len(siglas) < 2 or len(programa) < 2:
-                st.warning("Ingresa siglas y programa válidos (mínimo 2 caracteres).")
-            else:
-                st.session_state.siglas = siglas
-                st.session_state.programa = programa
-                st.session_state.paso = "principal"
-                st.experimental_rerun()
-        return
-
+    st.markdown("### Sistema de optimización con Algoritmos Genéticos")
+    
+    # Sidebar para configuración
     st.sidebar.header("⚙️ Configuración")
-    st.sidebar.write(f"**Departamento**: {st.session_state.siglas}")
-    st.sidebar.write(f"**Programa**: {st.session_state.programa}")
-
-    uploaded_cursos = st.sidebar.file_uploader(
-        "📁 Cargar Excel de cursos",
-        type=["xlsx", "xls"],
-        help="Debe contener columnas como Profesor, Curso/Materia, Créditos, Estudiantes."
+    
+    # Upload del archivo Excel
+    uploaded_file = st.sidebar.file_uploader(
+        "📁 Cargar archivo Excel con datos de profesores y cursos",
+        type=['xlsx', 'xls'],
+        help="El archivo debe contener columnas como: Profesor, Curso/Materia, Créditos, Estudiantes"
     )
-    uploaded_salones = st.sidebar.file_uploader(
-        "🏫 Cargar Excel de salones (opcional)",
-        type=["xlsx", "xls"],
-        help="Columnas sugeridas: Departamento, Salon"
-    )
-
-    if uploaded_salones is not None:
-        nuevos_salones = cargar_salones_desde_excel(uploaded_salones)
-        if nuevos_salones:
-            st.session_state.salones_catalogo.update(nuevos_salones)
-            st.success("Catálogo de salones actualizado desde Excel.")
-
-    if uploaded_cursos is not None:
-        with open("temp_cursos.xlsx", "wb") as f:
-            f.write(uploaded_cursos.getbuffer())
-        resultado = config.cargar_cursos("temp_cursos.xlsx", st.session_state.siglas, st.session_state.programa)
-        if resultado:
-            ok, programas_detectados = resultado
-            config.establecer_salones(
-                st.session_state.salones_catalogo.get(st.session_state.siglas, ["Salón General 1", "Salón General 2"])
-            )
-            st.session_state.configuracion = config
-            st.session_state.programas_detectados = programas_detectados
-            st.success("Datos de cursos cargados correctamente.")
-        else:
-            st.session_state.configuracion = None
-
-    if st.session_state.get("configuracion") is None:
-        st.info("Carga un Excel de cursos para continuar.")
-        return
-
-    config = st.session_state.configuracion
-
-    with st.expander("📋 Resumen de datos cargados", expanded=True):
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Profesores", len(config.profesores_config))
-        col2.metric("Cursos", sum(len(p["cursos"]) for p in config.profesores_config.values()))
-        col3.metric("Salones disponibles", len(config.salones))
-
-        if st.session_state.get("programas_detectados"):
-            st.write("Programas detectados en el archivo:")
-            st.write(", ".join(st.session_state.programas_detectados))
-
-    intentos = st.sidebar.slider("Número de iteraciones", 50, 500, 200, 50)
-    st.sidebar.subheader("Restricciones globales")
-    config.restricciones_globales["hora_inicio_min"] = st.sidebar.time_input(
-        "Hora inicio mínima", datetime.strptime(config.restricciones_globales["hora_inicio_min"], "%H:%M").time()
-    ).strftime("%H:%M")
-    config.restricciones_globales["hora_fin_max"] = st.sidebar.time_input(
-        "Hora fin máxima", datetime.strptime(config.restricciones_globales["hora_fin_max"], "%H:%M").time()
-    ).strftime("%H:%M")
-    config.restricciones_globales["creditos_max_profesor"] = st.sidebar.number_input(
-        "Créditos máximos por profesor", 1, 40, config.restricciones_globales["creditos_max_profesor"]
-    )
-    config.restricciones_globales["estudiantes_max_salon"] = st.sidebar.number_input(
-        "Estudiantes máximos por salón", 20, 200, config.restricciones_globales["estudiantes_max_salon"]
-    )
-
-    if st.button("🚀 Generar horario optimizado", use_container_width=True):
-        with st.spinner("Generando horario optimizado..."):
-            progress = st.empty()
-            bloques = generar_bloques()
-            mejor, score = buscar_mejor_horario(config, bloques, intentos, progress)
-            if mejor is None:
-                st.error("No se pudo generar un horario válido. Ajusta las restricciones o intenta de nuevo.")
-            else:
-                st.success(f"Horario generado (score: {score})")
-                df_horario = exportar_horario(mejor)
-                st.session_state.df_horario = df_horario
-                st.session_state.score = score
-
-    if st.session_state.get("df_horario") is not None:
-        df_horario = st.session_state.df_horario
-        score = st.session_state.score
-        st.subheader("📊 Horario completo")
-        st.dataframe(df_horario, use_container_width=True)
-
-        csv = df_horario.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            label="💾 Descargar horario (CSV)",
-            data=csv,
-            file_name=f"horario_{st.session_state.siglas}_{st.session_state.programa}.csv",
-            mime="text/csv"
-        )
-
-        with st.expander("👨‍🏫 Horario por profesor"):
-            for profesor in config.profesores_config.keys():
-                df_prof = df_horario[df_horario["Profesor"] == profesor]
-                if not df_prof.empty:
-                    st.write(f"**{profesor}**")
-                    st.dataframe(df_prof, use_container_width=True)
-
-        with st.expander("🏫 Horario por salón"):
-            for salon in config.salones:
-                df_salon = df_horario[df_horario["Salon"] == salon]
-                if not df_salon.empty:
-                    st.write(f"**{salon}**")
-                    st.dataframe(df_salon, use_container_width=True)
-
-        with st.expander("📈 Estadísticas"):
-            col1, col2 = st.columns(2)
+    
+    if uploaded_file is not None:
+        # Guardar archivo temporalmente
+        with open("temp_excel.xlsx", "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        
+        # Inicializar configuración
+        global config, bloques
+        config = ConfiguracionSistema("temp_excel.xlsx")
+        bloques = generar_bloques()
+        
+        if config.profesores_config:
+            st.success("✅ Archivo cargado correctamente")
+            
+            # Mostrar resumen de datos cargados
+            col1, col2, col3 = st.columns(3)
             with col1:
-                st.write("Distribución de créditos por profesor:")
-                st.bar_chart(df_horario.groupby("Profesor")["Créditos"].sum())
+                st.metric("👨‍🏫 Profesores", len(config.profesores_config))
             with col2:
-                st.write("Uso de salones (conteo de sesiones):")
-                st.bar_chart(df_horario.groupby("Salon").size())
-
-            clases_3h = df_horario[df_horario["3h Consecutivas"] == "SÍ"]
-            if not clases_3h.empty:
-                cumple = clases_3h[clases_3h["Restricción 15:30"] == "CUMPLE"]
-                viola = clases_3h[clases_3h["Restricción 15:30"] == "VIOLA"]
-                st.metric("Cumplen restricción 15:30", len(cumple))
-                st.metric("Violan restricción 15:30", len(viola))
-                if not viola.empty:
-                    st.warning("Las siguientes clases violan la restricción de 3 horas después de las 15:30:")
-                    st.dataframe(viola, use_container_width=True)
-
-    if st.sidebar.button("🔄 Reiniciar", use_container_width=True):
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
-        st.experimental_rerun()
+                total_cursos = sum(len(prof['cursos']) for prof in config.profesores_config.values())
+                st.metric("📚 Cursos", total_cursos)
+            with col3:
+                st.metric("🏫 Salones", len(config.salones))
+            
+            # Mostrar datos cargados
+            with st.expander("📋 Ver datos cargados"):
+                for profesor, data in config.profesores_config.items():
+                    st.write(f"**{profesor}** ({data['creditos_totales']} créditos)")
+                    for curso in data['cursos']:
+                        st.write(f"  - {curso['nombre']} ({curso['creditos']} créditos, {curso['estudiantes']} estudiantes)")
+            
+            # Configuración de parámetros
+            st.sidebar.subheader("🎯 Parámetros de Optimización")
+            intentos = st.sidebar.slider("Número de iteraciones", 50, 500, 200, 50)
+            
+            # Configuración de restricciones
+            with st.sidebar.expander("🔒 Restricciones Globales"):
+                config.restricciones_globales["hora_inicio_min"] = st.time_input(
+                    "Hora inicio mínima", 
+                    datetime.strptime("07:30", "%H:%M").time()
+                ).strftime("%H:%M")
+                
+                config.restricciones_globales["hora_fin_max"] = st.time_input(
+                    "Hora fin máxima", 
+                    datetime.strptime("19:30", "%H:%M").time()
+                ).strftime("%H:%M")
+                
+                config.restricciones_globales["creditos_max_profesor"] = st.number_input(
+                    "Créditos máximos por profesor", 1, 20, 15
+                )
+                
+                config.restricciones_globales["estudiantes_max_salon"] = st.number_input(
+                    "Estudiantes máximos por salón", 20, 100, 50
+                )
+            
+            # Configuración de preferencias de profesores
+            st.sidebar.subheader("👤 Preferencias de Profesores")
+            profesor_seleccionado = st.sidebar.selectbox(
+                "Seleccionar profesor para configurar",
+                ["Ninguno"] + list(config.profesores_config.keys())
+            )
+            
+            if profesor_seleccionado != "Ninguno":
+                with st.sidebar.expander(f"Configurar {profesor_seleccionado}"):
+                    st.write("**Horarios preferidos:**")
+                    dias = ["Lu", "Ma", "Mi", "Ju", "Vi"]
+                    for dia in dias:
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            inicio = st.time_input(f"{dia} inicio", key=f"pref_{profesor_seleccionado}_{dia}_inicio")
+                        with col2:
+                            fin = st.time_input(f"{dia} fin", key=f"pref_{profesor_seleccionado}_{dia}_fin")
+                        
+                        if inicio != datetime.strptime("00:00", "%H:%M").time():
+                            if profesor_seleccionado not in config.profesores_config:
+                                config.profesores_config[profesor_seleccionado] = {"horario_preferido": {}}
+                            if "horario_preferido" not in config.profesores_config[profesor_seleccionado]:
+                                config.profesores_config[profesor_seleccionado]["horario_preferido"] = {}
+                            config.profesores_config[profesor_seleccionado]["horario_preferido"][dia] = [
+                                (inicio.strftime("%H:%M"), fin.strftime("%H:%M"))
+                            ]
+            
+            # Botón para generar horario
+            if st.button("🚀 Generar Horario Optimizado", type="primary"):
+                with st.spinner("Generando horario optimizado..."):
+                    mejor, score = buscar_mejor_horario(intentos)
+                    
+                    if mejor is None:
+                        st.error("❌ No se pudo generar un horario válido. Intenta ajustar las restricciones.")
+                    else:
+                        st.success(f"✅ Horario generado exitosamente! Puntuación: {score}")
+                        
+                        # Exportar a DataFrame
+                        df_horario = exportar_horario(mejor)
+                        
+                        # Mostrar horario en pestañas
+                        tab1, tab2, tab3, tab4 = st.tabs(["📊 Horario Completo", "👨‍🏫 Por Profesor", "🏫 Por Salón", "📈 Estadísticas"])
+                        
+                        with tab1:
+                            st.subheader("📊 Horario Completo")
+                            st.dataframe(df_horario, use_container_width=True)
+                            
+                            # Botón de descarga
+                            csv = df_horario.to_csv(index=False)
+                            st.download_button(
+                                label="💾 Descargar horario (CSV)",
+                                data=csv,
+                                file_name="horario_generado.csv",
+                                mime="text/csv"
+                            )
+                        
+                        with tab2:
+                            st.subheader("👨‍🏫 Horario por Profesor")
+                            for profesor in config.profesores_config.keys():
+                                with st.expander(f"Horario de {profesor}"):
+                                    df_prof = df_horario[df_horario['Profesor'] == profesor]
+                                    if not df_prof.empty:
+                                        st.dataframe(df_prof, use_container_width=True)
+                                    else:
+                                        st.warning(f"No se encontraron clases para {profesor}")
+                        
+                        with tab3:
+                            st.subheader("🏫 Horario por Salón")
+                            for salon in config.salones:
+                                with st.expander(f"Horario del {salon}"):
+                                    df_salon = df_horario[df_horario['Salon'] == salon]
+                                    if not df_salon.empty:
+                                        st.dataframe(df_salon, use_container_width=True)
+                                    else:
+                                        st.info(f"No hay clases asignadas al {salon}")
+                        
+                        with tab4:
+                            st.subheader("📈 Estadísticas del Horario")
+                            
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                st.write("**Distribución de créditos por profesor:**")
+                                creditos_prof = df_horario.groupby('Profesor')['Créditos'].sum()
+                                st.bar_chart(creditos_prof)
+                            
+                            with col2:
+                                st.write("**Utilización de salones:**")
+                                uso_salones = df_horario.groupby('Salon').size()
+                                st.bar_chart(uso_salones)
+                            
+                            # Verificar restricción de 3 horas
+                            clases_3h = df_horario[df_horario['3h Consecutivas'] == 'SÍ']
+                            if len(clases_3h) > 0:
+                                st.write("**Cumplimiento de restricción de 3 horas consecutivas:**")
+                                cumple = len(clases_3h[clases_3h['Restricción 15:30'] == 'CUMPLE'])
+                                viola = len(clases_3h[clases_3h['Restricción 15:30'] == 'VIOLA'])
+                                
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    st.metric("✅ Cumple restricción", cumple)
+                                with col2:
+                                    st.metric("⚠️ Viola restricción", viola)
+                                
+                                if viola > 0:
+                                    st.warning("⚠️ Algunas clases de 3 horas consecutivas violan la restricción de horario (antes de 15:30)")
+                                    st.dataframe(clases_3h[clases_3h['Restricción 15:30'] == 'VIOLA'])
+        else:
+            st.error("❌ No se pudieron cargar los datos del archivo Excel")
+    else:
+        st.info("📁 Por favor, carga un archivo Excel para comenzar")
+        
+        # Mostrar ejemplo de formato esperado
+        with st.expander("📋 Formato esperado del archivo Excel"):
+            st.write("""
+            El archivo Excel debe contener al menos las siguientes columnas:
+            
+            | Profesor | Curso/Materia | Créditos | Estudiantes |
+            |----------|---------------|----------|-------------|
+            | Juan Pérez | Matemáticas I | 4 | 35 |
+            | Juan Pérez | Álgebra | 3 | 28 |
+            | María García | Física I | 4 | 30 |
+            
+            **Notas:**
+            - Los nombres de las columnas pueden variar (profesor/docente, curso/materia/asignatura, etc.)
+            - Si faltan columnas de créditos o estudiantes, se usarán valores por defecto
+            - El sistema detecta automáticamente las columnas relevantes
+            """)
 
 if __name__ == "__main__":
     main()
+
