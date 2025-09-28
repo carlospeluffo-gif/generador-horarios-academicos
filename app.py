@@ -726,6 +726,8 @@ def main():
         else:
             st.error("❌ No se pudieron cargar los datos del archivo Excel")
         
+    
+    else:
         # Mostrar ejemplo de formato esperado
         with st.expander("📋 Formato esperado del archivo Excel"):
             st.write("""
