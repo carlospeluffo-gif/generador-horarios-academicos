@@ -550,14 +550,14 @@ def main():
     )
     
     st.title("📅 Generador de Horarios Académicos")
-    st.markdown("### Sistema de optimización con Algoritmos Genéticos")
+    st.markdown("### _Optimización automática con Algoritmos Genéticos_")
     
     # Sidebar para configuración
     st.sidebar.header("⚙️ Configuración")
     
     # Upload del archivo Excel
     uploaded_file = st.sidebar.file_uploader(
-        "📁 Cargar archivo Excel con datos de profesores y cursos",
+        "📁 Cargar archivo Excel",
         type=['xlsx', 'xls'],
         help="El archivo debe contener columnas como: Profesor, Curso/Materia, Créditos, Estudiantes"
     )
@@ -725,8 +725,6 @@ def main():
                                     st.dataframe(clases_3h[clases_3h['Restricción 15:30'] == 'VIOLA'])
         else:
             st.error("❌ No se pudieron cargar los datos del archivo Excel")
-    else:
-        st.info("📁 Por favor, carga un archivo Excel para comenzar")
         
         # Mostrar ejemplo de formato esperado
         with st.expander("📋 Formato esperado del archivo Excel"):
