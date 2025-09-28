@@ -554,55 +554,56 @@ def exportar_horario(asignaciones):
 # ========================================================
 
 def main():
-
-    # Configuración de la página
-st.set_page_config(
-    page_title="Generación de Horarios Académicos",
-    page_icon="📅",
-    layout="centered"
-)
-
-# Fondo limpio y título centrado
-st.markdown(
-    """
-    <h1 style='text-align: center; color: #2E86C1; font-size: 48px;'>
-    GENERACIÓN DE HORARIOS ACADÉMICOS<br>CON ALGORITMOS GENÉTICOS
-    </h1>
-    """, 
-    unsafe_allow_html=True
-)
-
-st.markdown("<br>", unsafe_allow_html=True)  # Espacio
-
-# Entrada de usuario: siglas del departamento
-usuario = st.text_input(
-    "Ingrese la sigla de su departamento (ej: MATE, QUIM, FIS)", 
-    max_chars=10
-)
-
-st.markdown("<br>", unsafe_allow_html=True)  # Espacio
-
-# Botón para mostrar programas disponibles
-if st.button("📂 Seleccionar programa"):
-    programas = [
-        "Ingeniería Matemática",
-        "Licenciatura en Física",
-        "Química Industrial",
-        "Biología",
-        "Ingeniería Química",
-        "Matemática Aplicada"
-    ]
-    programa_seleccionado = st.selectbox("Seleccione su programa", programas)
-
-    if programa_seleccionado:
-        st.success(f"✅ Has seleccionado: {programa_seleccionado} ({usuario})")
-        
     st.set_page_config(
         page_title="Generador de Horarios con Algoritmos Genéticos",
         page_icon="📅",
-        layout="wide"
+        layout="centered"
     )
     
+    # ======= PANTALLA DE BIENVENIDA =======
+    st.markdown(
+        """
+        <h1 style='text-align: center; color: #2E86C1; font-size: 48px;'>
+        GENERACIÓN DE HORARIOS ACADÉMICOS<br>CON ALGORITMOS GENÉTICOS
+        </h1>
+        """, 
+        unsafe_allow_html=True
+    )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    usuario = st.text_input(
+        "Ingrese la sigla de su departamento (ej: MATE, QUIM, FIS)", 
+        max_chars=10
+    )
+
+    programa_seleccionado = None
+    if st.button("📂 Seleccionar programa"):
+        programas = [
+            "Ingeniería Matemática",
+            "Licenciatura en Física",
+            "Química Industrial",
+            "Biología",
+            "Ingeniería Química",
+            "Matemática Aplicada"
+        ]
+        programa_seleccionado = st.selectbox("Seleccione su programa", programas)
+    
+    if usuario and programa_seleccionado:
+        st.success(f"✅ Departamento: {usuario} | Programa: {programa_seleccionado}")
+        
+        # ======= SECCIÓN EXISTENTE DE CARGA DE EXCEL Y GENERACIÓN DE HORARIOS =======
+        uploaded_file = st.file_uploader(
+            "📁 Cargar archivo Excel con datos de profesores y cursos",
+            type=['xlsx', 'xls']
+        )
+        
+        if uploaded_file:
+            # Aquí iría el resto de tu código existente para procesar Excel, generar bloques, mostrar horarios, etc.
+            pass
+        else:
+            st.info("📁 Por favor, carga un archivo Excel para comenzar")
+
     st.title("📅 Generador de Horarios Académicos")
     st.markdown("### Sistema de optimización con Algoritmos Genéticos")
     
