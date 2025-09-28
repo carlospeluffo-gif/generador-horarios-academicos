@@ -174,10 +174,15 @@ class ConfiguracionSistema:
                 
                 st.write(f"📚 {profesor}: {len(cursos_lista)} cursos, {creditos_totales} créditos totales")
         
-        # Generar salones automáticamente basado en el número de cursos
-        total_cursos = sum(len(config['cursos']) for config in self.profesores_config.values())
-        num_salones = max(3, min(10, total_cursos // 3))
-        self.salones = [f"Salon {i+1}" for i in range(num_salones)]
+                # Calcular máximo número de cursos simultáneos
+                cursos_por_bloque = []
+                for profesor, prof_config in config.profesores_config.items():
+                for curso in prof_config['cursos']:
+                cursos_por_bloque.append(curso['creditos'])  # o simplemente contar cursos
+
+                # Aproximación: asumir que 1/3 de cursos podrían coincidir
+                num_salones = max(3, total_cursos // 2)  # Ajustar según tamaño de la universidad
+
         
         st.success(f"✅ Configuración completada: {len(self.profesores_config)} profesores, {num_salones} salones")
 
