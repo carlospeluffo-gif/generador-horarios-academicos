@@ -176,14 +176,15 @@ class ConfiguracionSistema:
         
                 # Calcular máximo número de cursos simultáneos
                 cursos_por_bloque = []
-                for profesor, prof_config in config.profesores_config.items():
-                for curso in prof_config['cursos']:
-                cursos_por_bloque.append(curso['creditos'])  # o simplemente contar cursos
+                for profesor, prof_config in self.profesores_config.items():
+                    for curso in prof_config['cursos']:
+                        cursos_por_bloque.append(curso['creditos'])  # o simplemente contar cursos
 
                 # Aproximación: asumir que 1/3 de cursos podrían coincidir
+                total_cursos = len(cursos_por_bloque)
                 num_salones = max(3, total_cursos // 2)  # Ajustar según tamaño de la universidad
+                self.salones = [f"Salon {i+1}" for i in range(num_salones)]
 
-        
         st.success(f"✅ Configuración completada: {len(self.profesores_config)} profesores, {num_salones} salones")
 
 # Generador de bloques según especificaciones
