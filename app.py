@@ -174,20 +174,20 @@ class ConfiguracionSistema:
                 
                 st.write(f"📚 {profesor}: {len(cursos_lista)} cursos, {creditos_totales} créditos totales")
         
-# Calcular número mínimo de salones necesarios
-cursos_por_bloque = []
+                # Calcular número mínimo de salones necesarios
+                cursos_por_bloque = []
 
-for prof_config in self.profesores_config.values():
-    for curso in prof_config['cursos']:
-        cursos_por_bloque.append(curso['creditos'])  # o simplemente contar cursos
+                for prof_config in self.profesores_config.values():
+                    for curso in prof_config['cursos']:
+                        cursos_por_bloque.append(curso['creditos'])  # o simplemente contar cursos
 
-# Aproximación: asumir que 1/3 de cursos podrían coincidir
-total_cursos = len(cursos_por_bloque)
-num_salones_minimos = max(1, total_cursos // 3)  # se puede ajustar
-num_salones_minimos = min(num_salones_minimos, 10)  # límite superior opcional
+                # Aproximación: asumir que 1/3 de cursos podrían coincidir
+                total_cursos = len(cursos_por_bloque)
+                num_salones_minimos = max(1, total_cursos // 3)  # se puede ajustar
+                num_salones_minimos = min(num_salones_minimos, 10)  # límite superior opcional
 
-self.salones = [f"Salon {i+1}" for i in range(num_salones_minimos)]
-st.write(f"🏫 Número mínimo de salones calculado: {num_salones_minimos}")
+                self.salones = [f"Salon {i+1}" for i in range(num_salones_minimos)]
+                st.write(f"🏫 Número mínimo de salones calculado: {num_salones_minimos}")
 
 
         st.success(f"✅ Configuración completada: {len(self.profesores_config)} profesores, {num_salones} salones")
