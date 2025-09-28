@@ -552,25 +552,58 @@ def main():
     st.title("📅 Generador de Horarios Académicos")
     st.markdown("### Sistema de optimización con Algoritmos Genéticos")
     
-    # Sidebar para configuración
-    st.sidebar.header("⚙️ Configuración")
+    # ============================================================
+    # PÁGINA PRINCIPAL: SELECCIÓN DE DEPARTAMENTO Y PROGRAMA
+    # ============================================================
+    st.sidebar.header("🏛️ Selección de Departamento y Programa")
     
-    # Upload del archivo Excel
-    uploaded_file = st.sidebar.file_uploader(
-        "📁 Cargar archivo Excel con datos de profesores y cursos",
-        type=['xlsx', 'xls'],
-        help="El archivo debe contener columnas como: Profesor, Curso/Materia, Créditos, Estudiantes"
+    # Input de siglas del departamento
+    departamento_siglas = st.sidebar.text_input(
+        "Ingrese las siglas de su departamento", 
+        max_chars=10,
+        help="Ejemplo: MAT, FIS, BIO"
     )
     
-    if uploaded_file is not None:
-        # Guardar archivo temporalmente
-        with open("temp_excel.xlsx", "wb") as f:
-            f.write(uploaded_file.getbuffer())
+    # Lista de programas (puede ser estática o cargada dinámicamente desde Excel si quieres)
+    programas = {
+        "MAT": ["Matemática Aplicada", "Estadística", "Computación Matemática"],
+        "FIS": ["Física Teórica", "Física Experimental", "Astrofísica"],
+        "BIO": ["Biología Molecular", "Genética", "Microbiología"]
+    }
+    
+    programa_seleccionado = None
+    if departamento_siglas:
+        if departamento_siglas.upper() in programas:
+            programa_seleccionado = st.sidebar.selectbox(
+                "Seleccione su programa",
+                programas[departamento_siglas.upper()]
+            )
+        else:
+            st.sidebar.warning("⚠️ Departamento no reconocido. Intente nuevamente.")
+    
+    # ============================================================
+    # SOLO PROCEDE A LA CARGA DE EXCEL Y GENERACIÓN DE HORARIO
+    # SI SE HA SELECCIONADO UN PROGRAMA
+    # ============================================================
+    if programa_seleccionado:
+        st.info(f"Departamento: {departamento_siglas.upper()} | Programa: {programa_seleccionado}")
         
-        # Inicializar configuración
-        global config, bloques
-        config = ConfiguracionSistema("temp_excel.xlsx")
-        bloques = generar_bloques()
+        # Upload del archivo Excel
+        uploaded_file = st.file_uploader(
+            "📁 Cargar archivo Excel con datos de profesores y cursos",
+            type=['xlsx', 'xls'],
+            help="El archivo debe contener columnas como: Profesor, Curso/Materia, Créditos, Estudiantes"
+        )
+        
+        if uploaded_file is not None:
+            # Guardar archivo temporalmente
+            with open("temp_excel.xlsx", "wb") as f:
+                f.write(uploaded_file.getbuffer())
+            
+            # Inicializar configuración
+            global config, bloques
+            config = ConfiguracionSistema("temp_excel.xlsx")
+            bloques = generar_bloques()
         
         if config.profesores_config:
             st.success("✅ Archivo cargado correctamente")
