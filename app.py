@@ -1,4 +1,3 @@
-# app_horarios_ga_streamlit.py
 import streamlit as st
 import pandas as pd
 import random
@@ -7,18 +6,11 @@ import numpy as np
 from datetime import datetime, timedelta
 import copy
 import io
-import math
-from typing import List, Tuple
 
-# ---------------------------
-# UTIL / FUNCIONES BASE (tu código con ligeras adaptaciones)
-# ---------------------------
-# (Mantengo prácticamente todas tus estructuras y funciones, con algunas mejoras
-#  para que el GA pueda llamar a evaluaciones y construir cromosomas)
+# ========================================================
+# CONFIGURACIÓN DEL SISTEMA - CARGA DESDE EXCEL
+# ========================================================
 
-# -------------------------------------------------
-# CLASES Y CONFIG
-# -------------------------------------------------
 class ConfiguracionSistema:
     def __init__(self, archivo_excel=None):
         self.archivo_excel = archivo_excel
@@ -189,9 +181,7 @@ class ConfiguracionSistema:
         
         st.success(f"✅ Configuración completada: {len(self.profesores_config)} profesores, {num_salones} salones")
 
-# -------------------------------------------------
-# BLOQUES, TABLA CREDITOS Y UTILS DE HORAS
-# -------------------------------------------------
+# Generador de bloques según especificaciones
 def generar_bloques():
     bloques = []
     id_counter = 1
@@ -247,6 +237,7 @@ def generar_bloques():
 
     return bloques
 
+# Tabla de créditos adicionales por tamaño de sección
 tabla_creditos = {
     1: [(1,44,0),(45,74,0.5),(75,104,1),(105,134,1.5),(135,164,2),(165,194,2.5),
         (195,224,3),(225,254,3.5),(255,284,4),(285,314,4.5),(315,344,5),(345,374,5.5),
@@ -276,7 +267,7 @@ def calcular_creditos_adicionales(horas_contacto, estudiantes):
             return creditos
     return 0
 
-# Horario de 7:00 a 19:20 en intervalos de 30 minutos (matching tu original)
+# Horario de 7:00 a 19:20 en intervalos de 30 minutos
 horas_inicio = []
 for h in range(7, 20):
     for m in [0, 30]:
@@ -300,23 +291,21 @@ def es_bloque_tres_horas_valido(dia, hora_inicio, duracion, creditos):
                 return False
     return True
 
-def horario_valido(dia, hora_inicio, duracion, profesor=None, creditos=None, config_local=None):
+def horario_valido(dia, hora_inicio, duracion, profesor=None, creditos=None):
     """Verifica si un horario es válido según las restricciones fuertes"""
-    if config_local is None:
-        return False
     ini_min = a_minutos(hora_inicio)
     fin_min = ini_min + int(duracion * 60)
     
-    if fin_min > a_minutos(config_local.restricciones_globales["hora_fin_max"]):
+    if fin_min > a_minutos(config.restricciones_globales["hora_fin_max"]):
         return False
     
-    if ini_min < a_minutos(config_local.restricciones_globales["hora_inicio_min"]):
+    if ini_min < a_minutos(config.restricciones_globales["hora_inicio_min"]):
         return False
     
     if creditos and not es_bloque_tres_horas_valido(dia, hora_inicio, duracion, creditos):
         return False
     
-    restricciones_horario = config_local.restricciones_globales["horarios_prohibidos"]
+    restricciones_horario = config.restricciones_globales["horarios_prohibidos"]
     if dia in restricciones_horario:
         for r_ini, r_fin in restricciones_horario[dia]:
             r_ini_min = a_minutos(r_ini)
@@ -324,9 +313,9 @@ def horario_valido(dia, hora_inicio, duracion, profesor=None, creditos=None, con
             if not (fin_min <= r_ini_min or ini_min >= r_fin_min):
                 return False
     
-    if profesor and profesor in config_local.profesores_config:
-        prof_config = config_local.profesores_config[profesor]
-        if dia in prof_config.get("horario_no_disponible", {}):
+    if profesor and profesor in config.profesores_config:
+        prof_config = config.profesores_config[profesor]
+        if dia in prof_config["horario_no_disponible"]:
             for r_ini, r_fin in prof_config["horario_no_disponible"][dia]:
                 r_ini_min = a_minutos(r_ini)
                 r_fin_min = a_minutos(r_fin)
@@ -341,7 +330,7 @@ def cumple_horario_preferido(dia, hora_inicio, duracion, profesor):
         return False
     
     prof_config = config.profesores_config[profesor]
-    if dia not in prof_config.get("horario_preferido", {}):
+    if dia not in prof_config["horario_preferido"]:
         return False
     
     ini_min = a_minutos(hora_inicio)
@@ -355,9 +344,7 @@ def cumple_horario_preferido(dia, hora_inicio, duracion, profesor):
     
     return False
 
-# -------------------------------------------------
-# CLASE AsignacionClase y funciones de conflicto
-# -------------------------------------------------
+# Clase para representar una asignación de clase
 class AsignacionClase:
     def __init__(self, curso_info, profesor, bloque, hora_inicio, salon):
         self.curso_nombre = curso_info["nombre"]
@@ -367,8 +354,7 @@ class AsignacionClase:
         self.estudiantes = curso_info["estudiantes"]
         self.salon = salon
         self.creditos = curso_info["creditos"]
-        # horas_contacto: suma de bloque["horas"] como int para tabla_creditos
-        self.horas_contacto = int(round(sum(bloque["horas"])))
+        self.horas_contacto = int(sum(bloque["horas"]))
         self.creditos_extra = calcular_creditos_adicionales(self.horas_contacto, self.estudiantes)
         
     def get_horario_detallado(self):
@@ -397,6 +383,50 @@ class AsignacionClase:
             })
         return horarios
 
+# Generador de horarios con restricciones fuertes
+def generar_horario_valido():
+    """Genera un horario que cumple todas las restricciones fuertes"""
+    asignaciones = []
+    
+    for profesor, prof_config in config.profesores_config.items():
+        cursos_asignados = 0
+        intentos = 0
+        max_intentos = 3000
+        
+        while cursos_asignados < len(prof_config["cursos"]) and intentos < max_intentos:
+            intentos += 1
+            
+            curso_info = prof_config["cursos"][cursos_asignados]
+            
+            bloques_compatibles = [b for b in bloques if b["creditos"] == curso_info["creditos"]]
+            
+            if not bloques_compatibles:
+                bloques_compatibles = sorted(bloques, key=lambda x: abs(x["creditos"] - curso_info["creditos"]))[:5]
+            
+            bloque = random.choice(bloques_compatibles)
+            hora_inicio = random.choice(horas_inicio)
+            salon = random.choice(config.salones)
+            
+            valido = True
+            for dia, duracion in zip(bloque["dias"], bloque["horas"]):
+                if not horario_valido(dia, hora_inicio, duracion, profesor, curso_info["creditos"]):
+                    valido = False
+                    break
+            
+            if not valido:
+                continue
+            
+            nueva_asignacion = AsignacionClase(curso_info, profesor, bloque, hora_inicio, salon)
+            
+            if not hay_conflictos(nueva_asignacion, asignaciones):
+                asignaciones.append(nueva_asignacion)
+                cursos_asignados += 1
+        
+        if cursos_asignados < len(prof_config["cursos"]):
+            return None
+    
+    return asignaciones
+
 def hay_conflictos(nueva_asignacion, asignaciones_existentes):
     """Verifica si hay conflictos de profesor o salón"""
     for asignacion in asignaciones_existentes:
@@ -417,10 +447,8 @@ def hay_conflictos(nueva_asignacion, asignaciones_existentes):
     
     return False
 
-# -------------------------------------------------
-# EVALUACIÓN - función adaptada para recibir lista AsignacionClase
-# -------------------------------------------------
-def evaluar_horario(asignaciones, config_local):
+# Función de evaluación
+def evaluar_horario(asignaciones):
     """Evalúa un horario considerando restricciones fuertes y suaves configurables"""
     if asignaciones is None:
         return -float('inf')
@@ -429,7 +457,7 @@ def evaluar_horario(asignaciones, config_local):
     bonus = 0
     
     # Verificar que cada profesor tenga todos sus cursos asignados
-    for profesor, prof_config in config_local.profesores_config.items():
+    for profesor, prof_config in config.profesores_config.items():
         cursos_asignados = sum(1 for asig in asignaciones if asig.profesor == profesor)
         cursos_requeridos = len(prof_config["cursos"])
         if cursos_asignados != cursos_requeridos:
@@ -441,15 +469,15 @@ def evaluar_horario(asignaciones, config_local):
         creditos_por_prof.setdefault(asig.profesor, 0)
         creditos_por_prof[asig.profesor] += asig.creditos
     
-    for profesor, prof_config in config_local.profesores_config.items():
+    for profesor, prof_config in config.profesores_config.items():
         creditos_actuales = creditos_por_prof.get(profesor, 0)
         creditos_objetivo = prof_config["creditos_totales"]
         
-        if creditos_actuales > config_local.restricciones_globales["creditos_max_profesor"]:
-            penalizacion += (creditos_actuales - config_local.restricciones_globales["creditos_max_profesor"]) * 1000
+        if creditos_actuales > config.restricciones_globales["creditos_max_profesor"]:
+            penalizacion += (creditos_actuales - config.restricciones_globales["creditos_max_profesor"]) * 1000
         
-        if creditos_actuales < config_local.restricciones_globales["creditos_min_profesor"]:
-            penalizacion += (config_local.restricciones_globales["creditos_min_profesor"] - creditos_actuales) * 1000
+        if creditos_actuales < config.restricciones_globales["creditos_min_profesor"]:
+            penalizacion += (config.restricciones_globales["creditos_min_profesor"] - creditos_actuales) * 1000
         
         if creditos_actuales != creditos_objetivo:
             penalizacion += abs(creditos_actuales - creditos_objetivo) * 200
@@ -459,7 +487,6 @@ def evaluar_horario(asignaciones, config_local):
         for j, asig2 in enumerate(asignaciones):
             if i >= j:
                 continue
-            # uso de hay_conflictos usando listas de uno
             if hay_conflictos(asig1, [asig2]):
                 penalizacion += 5000
     
@@ -470,172 +497,39 @@ def evaluar_horario(asignaciones, config_local):
                 penalizacion += 10000
     
     # Restricciones suaves
-    pesos = config_local.pesos_restricciones
+    pesos = config.pesos_restricciones
     
     for asig in asignaciones:
         for dia, duracion in zip(asig.bloque["dias"], asig.bloque["horas"]):
             if cumple_horario_preferido(dia, asig.hora_inicio, duracion, asig.profesor):
                 bonus += pesos["horario_preferido"]
         
-        if asig.estudiantes > config_local.restricciones_globales["estudiantes_max_salon"]:
-            penalizacion += pesos["estudiantes_por_salon"] * (asig.estudiantes - config_local.restricciones_globales["estudiantes_max_salon"])
+        if asig.estudiantes > config.restricciones_globales["estudiantes_max_salon"]:
+            penalizacion += pesos["estudiantes_por_salon"] * (asig.estudiantes - config.restricciones_globales["estudiantes_max_salon"])
     
     return bonus - penalizacion
 
-
-# -------------------------------------------------
-# REPRESENTACIÓN DEL GENOMA Y CONVERSIONES
-# -------------------------------------------------
-# Vamos a construir una lista global de "cursos" en orden fijo:
-# cursos_lista = [(profesor, curso_info), ...] y cada gen es (bloque_id, hora_inicio_idx, salon_idx)
-
-def construir_lista_cursos(config_local):
-    """Devuelve lista de (profesor, curso_info) en orden fijo"""
-    lista = []
-    for profesor, info in config_local.profesores_config.items():
-        for curso in info["cursos"]:
-            lista.append((profesor, curso))
-    return lista
-
-def genoma_a_asignaciones(genoma, cursos_lista, bloques, config_local):
-    """
-    Convierte un genoma en lista de AsignacionClase.
-    genoma: list of (bloque_id, hora_idx, salon_idx)
-    """
-    asignaciones = []
-    for gene, (profesor, curso_info) in zip(genoma, cursos_lista):
-        bloque_id, hora_idx, salon_idx = gene
-        # buscar bloque por id
-        bloque = next((b for b in bloques if b["id"] == bloque_id), None)
-        hora_inicio = horas_inicio[hora_idx]
-        salon = config_local.salones[salon_idx]
-        asignacion = AsignacionClase(curso_info, profesor, bloque, hora_inicio, salon)
-        asignaciones.append(asignacion)
-    return asignaciones
-
-def generar_gen_aleatorio_para_curso(curso_info, bloques, config_local):
-    """Crea un gen aleatorio compatible (intento de buena elección): elegir bloques con creditos iguales/parecidos"""
-    # Preferir bloques con mismos créditos
-    bloques_compatibles = [b for b in bloques if b["creditos"] == curso_info["creditos"]]
-    if not bloques_compatibles:
-        # fallback: los 6 bloques más cercanos en créditos
-        bloques_compatibles = sorted(bloques, key=lambda x: abs(x["creditos"] - curso_info["creditos"]))[:6]
-    bloque = random.choice(bloques_compatibles)
-    # elegir hora aleatoria entre horas_inicio que cumplan por cada dia la restricción de hora inicio/fin
-    # Para simplificar elegimos cualquier hora y dejamos que la evaluación penalice violaciones.
-    hora_idx = random.randrange(len(horas_inicio))
-    salon_idx = random.randrange(len(config_local.salones))
-    return (bloque["id"], hora_idx, salon_idx)
-
-# -------------------------------------------------
-# ALGORITMO GENÉTICO
-# -------------------------------------------------
-def inicializar_poblacion(tamano, cursos_lista, bloques, config_local):
-    poblacion = []
-    for _ in range(tamano):
-        genoma = [generar_gen_aleatorio_para_curso(curso_info, bloques, config_local) for (_, curso_info) in cursos_lista]
-        poblacion.append(genoma)
-    return poblacion
-
-def fitness_de_genoma(genoma, cursos_lista, bloques, config_local):
-    # Convierte genoma a asignaciones y evalúa
-    asignaciones = genoma_a_asignaciones(genoma, cursos_lista, bloques, config_local)
-    score = evaluar_horario(asignaciones, config_local)
-    # Además penalizamos fuertemente horarios que no cumplan horarios válidos por bloque/día
-    penal_extra = 0
-    for asig in asignaciones:
-        for dia, dur in zip(asig.bloque["dias"], asig.bloque["horas"]):
-            if not horario_valido(dia, asig.hora_inicio, dur, asig.profesor, asig.creditos, config_local):
-                penal_extra += 5000
-    return score - penal_extra
-
-def seleccion_torneo(poblacion, scores, k=3):
-    # torneo simple: escoger k aleatorios, devolver el mejor
-    seleccionados = random.sample(list(range(len(poblacion))), k)
-    mejor = max(seleccionados, key=lambda i: scores[i])
-    return copy.deepcopy(poblacion[mejor])
-
-def cruce_uniforme(padre1, padre2, prob_swap=0.5):
-    hijo = []
-    for g1, g2 in zip(padre1, padre2):
-        if random.random() < prob_swap:
-            hijo.append(copy.deepcopy(g2))
-        else:
-            hijo.append(copy.deepcopy(g1))
-    return hijo
-
-def mutacion(genoma, bloques, config_local, prob_mut=0.05):
-    for i in range(len(genoma)):
-        if random.random() < prob_mut:
-            # mutar bloque/hora/salon parcialmente
-            bloque_id, hora_idx, salon_idx = genoma[i]
-            # elegir que parte mutar
-            r = random.random()
-            if r < 0.4:
-                # cambiar bloque por otro compatible
-                curso_info = None  # tenemos que recuperar curso_info? No aquí; llamador puede mutar libremente
-                bloque_id = random.choice(bloques)["id"]
-            elif r < 0.8:
-                hora_idx = random.randrange(len(horas_inicio))
-            else:
-                salon_idx = random.randrange(len(config_local.salones))
-            genoma[i] = (bloque_id, hora_idx, salon_idx)
-    return genoma
-
-def reconstruir_mejor_asignaciones_desde_poblacion(poblacion, scores, cursos_lista, bloques, config_local):
-    idx = int(np.argmax(scores))
-    return genoma_a_asignaciones(poblacion[idx], cursos_lista, bloques, config_local), scores[idx]
-
-
-def ga_buscar_mejor_horario(config_local, bloques, poblacion_tamano=80, generaciones=200, prob_mut=0.08, elitismo=0.05, torneo_k=3, progreso_callback=None):
-    """
-    Algoritmo genético principal.
-    progreso_callback: función opcional que recibe (generacion, mejor_score, promedio_score) para actualizar UI.
-    """
-    cursos_lista = construir_lista_cursos(config_local)
-    if not cursos_lista:
-        return None, -float('inf')
-    
-    poblacion = inicializar_poblacion(poblacion_tamano, cursos_lista, bloques, config_local)
-    scores = [fitness_de_genoma(ind, cursos_lista, bloques, config_local) for ind in poblacion]
-    mejor_global = None
+def buscar_mejor_horario(intentos=200):
+    """Genera varios horarios y retorna el mejor según la evaluación"""
+    mejor_asignaciones = None
     mejor_score = -float('inf')
-    n_elite = max(1, int(elitismo * poblacion_tamano))
     
-    for gen in range(generaciones):
-        nueva_poblacion = []
-        # Elitismo: conservar los mejores
-        idx_orden = sorted(range(len(poblacion)), key=lambda i: scores[i], reverse=True)
-        for i in idx_orden[:n_elite]:
-            nueva_poblacion.append(copy.deepcopy(poblacion[i]))
-        
-        # Rellenar el resto con cruces
-        while len(nueva_poblacion) < poblacion_tamano:
-            padre1 = seleccion_torneo(poblacion, scores, k=torneo_k)
-            padre2 = seleccion_torneo(poblacion, scores, k=torneo_k)
-            hijo = cruce_uniforme(padre1, padre2, prob_swap=0.5)
-            hijo = mutacion(hijo, bloques, config_local, prob_mut=prob_mut)
-            nueva_poblacion.append(hijo)
-        
-        poblacion = nueva_poblacion
-        scores = [fitness_de_genoma(ind, cursos_lista, bloques, config_local) for ind in poblacion]
-        
-        gen_mejor_score = max(scores)
-        gen_promedio = sum(scores) / len(scores)
-        if gen_mejor_score > mejor_score:
-            mejor_score = gen_mejor_score
-            mejor_global = copy.deepcopy(poblacion[int(np.argmax(scores))])
-        
-        if progreso_callback:
-            progreso_callback(gen+1, mejor_score, gen_promedio)
+    progress_bar = st.progress(0)
+    status_text = st.empty()
     
-    # reconstruir asignaciones
-    mejor_asignaciones = genoma_a_asignaciones(mejor_global, cursos_lista, bloques, config_local)
+    for i in range(intentos):
+        progress_bar.progress((i + 1) / intentos)
+        status_text.text(f"🔄 Generando horarios... {i+1}/{intentos}")
+        
+        asignaciones = generar_horario_valido()
+        score = evaluar_horario(asignaciones)
+        if score > mejor_score:
+            mejor_score = score
+            mejor_asignaciones = asignaciones
+    
+    status_text.text(f"✅ Generación completada. Mejor puntuación: {mejor_score}")
     return mejor_asignaciones, mejor_score
 
-# -------------------------------------------------
-# EXPORTACIÓN A DATAFRAME (igual que tu original)
-# -------------------------------------------------
 def exportar_horario(asignaciones):
     """Convierte las asignaciones a un DataFrame para visualización"""
     registros = []
@@ -644,238 +538,212 @@ def exportar_horario(asignaciones):
     df = pd.DataFrame(registros)
     return df
 
-# -------------------------------------------------
-# INTERFAZ STREAMLIT - DISEÑO MEJORADO
-# -------------------------------------------------
-
-# CSS para estilo más elegante
-PAGE_CSS = """
-<style>
-/* Fondo suave y contenedores */
-[data-testid="stAppViewContainer"] {
-  background: linear-gradient(180deg, #f7f9fb 0%, #ffffff 100%);
-}
-header {display:none;}
-h1, h2, h3 { font-family: 'Segoe UI', Roboto, Arial; }
-.card {
-  background: white;
-  border-radius: 12px;
-  padding: 16px;
-  box-shadow: 0 4px 18px rgba(20,30,60,0.08);
-  margin-bottom: 12px;
-}
-.topline {
-  display:flex;
-  gap:12px;
-  align-items:center;
-  padding:12px;
-}
-.logo {
-  width:64px;
-  height:64px;
-  border-radius:12px;
-  background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  color:white;
-  font-weight:700;
-  font-size:20px;
-}
-.small-muted { color:#6b7280; font-size:13px; }
-.metric-card { padding:12px; border-radius:10px; background:linear-gradient(90deg,#ffffff,#fbfdff); }
-.footer-small { color:#9ca3af; font-size:12px; margin-top:10px; }
-</style>
-"""
+# ========================================================
+# INTERFAZ STREAMLIT
+# ========================================================
 
 def main():
     st.set_page_config(
-        page_title="Generador de Horarios (GA) — Elegante",
+        page_title="Generador de Horarios con Algoritmos Genéticos",
         page_icon="📅",
-        layout="wide",
+        layout="wide"
     )
-    st.markdown(PAGE_CSS, unsafe_allow_html=True)
     
-    # HEADER
-    col1, col2 = st.columns([0.12, 0.88])
-    with col1:
-        st.markdown('<div class="logo">GA</div>', unsafe_allow_html=True)
-    with col2:
-        st.markdown("<h1>Generador de Horarios Académicos</h1>", unsafe_allow_html=True)
-        st.markdown("<div class='small-muted'>Optimización por Algoritmos Genéticos · Interfaz limpia y profesional</div>", unsafe_allow_html=True)
+    st.title("📅 Generador de Horarios Académicos")
+    st.markdown("### Sistema de optimización con Algoritmos Genéticos")
     
-    st.markdown("---")
+    # Sidebar para configuración
+    st.sidebar.header("⚙️ Configuración")
     
-    # SIDEBAR: carga y parámetros
-    st.sidebar.header("⚙️ Configuración & Parámetros")
+    # Upload del archivo Excel
     uploaded_file = st.sidebar.file_uploader(
         "📁 Cargar archivo Excel con datos de profesores y cursos",
         type=['xlsx', 'xls'],
-        help="Columnas: Profesor, Curso/Materia, Créditos, Estudiantes (flexible)"
+        help="El archivo debe contener columnas como: Profesor, Curso/Materia, Créditos, Estudiantes"
     )
     
-    # Parámetros GA
-    st.sidebar.subheader("🧬 Parámetros del Algoritmo Genético")
-    pop_size = st.sidebar.slider("Población", 20, 300, 80, 10)
-    generaciones = st.sidebar.slider("Generaciones", 10, 800, 200, 10)
-    prob_mut = st.sidebar.slider("Probabilidad de mutación", 0.0, 0.5, 0.08, 0.01)
-    elitismo = st.sidebar.slider("Elitismo (fracción)", 0.0, 0.3, 0.06, 0.01)
-    torneo_k = st.sidebar.slider("Tamaño torneo", 2, 8, 3, 1)
-    
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("📥 Exportar")
-    st.sidebar.write("El horario final se puede descargar como CSV tras la generación.")
-    
-    # Cargar archivo y crear config
-    global config, bloques
     if uploaded_file is not None:
+        # Guardar archivo temporalmente
         with open("temp_excel.xlsx", "wb") as f:
             f.write(uploaded_file.getbuffer())
+        
+        # Inicializar configuración
+        global config, bloques
         config = ConfiguracionSistema("temp_excel.xlsx")
         bloques = generar_bloques()
-    else:
-        config = None
-        bloques = generar_bloques()
-    
-    # MAIN: si no hay config, mostrar ejemplo y ayuda
-    if config is None or not config.profesores_config:
-        with st.container():
-            st.info("📁 Por favor, carga un archivo Excel para comenzar. Aquí tienes un ejemplo del formato esperado.")
-            with st.expander("📋 Formato esperado del archivo Excel"):
-                st.write("""
-                El archivo Excel debe contener al menos las siguientes columnas (nombres flexibles):
-                
-                | Profesor | Curso/Materia | Créditos | Estudiantes |
-                |----------|---------------|----------|-------------|
-                | Juan Pérez | Matemáticas I | 4 | 35 |
-                | Juan Pérez | Álgebra | 3 | 28 |
-                | María García | Física I | 4 | 30 |
-                """)
-            st.write("Consejos rápidos:")
-            st.markdown("- Asegúrate que los nombres de profesores estén consistentes (mismo exacto).")
-            st.markdown("- Si no incluyes créditos o estudiantes, se usarán valores por defecto (3 y 30).")
-        return
-    
-    # Si llegó aquí: config cargada
-    # Tarjetas métricas superiores
-    total_cursos = sum(len(p['cursos']) for p in config.profesores_config.values())
-    col1, col2, col3, col4 = st.columns(4)
-    col1.markdown(f"<div class='card metric-card'><h3>👨‍🏫 Profesores</h3><h2>{len(config.profesores_config)}</h2></div>", unsafe_allow_html=True)
-    col2.markdown(f"<div class='card metric-card'><h3>📚 Cursos</h3><h2>{total_cursos}</h2></div>", unsafe_allow_html=True)
-    col3.markdown(f"<div class='card metric-card'><h3>🏫 Salones</h3><h2>{len(config.salones)}</h2></div>", unsafe_allow_html=True)
-    col4.markdown(f"<div class='card metric-card'><h3>🕒 Ventana Horaria</h3><h4>{config.restricciones_globales['hora_inicio_min']} - {config.restricciones_globales['hora_fin_max']}</h4></div>", unsafe_allow_html=True)
-    
-    st.markdown("---")
-    
-    # Mostrar datos cargados en una tabla compacta
-    with st.expander("📋 Ver datos cargados (profesores y cursos)"):
-        for profesor, data in config.profesores_config.items():
-            st.write(f"**{profesor}** — {len(data['cursos'])} cursos — {data['creditos_totales']} créditos")
-    
-    # Panel de configuración de preferencias por profesor
-    st.subheader("👤 Preferencias de Profesores (opcional)")
-    profesor_seleccionado = st.selectbox("Seleccionar profesor para agregar preferencia", ["Ninguno"] + list(config.profesores_config.keys()))
-    if profesor_seleccionado != "Ninguno":
-        with st.expander(f"Configurar preferencia para {profesor_seleccionado}"):
-            dias = ["Lu", "Ma", "Mi", "Ju", "Vi"]
-            for dia in dias:
-                colA, colB = st.columns(2)
-                with colA:
-                    inicio = st.time_input(f"{dia} inicio", key=f"pref_{profesor_seleccionado}_{dia}_inicio", value=datetime.strptime("07:30","%H:%M").time())
-                with colB:
-                    fin = st.time_input(f"{dia} fin", key=f"pref_{profesor_seleccionado}_{dia}_fin", value=datetime.strptime("19:30","%H:%M").time())
-                
-                if inicio != datetime.strptime("07:30","%H:%M").time() or fin != datetime.strptime("19:30","%H:%M").time():
-                    config.profesores_config[profesor_seleccionado].setdefault("horario_preferido", {})
-                    config.profesores_config[profesor_seleccionado]["horario_preferido"][dia] = [(inicio.strftime("%H:%M"), fin.strftime("%H:%M"))]
-    
-    st.markdown("---")
-    
-    # Botón para ejecutar el GA
-    run_col1, run_col2 = st.columns([0.2,0.8])
-    with run_col1:
-        if st.button("🚀 Ejecutar Algoritmo Genético", type="primary"):
-            # Preparar UI para progreso
-            progress_bar = st.progress(0)
-            status = st.empty()
-            status.info("Inicializando algoritmo genético...")
+        
+        if config.profesores_config:
+            st.success("✅ Archivo cargado correctamente")
             
-            # callback para progreso
-            def progreso_cb(generacion, mejor_score, promedio):
-                frac = generacion / max(1, generaciones)
-                progress_bar.progress(min(1.0, frac))
-                status.markdown(f"Generación **{generacion} / {generaciones}** — Mejor score: **{mejor_score:.1f}** — Promedio: {promedio:.1f}")
+            # Mostrar resumen de datos cargados
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("👨‍🏫 Profesores", len(config.profesores_config))
+            with col2:
+                total_cursos = sum(len(prof['cursos']) for prof in config.profesores_config.values())
+                st.metric("📚 Cursos", total_cursos)
+            with col3:
+                st.metric("🏫 Salones", len(config.salones))
             
-            # Ejecutar GA
-            with st.spinner("Ejecutando GA, esto puede tardar unos instantes..."):
-                mejor_asig, mejor_score = ga_buscar_mejor_horario(
-                    config_local=config,
-                    bloques=bloques,
-                    poblacion_tamano=pop_size,
-                    generaciones=generaciones,
-                    prob_mut=prob_mut,
-                    elitismo=elitismo,
-                    torneo_k=torneo_k,
-                    progreso_callback=progreso_cb
+            # Mostrar datos cargados
+            with st.expander("📋 Ver datos cargados"):
+                for profesor, data in config.profesores_config.items():
+                    st.write(f"**{profesor}** ({data['creditos_totales']} créditos)")
+                    for curso in data['cursos']:
+                        st.write(f"  - {curso['nombre']} ({curso['creditos']} créditos, {curso['estudiantes']} estudiantes)")
+            
+            # Configuración de parámetros
+            st.sidebar.subheader("🎯 Parámetros de Optimización")
+            intentos = st.sidebar.slider("Número de iteraciones", 50, 500, 200, 50)
+            
+            # Configuración de restricciones
+            with st.sidebar.expander("🔒 Restricciones Globales"):
+                config.restricciones_globales["hora_inicio_min"] = st.time_input(
+                    "Hora inicio mínima", 
+                    datetime.strptime("07:30", "%H:%M").time()
+                ).strftime("%H:%M")
+                
+                config.restricciones_globales["hora_fin_max"] = st.time_input(
+                    "Hora fin máxima", 
+                    datetime.strptime("19:30", "%H:%M").time()
+                ).strftime("%H:%M")
+                
+                config.restricciones_globales["creditos_max_profesor"] = st.number_input(
+                    "Créditos máximos por profesor", 1, 20, 15
+                )
+                
+                config.restricciones_globales["estudiantes_max_salon"] = st.number_input(
+                    "Estudiantes máximos por salón", 20, 100, 50
                 )
             
-            if mejor_asig is None:
-                st.error("❌ No se pudo generar un horario válido. Revisa restricciones y archivos.")
-            else:
-                st.success(f"✅ Horario generado! Mejor puntuación: {mejor_score:.1f}")
-                df_horario = exportar_horario(mejor_asig)
-                
-                # Mostrar pestañas con la info
-                tab1, tab2, tab3, tab4 = st.tabs(["📊 Horario Completo", "👨‍🏫 Por Profesor", "🏫 Por Salón", "📈 Estadísticas"])
-                
-                with tab1:
-                    st.subheader("📊 Horario Completo")
-                    st.dataframe(df_horario, use_container_width=True)
-                    csv = df_horario.to_csv(index=False)
-                    st.download_button("💾 Descargar horario (CSV)", data=csv, file_name="horario_ga.csv", mime="text/csv")
-                
-                with tab2:
-                    st.subheader("👨‍🏫 Horario por Profesor")
-                    for profesor in config.profesores_config.keys():
-                        with st.expander(f"{profesor}"):
-                            df_prof = df_horario[df_horario['Profesor'] == profesor]
-                            if not df_prof.empty:
-                                st.dataframe(df_prof, use_container_width=True)
-                            else:
-                                st.write("Sin clases asignadas.")
-                
-                with tab3:
-                    st.subheader("🏫 Horario por Salón")
-                    for salon in config.salones:
-                        with st.expander(f"{salon}"):
-                            df_salon = df_horario[df_horario['Salon'] == salon]
-                            if not df_salon.empty:
-                                st.dataframe(df_salon, use_container_width=True)
-                            else:
-                                st.write("Sin clases en este salón.")
-                
-                with tab4:
-                    st.subheader("📈 Estadísticas del Horario")
-                    colA, colB = st.columns(2)
-                    with colA:
-                        st.write("**Créditos por profesor**")
-                        creditos_prof = df_horario.groupby('Profesor')['Créditos'].sum()
-                        st.bar_chart(creditos_prof)
-                    with colB:
-                        st.write("**Uso de salones**")
-                        uso_salones = df_horario.groupby('Salon').size()
-                        st.bar_chart(uso_salones)
+            # Configuración de preferencias de profesores
+            st.sidebar.subheader("👤 Preferencias de Profesores")
+            profesor_seleccionado = st.sidebar.selectbox(
+                "Seleccionar profesor para configurar",
+                ["Ninguno"] + list(config.profesores_config.keys())
+            )
+            
+            if profesor_seleccionado != "Ninguno":
+                with st.sidebar.expander(f"Configurar {profesor_seleccionado}"):
+                    st.write("**Horarios preferidos:**")
+                    dias = ["Lu", "Ma", "Mi", "Ju", "Vi"]
+                    for dia in dias:
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            inicio = st.time_input(f"{dia} inicio", key=f"pref_{profesor_seleccionado}_{dia}_inicio")
+                        with col2:
+                            fin = st.time_input(f"{dia} fin", key=f"pref_{profesor_seleccionado}_{dia}_fin")
+                        
+                        if inicio != datetime.strptime("00:00", "%H:%M").time():
+                            if profesor_seleccionado not in config.profesores_config:
+                                config.profesores_config[profesor_seleccionado] = {"horario_preferido": {}}
+                            if "horario_preferido" not in config.profesores_config[profesor_seleccionado]:
+                                config.profesores_config[profesor_seleccionado]["horario_preferido"] = {}
+                            config.profesores_config[profesor_seleccionado]["horario_preferido"][dia] = [
+                                (inicio.strftime("%H:%M"), fin.strftime("%H:%M"))
+                            ]
+            
+            # Botón para generar horario
+            if st.button("🚀 Generar Horario Optimizado", type="primary"):
+                with st.spinner("Generando horario optimizado..."):
+                    mejor, score = buscar_mejor_horario(intentos)
                     
-                    clases_3h = df_horario[df_horario['3h Consecutivas'] == 'SÍ']
-                    if len(clases_3h) > 0:
-                        cumple = len(clases_3h[clases_3h['Restricción 15:30'] == 'CUMPLE'])
-                        viola = len(clases_3h[clases_3h['Restricción 15:30'] == 'VIOLA'])
-                        st.write(f"Clases 3h: {len(clases_3h)}  — Cumplen: {cumple} — Violan: {viola}")
-                        if viola > 0:
-                            st.warning("⚠️ Algunas clases de 3h violan la restricción (antes de 15:30). Revisa horarios preferidos o aumenta penalizaciones.")
-    
-    # Pie de página
-    st.markdown("<div class='footer-small'>Generador de Horarios • Algoritmo Genético • Diseñado para ser fácil de usar y extensible</div>", unsafe_allow_html=True)
+                    if mejor is None:
+                        st.error("❌ No se pudo generar un horario válido. Intenta ajustar las restricciones.")
+                    else:
+                        st.success(f"✅ Horario generado exitosamente! Puntuación: {score}")
+                        
+                        # Exportar a DataFrame
+                        df_horario = exportar_horario(mejor)
+                        
+                        # Mostrar horario en pestañas
+                        tab1, tab2, tab3, tab4 = st.tabs(["📊 Horario Completo", "👨‍🏫 Por Profesor", "🏫 Por Salón", "📈 Estadísticas"])
+                        
+                        with tab1:
+                            st.subheader("📊 Horario Completo")
+                            st.dataframe(df_horario, use_container_width=True)
+                            
+                            # Botón de descarga
+                            csv = df_horario.to_csv(index=False)
+                            st.download_button(
+                                label="💾 Descargar horario (CSV)",
+                                data=csv,
+                                file_name="horario_generado.csv",
+                                mime="text/csv"
+                            )
+                        
+                        with tab2:
+                            st.subheader("👨‍🏫 Horario por Profesor")
+                            for profesor in config.profesores_config.keys():
+                                with st.expander(f"Horario de {profesor}"):
+                                    df_prof = df_horario[df_horario['Profesor'] == profesor]
+                                    if not df_prof.empty:
+                                        st.dataframe(df_prof, use_container_width=True)
+                                    else:
+                                        st.warning(f"No se encontraron clases para {profesor}")
+                        
+                        with tab3:
+                            st.subheader("🏫 Horario por Salón")
+                            for salon in config.salones:
+                                with st.expander(f"Horario del {salon}"):
+                                    df_salon = df_horario[df_horario['Salon'] == salon]
+                                    if not df_salon.empty:
+                                        st.dataframe(df_salon, use_container_width=True)
+                                    else:
+                                        st.info(f"No hay clases asignadas al {salon}")
+                        
+                        with tab4:
+                            st.subheader("📈 Estadísticas del Horario")
+                            
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                st.write("**Distribución de créditos por profesor:**")
+                                creditos_prof = df_horario.groupby('Profesor')['Créditos'].sum()
+                                st.bar_chart(creditos_prof)
+                            
+                            with col2:
+                                st.write("**Utilización de salones:**")
+                                uso_salones = df_horario.groupby('Salon').size()
+                                st.bar_chart(uso_salones)
+                            
+                            # Verificar restricción de 3 horas
+                            clases_3h = df_horario[df_horario['3h Consecutivas'] == 'SÍ']
+                            if len(clases_3h) > 0:
+                                st.write("**Cumplimiento de restricción de 3 horas consecutivas:**")
+                                cumple = len(clases_3h[clases_3h['Restricción 15:30'] == 'CUMPLE'])
+                                viola = len(clases_3h[clases_3h['Restricción 15:30'] == 'VIOLA'])
+                                
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    st.metric("✅ Cumple restricción", cumple)
+                                with col2:
+                                    st.metric("⚠️ Viola restricción", viola)
+                                
+                                if viola > 0:
+                                    st.warning("⚠️ Algunas clases de 3 horas consecutivas violan la restricción de horario (antes de 15:30)")
+                                    st.dataframe(clases_3h[clases_3h['Restricción 15:30'] == 'VIOLA'])
+        else:
+            st.error("❌ No se pudieron cargar los datos del archivo Excel")
+    else:
+        st.info("📁 Por favor, carga un archivo Excel para comenzar")
+        
+        # Mostrar ejemplo de formato esperado
+        with st.expander("📋 Formato esperado del archivo Excel"):
+            st.write("""
+            El archivo Excel debe contener al menos las siguientes columnas:
+            
+            | Profesor | Curso/Materia | Créditos | Estudiantes |
+            |----------|---------------|----------|-------------|
+            | Juan Pérez | Matemáticas I | 4 | 35 |
+            | Juan Pérez | Álgebra | 3 | 28 |
+            | María García | Física I | 4 | 30 |
+            
+            **Notas:**
+            - Los nombres de las columnas pueden variar (profesor/docente, curso/materia/asignatura, etc.)
+            - Si faltan columnas de créditos o estudiantes, se usarán valores por defecto
+            - El sistema detecta automáticamente las columnas relevantes
+            """)
 
 if __name__ == "__main__":
     main()
