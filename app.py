@@ -49,73 +49,113 @@ class ConfiguracionSistema:
             self.cargar_desde_excel()
     
     def cargar_desde_excel(self):
+        """Carga la configuración desde el archivo Excel"""
         try:
+            # Leer todas las hojas del Excel
             excel_data = pd.read_excel(self.archivo_excel, sheet_name=None)
+            
             st.write(f"📊 Hojas disponibles en el Excel: {list(excel_data.keys())}")
+            
+            # Buscar la hoja que contiene los datos de cursos
             hoja_cursos = None
             for nombre_hoja, df in excel_data.items():
+                st.write(f"\n🔍 Analizando hoja '{nombre_hoja}':")
+                st.write(f"Columnas: {list(df.columns)}")
+                
+                # Verificar si esta hoja contiene información de cursos
                 columnas_df = [col.lower().strip() for col in df.columns]
+                
                 if any('profesor' in col or 'docente' in col for col in columnas_df) and any('curso' in col or 'materia' in col or 'asignatura' in col for col in columnas_df):
                     hoja_cursos = df
                     st.success(f"✅ Hoja '{nombre_hoja}' seleccionada como fuente de datos")
                     break
+            
             if hoja_cursos is None:
                 st.error("❌ No se encontró una hoja con datos de cursos válidos")
                 return
+            
             self.cursos_df = hoja_cursos
             self.procesar_datos_excel()
+            
         except Exception as e:
             st.error(f"❌ Error al cargar el archivo Excel: {e}")
             st.info("ℹ️ Usando configuración por defecto")
     
     def procesar_datos_excel(self):
-        if self.cursos_df is None: return
+        """Procesa los datos del Excel y crea la configuración de profesores"""
+        if self.cursos_df is None:
+            return
+        
         df = self.cursos_df.copy()
+        
+        # Normalizar nombres de columnas
         df.columns = [col.lower().strip().replace(' ', '_') for col in df.columns]
+        
+        # Mapear columnas comunes
         mapeo_columnas = {
             'profesor': ['profesor', 'docente', 'teacher', 'instructor'],
             'curso': ['curso', 'materia', 'asignatura', 'subject', 'course'],
             'creditos': ['creditos', 'créditos', 'credits', 'horas'],
             'estudiantes': ['estudiantes', 'alumnos', 'students', 'enrollment', 'seccion']
         }
+        
         columnas_finales = {}
         for campo, posibles in mapeo_columnas.items():
             for col in df.columns:
                 if any(pos in col for pos in posibles):
                     columnas_finales[campo] = col
                     break
+        
         st.write(f"🔗 Mapeo de columnas: {columnas_finales}")
+        
+        # Verificar que tenemos las columnas mínimas necesarias
         if 'profesor' not in columnas_finales or 'curso' not in columnas_finales:
             st.error("❌ Error: No se encontraron las columnas básicas (profesor, curso)")
             return
+        
+        # Asignar valores por defecto si faltan columnas
         if 'creditos' not in columnas_finales:
             df['creditos_default'] = 3
             columnas_finales['creditos'] = 'creditos_default'
             st.warning("⚠️ No se encontró columna de créditos, usando 3 por defecto")
+        
         if 'estudiantes' not in columnas_finales:
             df['estudiantes_default'] = 30
             columnas_finales['estudiantes'] = 'estudiantes_default'
             st.warning("⚠️ No se encontró columna de estudiantes, usando 30 por defecto")
+        
+        # Limpiar datos
         df = df.dropna(subset=[columnas_finales['profesor'], columnas_finales['curso']])
+        
+        # Procesar cada profesor
         profesores_unicos = df[columnas_finales['profesor']].unique()
         st.info(f"👨‍🏫 Profesores encontrados: {len(profesores_unicos)}")
+        
         for profesor in profesores_unicos:
             if pd.isna(profesor) or str(profesor).strip() == '':
                 continue
+                
             profesor = str(profesor).strip()
             cursos_profesor = df[df[columnas_finales['profesor']] == profesor]
+            
             cursos_lista = []
             creditos_totales = 0
+            
             for _, fila in cursos_profesor.iterrows():
                 curso_nombre = str(fila[columnas_finales['curso']]).strip()
+                
+                # Manejar créditos
                 try:
                     creditos = int(float(fila[columnas_finales['creditos']]))
                 except (ValueError, TypeError):
                     creditos = 3
+                
+                # Manejar estudiantes
                 try:
                     estudiantes = int(float(fila[columnas_finales['estudiantes']]))
                 except (ValueError, TypeError):
                     estudiantes = 30
+                
                 if curso_nombre and curso_nombre != 'nan':
                     cursos_lista.append({
                         "nombre": curso_nombre,
@@ -123,6 +163,7 @@ class ConfiguracionSistema:
                         "estudiantes": estudiantes
                     })
                     creditos_totales += creditos
+            
             if cursos_lista:
                 self.profesores_config[profesor] = {
                     "cursos": cursos_lista,
@@ -130,15 +171,15 @@ class ConfiguracionSistema:
                     "horario_preferido": {},
                     "horario_no_disponible": {}
                 }
+                
                 st.write(f"📚 {profesor}: {len(cursos_lista)} cursos, {creditos_totales} créditos totales")
+        
+        # Generar salones automáticamente basado en el número de cursos
         total_cursos = sum(len(config['cursos']) for config in self.profesores_config.values())
         num_salones = max(3, min(10, total_cursos // 3))
         self.salones = [f"Salon {i+1}" for i in range(num_salones)]
+        
         st.success(f"✅ Configuración completada: {len(self.profesores_config)} profesores, {num_salones} salones")
-
-# ========================================================
-# BLOQUES, TABLAS Y FUNCIONES DE HORARIO
-# ========================================================
 
 # Generador de bloques según especificaciones
 def generar_bloques():
@@ -498,29 +539,6 @@ def exportar_horario(asignaciones):
     return df
 
 # ========================================================
-# EXPORTAR HORARIO EN FORMATO TABLA SEMANAL
-# ========================================================
-
-def exportar_horario_tabla(asignaciones):
-    dias_semana = ["Lu", "Ma", "Mi", "Ju", "Vi"]
-    tabla = {}
-    horas_unicas = sorted({a.hora_inicio for a in asignaciones}, key=lambda x: a_minutos(x))
-    for hora in horas_unicas:
-        tabla[hora] = {dia: "" for dia in dias_semana}
-    for asig in asignaciones:
-        for dia in asig.bloque["dias"]:
-            contenido = f"{asig.curso_nombre} ({asig.profesor}) [{asig.salon}]"
-            if tabla[asig.hora_inicio][dia]:
-                tabla[asig.hora_inicio][dia] += "\n" + contenido
-            else:
-                tabla[asig.hora_inicio][dia] = contenido
-    df_tabla = pd.DataFrame.from_dict(tabla, orient='index')
-    df_tabla.index.name = "Hora"
-    df_tabla = df_tabla.rename(columns={"Lu":"Lunes","Ma":"Martes","Mi":"Miércoles","Ju":"Jueves","Vi":"Viernes"})
-    df_tabla = df_tabla.sort_index(key=lambda x: [a_minutos(h) for h in x])
-    return df_tabla
-
-# ========================================================
 # INTERFAZ STREAMLIT
 # ========================================================
 
@@ -534,75 +552,199 @@ def main():
     st.title("📅 Generador de Horarios Académicos")
     st.markdown("### Sistema de optimización con Algoritmos Genéticos")
     
-    uploaded_file = st.file_uploader("📁 Cargar archivo Excel con datos de profesores y cursos", type=['xlsx','xls'])
+    # Sidebar para configuración
+    st.sidebar.header("⚙️ Configuración")
     
-    if uploaded_file:
-        with open("temp.xlsx","wb") as f: f.write(uploaded_file.getbuffer())
+    # Upload del archivo Excel
+    uploaded_file = st.sidebar.file_uploader(
+        "📁 Cargar archivo Excel con datos de profesores y cursos",
+        type=['xlsx', 'xls'],
+        help="El archivo debe contener columnas como: Profesor, Curso/Materia, Créditos, Estudiantes"
+    )
+    
+    if uploaded_file is not None:
+        # Guardar archivo temporalmente
+        with open("temp_excel.xlsx", "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        
+        # Inicializar configuración
         global config, bloques
-        config = ConfiguracionSistema("temp.xlsx")
+        config = ConfiguracionSistema("temp_excel.xlsx")
         bloques = generar_bloques()
         
         if config.profesores_config:
-            mejor, score = buscar_mejor_horario(100)
-            df_completo = exportar_horario(mejor)
-            df_tabla = exportar_horario_tabla(mejor)
+            st.success("✅ Archivo cargado correctamente")
             
-            # Pestañas
-            tab1, tab2, tab3, tab4, tab5 = st.tabs([
-                "📊 Horario Completo", 
-                "👨‍🏫 Por Profesor", 
-                "🏫 Por Salón", 
-                "📈 Estadísticas",
-                "📅 Tabla Semanal"
-            ])
+            # Mostrar resumen de datos cargados
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("👨‍🏫 Profesores", len(config.profesores_config))
+            with col2:
+                total_cursos = sum(len(prof['cursos']) for prof in config.profesores_config.values())
+                st.metric("📚 Cursos", total_cursos)
+            with col3:
+                st.metric("🏫 Salones", len(config.salones))
             
-            with tab1:
-                st.subheader("📊 Horario Completo")
-                st.dataframe(df_completo, use_container_width=True)
+            # Mostrar datos cargados
+            with st.expander("📋 Ver datos cargados"):
+                for profesor, data in config.profesores_config.items():
+                    st.write(f"**{profesor}** ({data['creditos_totales']} créditos)")
+                    for curso in data['cursos']:
+                        st.write(f"  - {curso['nombre']} ({curso['creditos']} créditos, {curso['estudiantes']} estudiantes)")
             
-            with tab2:
-                st.subheader("👨‍🏫 Horario por Profesor")
-                for profesor in config.profesores_config.keys():
-                    with st.expander(f"Horario de {profesor}"):
-                        df_prof = df_completo[df_completo['Profesor'] == profesor]
-                        st.dataframe(df_prof, use_container_width=True)
+            # Configuración de parámetros
+            st.sidebar.subheader("🎯 Parámetros de Optimización")
+            intentos = st.sidebar.slider("Número de iteraciones", 50, 500, 200, 50)
             
-            with tab3:
-                st.subheader("🏫 Horario por Salón")
-                for salon in config.salones:
-                    with st.expander(f"Horario del {salon}"):
-                        df_salon = df_completo[df_completo['Salon'] == salon]
-                        st.dataframe(df_salon, use_container_width=True)
+            # Configuración de restricciones
+            with st.sidebar.expander("🔒 Restricciones Globales"):
+                config.restricciones_globales["hora_inicio_min"] = st.time_input(
+                    "Hora inicio mínima", 
+                    datetime.strptime("07:30", "%H:%M").time()
+                ).strftime("%H:%M")
+                
+                config.restricciones_globales["hora_fin_max"] = st.time_input(
+                    "Hora fin máxima", 
+                    datetime.strptime("19:30", "%H:%M").time()
+                ).strftime("%H:%M")
+                
+                config.restricciones_globales["creditos_max_profesor"] = st.number_input(
+                    "Créditos máximos por profesor", 1, 20, 15
+                )
+                
+                config.restricciones_globales["estudiantes_max_salon"] = st.number_input(
+                    "Estudiantes máximos por salón", 20, 100, 50
+                )
             
-            with tab4:
-                st.subheader("📈 Estadísticas")
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.write("**Distribución de créditos por profesor:**")
-                    creditos_prof = df_completo.groupby('Profesor')['Créditos'].sum()
-                    st.bar_chart(creditos_prof)
-                with col2:
-                    st.write("**Utilización de salones:**")
-                    uso_salones = df_completo.groupby('Salon').size()
-                    st.bar_chart(uso_salones)
+            # Configuración de preferencias de profesores
+            st.sidebar.subheader("👤 Preferencias de Profesores")
+            profesor_seleccionado = st.sidebar.selectbox(
+                "Seleccionar profesor para configurar",
+                ["Ninguno"] + list(config.profesores_config.keys())
+            )
             
-            with tab5:
-                st.subheader("📅 Horario Semanal")
-                st.dataframe(df_tabla, use_container_width=True)
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-                    df_tabla.to_excel(writer, index=True, sheet_name="Horario Semanal")
-                    writer.save()
-                    st.download_button(
-                        "💾 Descargar horario (Excel)", 
-                        data=output.getvalue(), 
-                        file_name="horario_semanal.xlsx", 
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
+            if profesor_seleccionado != "Ninguno":
+                with st.sidebar.expander(f"Configurar {profesor_seleccionado}"):
+                    st.write("**Horarios preferidos:**")
+                    dias = ["Lu", "Ma", "Mi", "Ju", "Vi"]
+                    for dia in dias:
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            inicio = st.time_input(f"{dia} inicio", key=f"pref_{profesor_seleccionado}_{dia}_inicio")
+                        with col2:
+                            fin = st.time_input(f"{dia} fin", key=f"pref_{profesor_seleccionado}_{dia}_fin")
+                        
+                        if inicio != datetime.strptime("00:00", "%H:%M").time():
+                            if profesor_seleccionado not in config.profesores_config:
+                                config.profesores_config[profesor_seleccionado] = {"horario_preferido": {}}
+                            if "horario_preferido" not in config.profesores_config[profesor_seleccionado]:
+                                config.profesores_config[profesor_seleccionado]["horario_preferido"] = {}
+                            config.profesores_config[profesor_seleccionado]["horario_preferido"][dia] = [
+                                (inicio.strftime("%H:%M"), fin.strftime("%H:%M"))
+                            ]
+            
+            # Botón para generar horario
+            if st.button("🚀 Generar Horario Optimizado", type="primary"):
+                with st.spinner("Generando horario optimizado..."):
+                    mejor, score = buscar_mejor_horario(intentos)
+                    
+                    if mejor is None:
+                        st.error("❌ No se pudo generar un horario válido. Intenta ajustar las restricciones.")
+                    else:
+                        st.success(f"✅ Horario generado exitosamente! Puntuación: {score}")
+                        
+                        # Exportar a DataFrame
+                        df_horario = exportar_horario(mejor)
+                        
+                        # Mostrar horario en pestañas
+                        tab1, tab2, tab3, tab4 = st.tabs(["📊 Horario Completo", "👨‍🏫 Por Profesor", "🏫 Por Salón", "📈 Estadísticas"])
+                        
+                        with tab1:
+                            st.subheader("📊 Horario Completo")
+                            st.dataframe(df_horario, use_container_width=True)
+                            
+                            # Botón de descarga
+                            csv = df_horario.to_csv(index=False)
+                            st.download_button(
+                                label="💾 Descargar horario (CSV)",
+                                data=csv,
+                                file_name="horario_generado.csv",
+                                mime="text/csv"
+                            )
+                        
+                        with tab2:
+                            st.subheader("👨‍🏫 Horario por Profesor")
+                            for profesor in config.profesores_config.keys():
+                                with st.expander(f"Horario de {profesor}"):
+                                    df_prof = df_horario[df_horario['Profesor'] == profesor]
+                                    if not df_prof.empty:
+                                        st.dataframe(df_prof, use_container_width=True)
+                                    else:
+                                        st.warning(f"No se encontraron clases para {profesor}")
+                        
+                        with tab3:
+                            st.subheader("🏫 Horario por Salón")
+                            for salon in config.salones:
+                                with st.expander(f"Horario del {salon}"):
+                                    df_salon = df_horario[df_horario['Salon'] == salon]
+                                    if not df_salon.empty:
+                                        st.dataframe(df_salon, use_container_width=True)
+                                    else:
+                                        st.info(f"No hay clases asignadas al {salon}")
+                        
+                        with tab4:
+                            st.subheader("📈 Estadísticas del Horario")
+                            
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                st.write("**Distribución de créditos por profesor:**")
+                                creditos_prof = df_horario.groupby('Profesor')['Créditos'].sum()
+                                st.bar_chart(creditos_prof)
+                            
+                            with col2:
+                                st.write("**Utilización de salones:**")
+                                uso_salones = df_horario.groupby('Salon').size()
+                                st.bar_chart(uso_salones)
+                            
+                            # Verificar restricción de 3 horas
+                            clases_3h = df_horario[df_horario['3h Consecutivas'] == 'SÍ']
+                            if len(clases_3h) > 0:
+                                st.write("**Cumplimiento de restricción de 3 horas consecutivas:**")
+                                cumple = len(clases_3h[clases_3h['Restricción 15:30'] == 'CUMPLE'])
+                                viola = len(clases_3h[clases_3h['Restricción 15:30'] == 'VIOLA'])
+                                
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    st.metric("✅ Cumple restricción", cumple)
+                                with col2:
+                                    st.metric("⚠️ Viola restricción", viola)
+                                
+                                if viola > 0:
+                                    st.warning("⚠️ Algunas clases de 3 horas consecutivas violan la restricción de horario (antes de 15:30)")
+                                    st.dataframe(clases_3h[clases_3h['Restricción 15:30'] == 'VIOLA'])
         else:
-            st.error("❌ No se pudieron cargar los datos del Excel")
+            st.error("❌ No se pudieron cargar los datos del archivo Excel")
     else:
-        st.info("📁 Por favor carga un archivo Excel para comenzar")
+        st.info("📁 Por favor, carga un archivo Excel para comenzar")
+        
+        # Mostrar ejemplo de formato esperado
+        with st.expander("📋 Formato esperado del archivo Excel"):
+            st.write("""
+            El archivo Excel debe contener al menos las siguientes columnas:
+            
+            | Profesor | Curso/Materia | Créditos | Estudiantes |
+            |----------|---------------|----------|-------------|
+            | Juan Pérez | Matemáticas I | 4 | 35 |
+            | Juan Pérez | Álgebra | 3 | 28 |
+            | María García | Física I | 4 | 30 |
+            
+            **Notas:**
+            - Los nombres de las columnas pueden variar (profesor/docente, curso/materia/asignatura, etc.)
+            - Si faltan columnas de créditos o estudiantes, se usarán valores por defecto
+            - El sistema detecta automáticamente las columnas relevantes
+            """)
 
 if __name__ == "__main__":
     main()
+
