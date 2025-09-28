@@ -163,103 +163,123 @@ def generar_horario_valido():
     return asignaciones
 
 # ========================================================
-# EXPORTAR HORARIO A DATAFRAME DETALLADO
+# EXPORTAR HORARIO EN FORMATO TABLA SEMANAL
 # ========================================================
 
-def exportar_horario_dataframe(asignaciones):
-    datos = []
-    for a in asignaciones:
-        for dia in a.bloque["dias"]:
-            datos.append({
-                "Profesor": a.profesor,
-                "Curso": a.curso_nombre,
-                "Salon": a.salon,
-                "Día": dia,
-                "Hora Inicio": a.hora_inicio,
-                "Créditos": a.creditos,
-                "Estudiantes": a.estudiantes
-            })
-    df = pd.DataFrame(datos)
-    return df
+def exportar_horario_tabla(asignaciones):
+    dias_semana = ["Lu", "Ma", "Mi", "Ju", "Vi"]
+    tabla = {}
+    horas_unicas = sorted({a.hora_inicio for a in asignaciones}, key=lambda x: a_minutos(x))
+    for hora in horas_unicas:
+        tabla[hora] = {dia: "" for dia in dias_semana}
+    for asig in asignaciones:
+        for dia in asig.bloque["dias"]:
+            contenido = f"{asig.curso_nombre} ({asig.profesor}) [{asig.salon}]"
+            if tabla[asig.hora_inicio][dia]:
+                tabla[asig.hora_inicio][dia] += "\n" + contenido
+            else:
+                tabla[asig.hora_inicio][dia] = contenido
+    df_tabla = pd.DataFrame.from_dict(tabla, orient='index')
+    df_tabla.index.name = "Hora"
+    df_tabla = df_tabla.rename(columns={"Lu":"Lunes","Ma":"Martes","Mi":"Miércoles","Ju":"Jueves","Vi":"Viernes"})
+    df_tabla = df_tabla.sort_index(key=lambda x: [a_minutos(h) for h in x])
+    return df_tabla
+
 
 # ========================================================
-# STREAMLIT
+# INTERFAZ STREAMLIT (modificada)
 # ========================================================
 
 def main():
-    st.set_page_config(page_title="Generador de Horarios", page_icon="📅", layout="wide")
-    st.title("📅 Generador de Horarios Académicos")
+    st.set_page_config(
+        page_title="Generador de Horarios con Algoritmos Genéticos",
+        page_icon="📅",
+        layout="wide"
+    )
     
+    st.title("📅 Generador de Horarios Académicos")
+    st.markdown("### Sistema de optimización con Algoritmos Genéticos")
+    
+    # Sidebar para carga de archivo
     uploaded_file = st.file_uploader("📁 Cargar archivo Excel", type=['xlsx','xls'])
-    if uploaded_file:
+    
+    if uploaded_file is not None:
         with open("temp.xlsx","wb") as f: f.write(uploaded_file.getbuffer())
         global config, bloques
         config = ConfiguracionSistema("temp.xlsx")
         bloques = generar_bloques()
         
         if config.profesores_config:
-            mejor = generar_horario_valido()
-            df_horario = exportar_horario_dataframe(mejor)
+            # Generar horario válido
+            mejor, score = buscar_mejor_horario(100)
             
-            # ===========================
-            # Mostrar horario en pestañas
-            # ===========================
-            tab1, tab2, tab3, tab4 = st.tabs(["📊 Horario Completo", "👨‍🏫 Por Profesor", "🏫 Por Salón", "📈 Estadísticas"])
+            if mejor is None:
+                st.error("❌ No se pudo generar un horario válido")
+                return
+            
+            # Exportar a DataFrame completo y semanal
+            df_horario = exportar_horario(mejor)
+            df_tabla = exportar_horario_tabla(mejor)
+            
+            # Pestañas para mostrar diferentes vistas
+            tab1, tab2, tab3, tab4, tab5 = st.tabs([
+                "📊 Horario Completo", 
+                "👨‍🏫 Por Profesor", 
+                "🏫 Por Salón", 
+                "📈 Estadísticas", 
+                "📅 Horario Semanal"
+            ])
             
             with tab1:
                 st.subheader("📊 Horario Completo")
                 st.dataframe(df_horario, use_container_width=True)
-                
                 csv = df_horario.to_csv(index=False)
-                st.download_button(
-                    label="💾 Descargar horario (CSV)",
-                    data=csv,
-                    file_name="horario_generado.csv",
-                    mime="text/csv"
-                )
-                
-                # Exportar Excel
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-                    df_horario.to_excel(writer, index=False, sheet_name="Horario Completo")
-                    writer.save()
-                    st.download_button("💾 Descargar horario (Excel)", data=output.getvalue(), file_name="horario_completo.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                st.download_button("💾 Descargar horario completo (CSV)", csv, "horario_completo.csv", "text/csv")
             
             with tab2:
                 st.subheader("👨‍🏫 Horario por Profesor")
                 for profesor in config.profesores_config.keys():
                     with st.expander(f"Horario de {profesor}"):
                         df_prof = df_horario[df_horario['Profesor'] == profesor]
-                        if not df_prof.empty:
-                            st.dataframe(df_prof, use_container_width=True)
-                        else:
-                            st.warning(f"No se encontraron clases para {profesor}")
+                        st.dataframe(df_prof, use_container_width=True)
             
             with tab3:
                 st.subheader("🏫 Horario por Salón")
                 for salon in config.salones:
                     with st.expander(f"Horario del {salon}"):
                         df_salon = df_horario[df_horario['Salon'] == salon]
-                        if not df_salon.empty:
-                            st.dataframe(df_salon, use_container_width=True)
-                        else:
-                            st.info(f"No hay clases asignadas al {salon}")
+                        st.dataframe(df_salon, use_container_width=True)
             
             with tab4:
                 st.subheader("📈 Estadísticas del Horario")
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.write("**Distribución de créditos por profesor:**")
-                    creditos_prof = df_horario.groupby('Profesor')['Créditos'].sum()
-                    st.bar_chart(creditos_prof)
+                    st.write("**Créditos por profesor:**")
+                    st.bar_chart(df_horario.groupby('Profesor')['Créditos'].sum())
                 with col2:
-                    st.write("**Utilización de salones:**")
-                    uso_salones = df_horario.groupby('Salon').size()
-                    st.bar_chart(uso_salones)
+                    st.write("**Uso de salones:**")
+                    st.bar_chart(df_horario.groupby('Salon').size())
+            
+            with tab5:
+                st.subheader("📅 Horario Semanal")
+                st.dataframe(df_tabla, use_container_width=True)
+                
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+                    df_tabla.to_excel(writer, index=True, sheet_name="Horario Semanal")
+                    writer.save()
+                    st.download_button(
+                        "💾 Descargar horario semanal (Excel)",
+                        data=output.getvalue(),
+                        file_name="horario_semanal.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
         else:
             st.error("❌ No se pudieron cargar los datos del Excel")
     else:
-        st.info("📁 Por favor carga un archivo Excel para comenzar")
+        st.info("📁 Por favor, carga un archivo Excel para comenzar")
+
 
 if __name__ == "__main__":
     main()
+
