@@ -6,6 +6,9 @@ import numpy as np
 from datetime import datetime, timedelta
 import copy
 import io
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import plotly.express as px
 
 # ========================================================
 # CONFIGURACIÓN RUM (Programas por colegio y nivel)
@@ -169,7 +172,7 @@ PROGRAMAS_RUM = {
 }
 
 # ========================================================
-# CONFIGURACIÓN DEL SISTEMA - CARGA DESDE EXCEL (original)
+# CONFIGURACIÓN DEL SISTEMA - CARGA DESDE EXCEL
 # ========================================================
 
 class ConfiguracionSistema:
@@ -341,7 +344,7 @@ class ConfiguracionSistema:
         
         st.success(f"✅ Configuración completada: {len(self.profesores_config)} profesores, {num_salones} salones")
 
-# Generador de bloques según especificaciones (original)
+# Generador de bloques según especificaciones
 def generar_bloques():
     bloques = []
     id_counter = 1
@@ -397,7 +400,7 @@ def generar_bloques():
 
     return bloques
 
-# Tabla de créditos adicionales por tamaño de sección (original)
+# Tabla de créditos adicionales por tamaño de sección
 tabla_creditos = {
     1: [(1,44,0),(45,74,0.5),(75,104,1),(105,134,1.5),(135,164,2),(165,194,2.5),
         (195,224,3),(225,254,3.5),(255,284,4),(285,314,4.5),(315,344,5),(345,374,5.5),
@@ -427,7 +430,7 @@ def calcular_creditos_adicionales(horas_contacto, estudiantes):
             return creditos
     return 0
 
-# Horario de 7:00 a 19:20 en intervalos de 30 minutos (original)
+# Horario de 7:00 a 19:20 en intervalos de 30 minutos
 horas_inicio = []
 for h in range(7, 20):
     for m in [0, 30]:
@@ -479,7 +482,6 @@ def horario_valido(dia, hora_inicio, duracion, profesor=None, creditos=None):
             for r_ini, r_fin in prof_config["horario_no_disponible"][dia]:
                 r_ini_min = a_minutos(r_ini)
                 r_fin_min = a_minutos(r_fin)
-                # FIX: usar ini_min/fin_min actuales (no variables inexistentes)
                 if not (fin_min <= r_ini_min or ini_min >= r_fin_min):
                     return False
     
@@ -505,7 +507,7 @@ def cumple_horario_preferido(dia, hora_inicio, duracion, profesor):
     
     return False
 
-# Clase para representar una asignación de clase (original)
+# Clase para representar una asignación de clase
 class AsignacionClase:
     def __init__(self, curso_info, profesor, bloque, hora_inicio, salon):
         self.curso_nombre = curso_info["nombre"]
@@ -544,7 +546,7 @@ class AsignacionClase:
             })
         return horarios
 
-# Generador de horarios con restricciones fuertes (original)
+# Generador de horarios con restricciones fuertes
 def generar_horario_valido():
     """Genera un horario que cumple todas las restricciones fuertes"""
     asignaciones = []
@@ -608,7 +610,7 @@ def hay_conflictos(nueva_asignacion, asignaciones_existentes):
     
     return False
 
-# Función de evaluación (original)
+# Función de evaluación
 def evaluar_horario(asignaciones):
     """Evalúa un horario considerando restricciones fuertes y suaves configurables"""
     if asignaciones is None:
@@ -700,7 +702,167 @@ def exportar_horario(asignaciones):
     return df
 
 # ========================================================
-# UI DE SELECCIÓN DE PROGRAMA Y GENERADOR (Integrado)
+# NUEVA FUNCIÓN: CALENDARIO VISUAL INTERACTIVO
+# ========================================================
+
+def generar_colores_cursos(df_horario):
+    """Genera una paleta de colores única para cada curso"""
+    cursos_unicos = df_horario['Curso'].unique()
+    
+    # Paleta de colores moderna y vibrante
+    colores_base = [
+        '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', 
+        '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9',
+        '#F8C471', '#82E0AA', '#F1948A', '#85C1E9', '#D5A6BD',
+        '#AED6F1', '#A9DFBF', '#F9E79F', '#D7BDE2', '#A3E4D7'
+    ]
+    
+    # Asignar colores a cursos
+    colores_cursos = {}
+    for i, curso in enumerate(cursos_unicos):
+        colores_cursos[curso] = colores_base[i % len(colores_base)]
+    
+    return colores_cursos
+
+def crear_calendario_interactivo(df_horario):
+    """Crea un calendario visual estilo Google Calendar con Plotly"""
+    
+    # Generar colores para cada curso
+    colores_cursos = generar_colores_cursos(df_horario)
+    
+    # Mapeo de días a números para el eje X
+    dias_map = {'Lu': 1, 'Ma': 2, 'Mi': 3, 'Ju': 4, 'Vi': 5}
+    dias_nombres = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
+    
+    # Crear figura
+    fig = go.Figure()
+    
+    # Procesar cada clase para crear los bloques
+    for _, fila in df_horario.iterrows():
+        dia_num = dias_map[fila['Dia']]
+        
+        # Convertir horas a minutos desde medianoche para el eje Y
+        hora_inicio_min = a_minutos(fila['Hora Inicio'])
+        hora_fin_min = a_minutos(fila['Hora Fin'])
+        
+        # Crear el bloque de la clase
+        fig.add_shape(
+            type="rect",
+            x0=dia_num - 0.4,
+            y0=hora_inicio_min,
+            x1=dia_num + 0.4,
+            y1=hora_fin_min,
+            fillcolor=colores_cursos[fila['Curso']],
+            opacity=0.8,
+            line=dict(color="white", width=2),
+        )
+        
+        # Añadir texto de información de la clase
+        texto_clase = f"<b>{fila['Curso']}</b><br>"
+        texto_clase += f"👨‍🏫 {fila['Profesor']}<br>"
+        texto_clase += f"🏫 {fila['Salon']}<br>"
+        texto_clase += f"👥 {fila['Estudiantes']} estudiantes<br>"
+        texto_clase += f"⏰ {fila['Hora Inicio']} - {fila['Hora Fin']}<br>"
+        texto_clase += f"📚 {fila['Créditos']} créditos"
+        
+        # Añadir texto centrado en el bloque
+        fig.add_annotation(
+            x=dia_num,
+            y=(hora_inicio_min + hora_fin_min) / 2,
+            text=f"<b>{fila['Curso']}</b><br>{fila['Hora Inicio']}-{fila['Hora Fin']}<br>{fila['Salon']}",
+            showarrow=False,
+            font=dict(color="white", size=10, family="Arial Black"),
+            bgcolor="rgba(0,0,0,0.7)",
+            bordercolor="white",
+            borderwidth=1,
+            borderpad=4,
+            hovertext=texto_clase
+        )
+    
+    # Configurar el layout del calendario
+    fig.update_layout(
+        title={
+            'text': "📅 Calendario Semanal de Clases - Vista Interactiva",
+            'x': 0.5,
+            'xanchor': 'center',
+            'font': {'size': 24, 'color': '#2C3E50'}
+        },
+        xaxis=dict(
+            tickmode='array',
+            tickvals=[1, 2, 3, 4, 5],
+            ticktext=dias_nombres[1:],
+            range=[0.5, 5.5],
+            showgrid=True,
+            gridcolor='lightgray',
+            title="Días de la Semana",
+            title_font=dict(size=16, color='#34495E')
+        ),
+        yaxis=dict(
+            tickmode='array',
+            tickvals=[i*60 for i in range(7, 21)],  # Cada hora desde 7:00 hasta 20:00
+            ticktext=[f"{i:02d}:00" for i in range(7, 21)],
+            range=[7*60, 20*60],  # De 7:00 AM a 8:00 PM
+            showgrid=True,
+            gridcolor='lightgray',
+            title="Hora del Día",
+            title_font=dict(size=16, color='#34495E'),
+            autorange='reversed'  # Invertir para que las horas tempranas estén arriba
+        ),
+        plot_bgcolor='white',
+        paper_bgcolor='#F8F9FA',
+        width=1200,
+        height=800,
+        showlegend=False,
+        margin=dict(l=80, r=80, t=100, b=80)
+    )
+    
+    # Añadir líneas de cuadrícula más prominentes para las horas
+    for hora in range(8, 20):
+        fig.add_hline(
+            y=hora*60, 
+            line_dash="dot", 
+            line_color="gray", 
+            opacity=0.5
+        )
+    
+    return fig, colores_cursos
+
+def mostrar_leyenda_cursos(colores_cursos):
+    """Muestra una leyenda de colores para los cursos"""
+    st.subheader("🎨 Leyenda de Colores por Curso")
+    
+    # Crear columnas para mostrar la leyenda
+    num_cols = 3
+    cols = st.columns(num_cols)
+    
+    for i, (curso, color) in enumerate(colores_cursos.items()):
+        with cols[i % num_cols]:
+            st.markdown(
+                f"""
+                <div style="
+                    display: flex; 
+                    align-items: center; 
+                    margin: 5px 0;
+                    padding: 8px;
+                    border-radius: 5px;
+                    background-color: {color}20;
+                    border-left: 4px solid {color};
+                ">
+                    <div style="
+                        width: 20px; 
+                        height: 20px; 
+                        background-color: {color}; 
+                        margin-right: 10px;
+                        border-radius: 3px;
+                    "></div>
+                    <span style="font-weight: 500; color: #2C3E50;">{curso}</span>
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
+
+# ========================================================
+# UI DE SELECCIÓN DE PROGRAMA Y GENERADOR
 # ========================================================
 
 # Globals usados por el generador
@@ -761,7 +923,7 @@ def mostrar_seleccion_programa():
                 st.rerun()
 
 def mostrar_generador_horarios():
-    """Muestra la interfaz del generador de horarios original con presets por nivel"""
+    """Muestra la interfaz del generador de horarios con calendario visual mejorado"""
     # Cabecera contextual del programa
     colegio_info = None
     for colegio, info in PROGRAMAS_RUM.items():
@@ -850,7 +1012,7 @@ def mostrar_generador_horarios():
         st.session_state.nivel_seleccionado = None
         st.rerun()
 
-    # Upload del archivo Excel en sidebar (mantener estructura original de carga)
+    # Upload del archivo Excel en sidebar
     uploaded_file = st.sidebar.file_uploader(
         "📁 Cargar archivo Excel con datos de profesores y cursos",
         type=['xlsx', 'xls'],
@@ -867,7 +1029,7 @@ def mostrar_generador_horarios():
         config = ConfiguracionSistema("temp_excel.xlsx")
         bloques = generar_bloques()
 
-        # NUEVO: Control de cantidad de salones en la barra lateral (default 15)
+        # Control de cantidad de salones en la barra lateral
         st.sidebar.subheader("🏫 Infraestructura")
         num_salones = st.sidebar.number_input(
             "Salones disponibles",
@@ -899,7 +1061,7 @@ def mostrar_generador_horarios():
                     for curso in data['cursos']:
                         st.write(f"  - {curso['nombre']} ({curso['creditos']} créditos, {curso['estudiantes']} estudiantes)")
             
-            # Parámetros de Optimización (mantener estructura original)
+            # Parámetros de Optimización
             st.sidebar.subheader("🎯 Parámetros de Optimización")
             intentos = st.sidebar.slider("Número de iteraciones", 50, 500, 200, 50)
 
@@ -918,12 +1080,11 @@ def mostrar_generador_horarios():
                 hora_fin_default = "19:00"
                 creditos_max_default = 8
             else:
-                # Fallback a los valores originales
                 hora_inicio_default = "07:30"
                 hora_fin_default = "19:30"
                 creditos_max_default = 15
 
-            # Restricciones Globales (mantener estructura original, solo cambiar defaults dinámicos)
+            # Restricciones Globales
             with st.sidebar.expander("🔒 Restricciones Globales"):
                 config.restricciones_globales["hora_inicio_min"] = st.time_input(
                     "Hora inicio mínima", 
@@ -943,7 +1104,7 @@ def mostrar_generador_horarios():
                     "Estudiantes máximos por salón", 20, 100, 50
                 )
             
-            # Preferencias de Profesores (mantener estructura original)
+            # Preferencias de Profesores
             st.sidebar.subheader("👤 Preferencias de Profesores")
             profesor_seleccionado = st.sidebar.selectbox(
                 "Seleccionar profesor para configurar",
@@ -970,7 +1131,7 @@ def mostrar_generador_horarios():
                                 (inicio.strftime("%H:%M"), fin.strftime("%H:%M"))
                             ]
             
-            # Botón de generación (mantener original)
+            # Botón de generación
             if st.button("🚀 Generar Horario Optimizado", type="primary"):
                 with st.spinner("Generando horario optimizado..."):
                     mejor, score = buscar_mejor_horario(intentos)
@@ -982,9 +1143,43 @@ def mostrar_generador_horarios():
                         
                         df_horario = exportar_horario(mejor)
                         
-                        tab1, tab2, tab3, tab4 = st.tabs(["📊 Horario Completo", "👨‍🏫 Por Profesor", "🏫 Por Salón", "📈 Estadísticas"])
+                        # NUEVA PESTAÑA: CALENDARIO VISUAL
+                        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+                            "📅 Calendario Visual", 
+                            "📊 Horario Completo", 
+                            "👨‍🏫 Por Profesor", 
+                            "🏫 Por Salón", 
+                            "📈 Estadísticas"
+                        ])
                         
+                        # PESTAÑA 1: CALENDARIO VISUAL INTERACTIVO
                         with tab1:
+                            st.subheader("📅 Vista de Calendario Interactivo")
+                            st.markdown("""
+                            <div style="background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); 
+                                        padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+                                <p style="color: white; margin: 0; text-align: center; font-size: 1.1rem;">
+                                    🎨 <strong>Calendario estilo Google Calendar</strong> - Cada curso tiene un color único
+                                </p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            # Crear y mostrar el calendario
+                            fig_calendario, colores_cursos = crear_calendario_interactivo(df_horario)
+                            st.plotly_chart(fig_calendario, use_container_width=True)
+                            
+                            # Mostrar leyenda de colores
+                            mostrar_leyenda_cursos(colores_cursos)
+                            
+                            # Información adicional
+                            col1_info, col2_info = st.columns(2)
+                            with col1_info:
+                                st.info("💡 **Tip:** Pasa el mouse sobre los bloques para ver información detallada")
+                            with col2_info:
+                                st.info("🔍 **Zoom:** Usa las herramientas de Plotly para hacer zoom y navegar")
+                        
+                        # PESTAÑA 2: HORARIO COMPLETO (original)
+                        with tab2:
                             st.subheader("📊 Horario Completo")
                             st.dataframe(df_horario, use_container_width=True)
                             csv = df_horario.to_csv(index=False)
@@ -995,7 +1190,8 @@ def mostrar_generador_horarios():
                                 mime="text/csv"
                             )
                         
-                        with tab2:
+                        # PESTAÑA 3: POR PROFESOR (original)
+                        with tab3:
                             st.subheader("👨‍🏫 Horario por Profesor")
                             for profesor in config.profesores_config.keys():
                                 with st.expander(f"Horario de {profesor}"):
@@ -1005,7 +1201,8 @@ def mostrar_generador_horarios():
                                     else:
                                         st.warning(f"No se encontraron clases para {profesor}")
                         
-                        with tab3:
+                        # PESTAÑA 4: POR SALÓN (original)
+                        with tab4:
                             st.subheader("🏫 Horario por Salón")
                             for salon in config.salones:
                                 with st.expander(f"Horario del {salon}"):
@@ -1015,21 +1212,51 @@ def mostrar_generador_horarios():
                                     else:
                                         st.info(f"No hay clases asignadas al {salon}")
                         
-                        with tab4:
+                        # PESTAÑA 5: ESTADÍSTICAS (mejorada)
+                        with tab5:
                             st.subheader("📈 Estadísticas del Horario")
+                            
+                            # Métricas principales
+                            col1_met, col2_met, col3_met, col4_met = st.columns(4)
+                            with col1_met:
+                                st.metric("📚 Total Cursos", len(df_horario))
+                            with col2_met:
+                                st.metric("👨‍🏫 Profesores", df_horario['Profesor'].nunique())
+                            with col3_met:
+                                st.metric("🏫 Salones Usados", df_horario['Salon'].nunique())
+                            with col4_met:
+                                total_estudiantes = df_horario['Estudiantes'].sum()
+                                st.metric("👥 Total Estudiantes", total_estudiantes)
+                            
+                            # Gráficos
                             col1_stats, col2_stats = st.columns(2)
                             with col1_stats:
-                                st.write("**Distribución de créditos por profesor:**")
+                                st.write("**📊 Distribución de créditos por profesor:**")
                                 creditos_prof = df_horario.groupby('Profesor')['Créditos'].sum()
-                                st.bar_chart(creditos_prof)
-                            with col2_stats:
-                                st.write("**Utilización de salones:**")
-                                uso_salones = df_horario.groupby('Salon').size()
-                                st.bar_chart(uso_salones)
+                                fig_creditos = px.bar(
+                                    x=creditos_prof.index, 
+                                    y=creditos_prof.values,
+                                    title="Créditos por Profesor",
+                                    color=creditos_prof.values,
+                                    color_continuous_scale="viridis"
+                                )
+                                fig_creditos.update_layout(showlegend=False)
+                                st.plotly_chart(fig_creditos, use_container_width=True)
                             
+                            with col2_stats:
+                                st.write("**🏫 Utilización de salones:**")
+                                uso_salones = df_horario.groupby('Salon').size()
+                                fig_salones = px.pie(
+                                    values=uso_salones.values, 
+                                    names=uso_salones.index,
+                                    title="Uso de Salones"
+                                )
+                                st.plotly_chart(fig_salones, use_container_width=True)
+                            
+                            # Análisis de restricciones
                             clases_3h = df_horario[df_horario['3h Consecutivas'] == 'SÍ']
                             if len(clases_3h) > 0:
-                                st.write("**Cumplimiento de restricción de 3 horas consecutivas:**")
+                                st.write("**⏰ Cumplimiento de restricción de 3 horas consecutivas:**")
                                 cumple = len(clases_3h[clases_3h['Restricción 15:30'] == 'CUMPLE'])
                                 viola = len(clases_3h[clases_3h['Restricción 15:30'] == 'VIOLA'])
                                 
@@ -1063,13 +1290,36 @@ def mostrar_generador_horarios():
             """)
 
 def main():
-    # Configuración de la página (mejora de UI)
+    # Configuración de la página
     st.set_page_config(
         page_title="Sistema de Generación de Horarios Académicos - RUM",
         page_icon="🎓",
         layout="wide",
         initial_sidebar_state="expanded"
     )
+
+    # CSS personalizado para mejorar la apariencia
+    st.markdown("""
+    <style>
+    .main > div {
+        padding-top: 2rem;
+    }
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 2px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        padding-left: 20px;
+        padding-right: 20px;
+        background-color: #f0f2f6;
+        border-radius: 8px 8px 0px 0px;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #667eea;
+        color: white;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
     # Inicializar session state
     if 'programa_seleccionado' not in st.session_state:
