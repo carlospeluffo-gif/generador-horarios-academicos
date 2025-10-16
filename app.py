@@ -335,9 +335,8 @@ class ConfiguracionSistema:
                 
                 st.write(f"📚 {profesor}: {len(cursos_lista)} cursos, {creditos_totales} créditos totales")
         
-        # Generar salones automáticamente basado en el número de cursos
-        total_cursos = sum(len(config['cursos']) for config in self.profesores_config.values())
-        num_salones = max(3, min(10, total_cursos // 3))
+        # Generar salones: por defecto 15 salones por departamento disponibles
+        num_salones = 15
         self.salones = [f"Salon {i+1}" for i in range(num_salones)]
         
         st.success(f"✅ Configuración completada: {len(self.profesores_config)} profesores, {num_salones} salones")
@@ -480,6 +479,7 @@ def horario_valido(dia, hora_inicio, duracion, profesor=None, creditos=None):
             for r_ini, r_fin in prof_config["horario_no_disponible"][dia]:
                 r_ini_min = a_minutos(r_ini)
                 r_fin_min = a_minutos(r_fin)
+                # FIX: usar ini_min/fin_min actuales (no variables inexistentes)
                 if not (fin_min <= r_ini_min or ini_min >= r_fin_min):
                     return False
     
@@ -866,6 +866,18 @@ def mostrar_generador_horarios():
         global config, bloques
         config = ConfiguracionSistema("temp_excel.xlsx")
         bloques = generar_bloques()
+
+        # NUEVO: Control de cantidad de salones en la barra lateral (default 15)
+        st.sidebar.subheader("🏫 Infraestructura")
+        num_salones = st.sidebar.number_input(
+            "Salones disponibles",
+            min_value=1,
+            max_value=100,
+            value=15,
+            step=1,
+            help="Cantidad total de salones disponibles para el departamento"
+        )
+        config.salones = [f"Salon {i+1}" for i in range(int(num_salones))]
         
         if config.profesores_config:
             st.success("✅ Archivo cargado correctamente")
