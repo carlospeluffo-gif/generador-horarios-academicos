@@ -8,7 +8,168 @@ import copy
 import io
 
 # ========================================================
-# CONFIGURACIÓN DEL SISTEMA - CARGA DESDE EXCEL
+# CONFIGURACIÓN RUM (Programas por colegio y nivel)
+# ========================================================
+
+PROGRAMAS_RUM = {
+    "COLEGIO DE ADMINISTRACIÓN DE EMPRESAS": {
+        "color": "#FF6B6B",
+        "niveles": {
+            "Bachilleratos en Administración de Empresas": [
+                "Contabilidad",
+                "Finanzas",
+                "Gerencia de Recursos Humanos",
+                "Mercadeo",
+                "Gerencia de Operaciones",
+                "Sistemas Computadorizados de Información",
+                "Administración de Oficinas"
+            ],
+            "Maestrías en Administración de Empresas": [
+                "Administración de Empresas (Programa General)",
+                "Finanzas",
+                "Gerencia Industrial",
+                "Recursos Humanos"
+            ]
+        }
+    },
+    "COLEGIO DE ARTES Y CIENCIAS": {
+        "color": "#4ECDC4",
+        "niveles": {
+            "Bachilleratos en Artes": [
+                "Literatura Comparada",
+                "Economía",
+                "Inglés",
+                "Historia",
+                "Lengua y Literatura Francesa",
+                "Estudios Hispánicos",
+                "Filosofía",
+                "Educación Física – Enseñanza",
+                "Educación Física – Adiestramiento y Arbitraje",
+                "Artes Plásticas",
+                "Ciencias Políticas",
+                "Psicología",
+                "Ciencias Sociales",
+                "Sociología",
+                "Teoría del Arte"
+            ],
+            "Bachilleratos en Ciencias": [
+                "Biología",
+                "Microbiología Industrial",
+                "Pre-Médica",
+                "Biotecnología Industrial",
+                "Química",
+                "Geología",
+                "Matemáticas",
+                "Matemáticas – Ciencias de la Computación",
+                "Educación Matemática",
+                "Enfermería",
+                "Física",
+                "Ciencias Físicas"
+            ],
+            "Maestrías en Artes": [
+                "Estudios Culturales y Humanísticos",
+                "Estudios Hispánicos",
+                "Educación en Inglés",
+                "Kinesiología"
+            ],
+            "Maestrías en Ciencias": [
+                "Biología",
+                "Química",
+                "Geología",
+                "Ciencias Marinas",
+                "Física",
+                "Matemáticas Aplicadas",
+                "Matemática Estadística",
+                "Matemática Pura",
+                "Enseñanza de las Matemáticas a nivel preuniversitario",
+                "Computación Científica",
+                "Psicología Escolar"
+            ],
+            "Doctorados en Filosofía": [
+                "Ciencias Marinas",
+                "Química Aplicada",
+                "Psicología Escolar"
+            ]
+        }
+    },
+    "COLEGIO DE CIENCIAS AGRÍCOLAS": {
+        "color": "#96CEB4",
+        "niveles": {
+            "Bachilleratos en Ciencias Agrícolas": [
+                "Ciencias Agrícolas",
+                "Agronomía",
+                "Economía Agrícola",
+                "Horticultura",
+                "Ciencia Animal",
+                "Protección de Cultivos",
+                "Agronegocios",
+                "Educación Agrícola",
+                "Extensión Agrícola",
+                "Suelos",
+                "Sistemas Agrícolas y Ambientales",
+                "Pre-Veterinaria (No conducente a grado)"
+            ],
+            "Maestrías en Ciencias": [
+                "Agronomía",
+                "Ciencias y Tecnología de Alimentos",
+                "Economía Agrícola",
+                "Educación Agrícola",
+                "Extensión Agrícola",
+                "Horticultura",
+                "Ciencia Animal",
+                "Protección de Cultivos",
+                "Suelos"
+            ]
+        }
+    },
+    "COLEGIO DE INGENIERÍA": {
+        "color": "#FFEAA7",
+        "niveles": {
+            "Bachilleratos en Ingeniería": [
+                "Ingeniería Química",
+                "Ingeniería Civil",
+                "Ingeniería de Computadoras",
+                "Ciencias e Ingeniería de la Computación",
+                "Ingeniería Eléctrica",
+                "Ingeniería Industrial",
+                "Ingeniería Mecánica",
+                "Ingeniería de Software",
+                "Agrimensura y Topografía"
+            ],
+            "Maestrías en Ciencias": [
+                "Bioingeniería",
+                "Ingeniería Química",
+                "Ingeniería Civil",
+                "Ingeniería de Computadoras",
+                "Ingeniería Eléctrica",
+                "Ingeniería Industrial",
+                "Ciencia e Ingeniería de Materiales",
+                "Ingeniería Mecánica"
+            ],
+            "Maestrías en Ingeniería": [
+                "Bioingeniería",
+                "Ingeniería Química",
+                "Ingeniería Civil",
+                "Ingeniería de Computadoras",
+                "Ingeniería Eléctrica",
+                "Ingeniería Industrial",
+                "Ciencia e Ingeniería de Materiales",
+                "Ingeniería Mecánica"
+            ],
+            "Doctorados en Filosofía": [
+                "Bioingeniería",
+                "Ingeniería Química",
+                "Ingeniería Civil",
+                "Ingeniería Eléctrica",
+                "Ingeniería Mecánica",
+                "Ciencias e Ingeniería de la Información y la Computación"
+            ]
+        }
+    }
+}
+
+# ========================================================
+# CONFIGURACIÓN DEL SISTEMA - CARGA DESDE EXCEL (original)
 # ========================================================
 
 class ConfiguracionSistema:
@@ -181,7 +342,7 @@ class ConfiguracionSistema:
         
         st.success(f"✅ Configuración completada: {len(self.profesores_config)} profesores, {num_salones} salones")
 
-# Generador de bloques según especificaciones
+# Generador de bloques según especificaciones (original)
 def generar_bloques():
     bloques = []
     id_counter = 1
@@ -237,7 +398,7 @@ def generar_bloques():
 
     return bloques
 
-# Tabla de créditos adicionales por tamaño de sección
+# Tabla de créditos adicionales por tamaño de sección (original)
 tabla_creditos = {
     1: [(1,44,0),(45,74,0.5),(75,104,1),(105,134,1.5),(135,164,2),(165,194,2.5),
         (195,224,3),(225,254,3.5),(255,284,4),(285,314,4.5),(315,344,5),(345,374,5.5),
@@ -267,7 +428,7 @@ def calcular_creditos_adicionales(horas_contacto, estudiantes):
             return creditos
     return 0
 
-# Horario de 7:00 a 19:20 en intervalos de 30 minutos
+# Horario de 7:00 a 19:20 en intervalos de 30 minutos (original)
 horas_inicio = []
 for h in range(7, 20):
     for m in [0, 30]:
@@ -344,7 +505,7 @@ def cumple_horario_preferido(dia, hora_inicio, duracion, profesor):
     
     return False
 
-# Clase para representar una asignación de clase
+# Clase para representar una asignación de clase (original)
 class AsignacionClase:
     def __init__(self, curso_info, profesor, bloque, hora_inicio, salon):
         self.curso_nombre = curso_info["nombre"]
@@ -383,7 +544,7 @@ class AsignacionClase:
             })
         return horarios
 
-# Generador de horarios con restricciones fuertes
+# Generador de horarios con restricciones fuertes (original)
 def generar_horario_valido():
     """Genera un horario que cumple todas las restricciones fuertes"""
     asignaciones = []
@@ -447,7 +608,7 @@ def hay_conflictos(nueva_asignacion, asignaciones_existentes):
     
     return False
 
-# Función de evaluación
+# Función de evaluación (original)
 def evaluar_horario(asignaciones):
     """Evalúa un horario considerando restricciones fuertes y suaves configurables"""
     if asignaciones is None:
@@ -539,29 +700,163 @@ def exportar_horario(asignaciones):
     return df
 
 # ========================================================
-# INTERFAZ STREAMLIT
+# UI DE SELECCIÓN DE PROGRAMA Y GENERADOR (Integrado)
 # ========================================================
 
-def main():
-    st.set_page_config(
-        page_title="Generador de Horarios con Algoritmos Genéticos",
-        page_icon="📅",
-        layout="wide"
-    )
+# Globals usados por el generador
+config = None
+bloques = []
+
+def mostrar_seleccion_programa():
+    """Muestra la interfaz de selección de programa por colegio y nivel académico"""
+    st.markdown("## 🏛️ Selecciona tu Programa Académico")
+    st.markdown("Elige tu programa de estudio del Recinto Universitario de Mayagüez para generar horarios optimizados.")
     
-    st.title("📅 Generador de Horarios Académicos")
-    st.markdown("### Sistema de optimización con Algoritmos Genéticos")
+    for colegio, info in PROGRAMAS_RUM.items():
+        with st.expander(f"🏛️ {colegio}", expanded=False):
+            total_programas = sum(len(programas) for programas in info['niveles'].values())
+            st.markdown(f"**{total_programas} programas disponibles en {len(info['niveles'])} niveles académicos**")
+            
+            for nivel, programas in info['niveles'].items():
+                st.markdown(f"### 🎓 {nivel}")
+                st.markdown(f"*{len(programas)} programas*")
+                
+                cols = st.columns(3)
+                for idx, programa in enumerate(programas):
+                    with cols[idx % 3]:
+                        card_html = f"""
+                        <div style="
+                            border: 1px solid {info['color']};
+                            border-radius: 8px;
+                            padding: 0.8rem;
+                            margin: 0.3rem 0;
+                            background: linear-gradient(135deg, {info['color']}15, {info['color']}08);
+                            text-align: center;
+                            min-height: 80px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                        ">
+                            <p style="color: #333; margin: 0; font-size: 0.85rem; font-weight: 500; line-height: 1.2;">{programa}</p>
+                        </div>
+                        """
+                        st.markdown(card_html, unsafe_allow_html=True)
+                        if st.button("Seleccionar", key=f"btn_{colegio}_{nivel}_{programa}", use_container_width=True):
+                            st.session_state.programa_seleccionado = programa
+                            st.session_state.colegio_seleccionado = colegio
+                            st.session_state.nivel_seleccionado = nivel
+                            st.session_state.pagina_actual = 'generador'
+                            st.rerun()
+                st.markdown("---")
     
-    # Sidebar para configuración
+    if st.session_state.programa_seleccionado:
+        st.markdown("---")
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.success(f"✅ **Programa:** {st.session_state.programa_seleccionado}")
+            st.info(f"🎓 **Nivel:** {st.session_state.nivel_seleccionado}")
+            st.info(f"🏛️ **Colegio:** {st.session_state.colegio_seleccionado}")
+            if st.button("🚀 Continuar al Generador de Horarios", type="primary", use_container_width=True):
+                st.session_state.pagina_actual = 'generador'
+                st.rerun()
+
+def mostrar_generador_horarios():
+    """Muestra la interfaz del generador de horarios original con presets por nivel"""
+    # Cabecera contextual del programa
+    colegio_info = None
+    for colegio, info in PROGRAMAS_RUM.items():
+        if colegio == st.session_state.colegio_seleccionado:
+            colegio_info = info
+            break
+    if colegio_info:
+        st.markdown(f"""
+        <div style="
+            background: linear-gradient(90deg, {colegio_info['color']}30, {colegio_info['color']}10);
+            padding: 1.5rem;
+            border-radius: 10px;
+            margin-bottom: 2rem;
+            border-left: 5px solid {colegio_info['color']};
+        ">
+            <h3 style="margin: 0; color: #333;">📚 {st.session_state.programa_seleccionado}</h3>
+            <p style="margin: 0.3rem 0; color: #666; font-size: 1rem;">🎓 {st.session_state.nivel_seleccionado}</p>
+            <p style="margin: 0.3rem 0 0 0; color: #888; font-size: 0.9rem;">🏛️ {st.session_state.colegio_seleccionado}</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("## 📁 Cargar Datos para Generación de Horarios")
+    with st.expander("📋 Instrucciones para tu programa"):
+        st.markdown(f"""
+        ### Configuración para {st.session_state.programa_seleccionado}
+        **Nivel:** {st.session_state.nivel_seleccionado}
+        
+        **Formato del archivo Excel requerido:**
+        - **Hoja:** Debe contener los datos de profesores y cursos
+        - **Columnas requeridas:** Profesor, Curso/Materia, Créditos, Estudiantes
+        """)
+        # Consideraciones por nivel y colegio
+        nivel = st.session_state.nivel_seleccionado or ""
+        colegio = st.session_state.colegio_seleccionado or ""
+        if "Bachillerato" in nivel:
+            st.markdown("""
+            - Cursos básicos y de concentración
+            - Horarios diurnos principalmente (7:30 AM - 5:00 PM)
+            - Laboratorios de 2-3 horas consecutivas
+            """)
+        elif "Maestría" in nivel:
+            st.markdown("""
+            - Cursos especializados y seminarios
+            - Horarios flexibles (incluyendo nocturnos)
+            - Clases de 2 horas 30 minutos típicamente
+            - Tesis y proyectos de investigación
+            """)
+        elif "Doctorado" in nivel:
+            st.markdown("""
+            - Seminarios doctorales especializados
+            - Horarios muy flexibles
+            - Investigación dirigida
+            - Defensa de disertación
+            """)
+        if "INGENIERÍA" in colegio:
+            st.markdown("""
+            **Adicional para Ingeniería:**
+            - Laboratorios requieren equipos especializados
+            - Talleres y proyectos necesitan espacios amplios
+            - Coordinación con industria para prácticas
+            """)
+        elif "CIENCIAS AGRÍCOLAS" in colegio:
+            st.markdown("""
+            **Adicional para Ciencias Agrícolas:**
+            - Trabajo de campo en horarios variables
+            - Laboratorios con organismos vivos
+            - Dependencia de condiciones climáticas
+            """)
+
+    # Sidebar de estado y acciones
     st.sidebar.header("⚙️ Configuración")
-    
-    # Upload del archivo Excel
+    st.sidebar.markdown("### 📋 Estado Actual")
+    if st.session_state.programa_seleccionado:
+        st.sidebar.success(f"**Programa:** {st.session_state.programa_seleccionado}")
+        if st.session_state.nivel_seleccionado:
+            st.sidebar.info(f"**Nivel:** {st.session_state.nivel_seleccionado}")
+        if st.session_state.colegio_seleccionado:
+            st.sidebar.info(f"**Colegio:** {st.session_state.colegio_seleccionado}")
+    else:
+        st.sidebar.warning("No hay programa seleccionado")
+    st.sidebar.markdown("---")
+    if st.sidebar.button("🔄 Cambiar Programa", use_container_width=True):
+        st.session_state.pagina_actual = 'seleccion'
+        st.session_state.programa_seleccionado = None
+        st.session_state.colegio_seleccionado = None
+        st.session_state.nivel_seleccionado = None
+        st.rerun()
+
+    # Upload del archivo Excel en sidebar (mantener estructura original de carga)
     uploaded_file = st.sidebar.file_uploader(
         "📁 Cargar archivo Excel con datos de profesores y cursos",
         type=['xlsx', 'xls'],
         help="El archivo debe contener columnas como: Profesor, Curso/Materia, Créditos, Estudiantes"
     )
-    
+
     if uploaded_file is not None:
         # Guardar archivo temporalmente
         with open("temp_excel.xlsx", "wb") as f:
@@ -575,7 +870,7 @@ def main():
         if config.profesores_config:
             st.success("✅ Archivo cargado correctamente")
             
-            # Mostrar resumen de datos cargados
+            # Resumen de datos cargados
             col1, col2, col3 = st.columns(3)
             with col1:
                 st.metric("👨‍🏫 Profesores", len(config.profesores_config))
@@ -585,38 +880,58 @@ def main():
             with col3:
                 st.metric("🏫 Salones", len(config.salones))
             
-            # Mostrar datos cargados
+            # Datos cargados
             with st.expander("📋 Ver datos cargados"):
                 for profesor, data in config.profesores_config.items():
                     st.write(f"**{profesor}** ({data['creditos_totales']} créditos)")
                     for curso in data['cursos']:
                         st.write(f"  - {curso['nombre']} ({curso['creditos']} créditos, {curso['estudiantes']} estudiantes)")
             
-            # Configuración de parámetros
+            # Parámetros de Optimización (mantener estructura original)
             st.sidebar.subheader("🎯 Parámetros de Optimización")
             intentos = st.sidebar.slider("Número de iteraciones", 50, 500, 200, 50)
-            
-            # Configuración de restricciones
+
+            # Determinar presets por nivel
+            nivel_text = st.session_state.nivel_seleccionado or ""
+            if "Bachillerato" in nivel_text:
+                hora_inicio_default = "07:30"
+                hora_fin_default = "17:00"
+                creditos_max_default = 15
+            elif "Maestría" in nivel_text:
+                hora_inicio_default = "08:00"
+                hora_fin_default = "21:00"
+                creditos_max_default = 12
+            elif "Doctorado" in nivel_text:
+                hora_inicio_default = "09:00"
+                hora_fin_default = "19:00"
+                creditos_max_default = 8
+            else:
+                # Fallback a los valores originales
+                hora_inicio_default = "07:30"
+                hora_fin_default = "19:30"
+                creditos_max_default = 15
+
+            # Restricciones Globales (mantener estructura original, solo cambiar defaults dinámicos)
             with st.sidebar.expander("🔒 Restricciones Globales"):
                 config.restricciones_globales["hora_inicio_min"] = st.time_input(
                     "Hora inicio mínima", 
-                    datetime.strptime("07:30", "%H:%M").time()
+                    datetime.strptime(hora_inicio_default, "%H:%M").time()
                 ).strftime("%H:%M")
                 
                 config.restricciones_globales["hora_fin_max"] = st.time_input(
                     "Hora fin máxima", 
-                    datetime.strptime("19:30", "%H:%M").time()
+                    datetime.strptime(hora_fin_default, "%H:%M").time()
                 ).strftime("%H:%M")
                 
                 config.restricciones_globales["creditos_max_profesor"] = st.number_input(
-                    "Créditos máximos por profesor", 1, 20, 15
+                    "Créditos máximos por profesor", 1, 20, creditos_max_default
                 )
                 
                 config.restricciones_globales["estudiantes_max_salon"] = st.number_input(
                     "Estudiantes máximos por salón", 20, 100, 50
                 )
             
-            # Configuración de preferencias de profesores
+            # Preferencias de Profesores (mantener estructura original)
             st.sidebar.subheader("👤 Preferencias de Profesores")
             profesor_seleccionado = st.sidebar.selectbox(
                 "Seleccionar profesor para configurar",
@@ -628,10 +943,10 @@ def main():
                     st.write("**Horarios preferidos:**")
                     dias = ["Lu", "Ma", "Mi", "Ju", "Vi"]
                     for dia in dias:
-                        col1, col2 = st.columns(2)
-                        with col1:
+                        col1_pref, col2_pref = st.columns(2)
+                        with col1_pref:
                             inicio = st.time_input(f"{dia} inicio", key=f"pref_{profesor_seleccionado}_{dia}_inicio")
-                        with col2:
+                        with col2_pref:
                             fin = st.time_input(f"{dia} fin", key=f"pref_{profesor_seleccionado}_{dia}_fin")
                         
                         if inicio != datetime.strptime("00:00", "%H:%M").time():
@@ -643,7 +958,7 @@ def main():
                                 (inicio.strftime("%H:%M"), fin.strftime("%H:%M"))
                             ]
             
-            # Botón para generar horario
+            # Botón de generación (mantener original)
             if st.button("🚀 Generar Horario Optimizado", type="primary"):
                 with st.spinner("Generando horario optimizado..."):
                     mejor, score = buscar_mejor_horario(intentos)
@@ -653,17 +968,13 @@ def main():
                     else:
                         st.success(f"✅ Horario generado exitosamente! Puntuación: {score}")
                         
-                        # Exportar a DataFrame
                         df_horario = exportar_horario(mejor)
                         
-                        # Mostrar horario en pestañas
                         tab1, tab2, tab3, tab4 = st.tabs(["📊 Horario Completo", "👨‍🏫 Por Profesor", "🏫 Por Salón", "📈 Estadísticas"])
                         
                         with tab1:
                             st.subheader("📊 Horario Completo")
                             st.dataframe(df_horario, use_container_width=True)
-                            
-                            # Botón de descarga
                             csv = df_horario.to_csv(index=False)
                             st.download_button(
                                 label="💾 Descargar horario (CSV)",
@@ -694,30 +1005,26 @@ def main():
                         
                         with tab4:
                             st.subheader("📈 Estadísticas del Horario")
-                            
-                            col1, col2 = st.columns(2)
-                            
-                            with col1:
+                            col1_stats, col2_stats = st.columns(2)
+                            with col1_stats:
                                 st.write("**Distribución de créditos por profesor:**")
                                 creditos_prof = df_horario.groupby('Profesor')['Créditos'].sum()
                                 st.bar_chart(creditos_prof)
-                            
-                            with col2:
+                            with col2_stats:
                                 st.write("**Utilización de salones:**")
                                 uso_salones = df_horario.groupby('Salon').size()
                                 st.bar_chart(uso_salones)
                             
-                            # Verificar restricción de 3 horas
                             clases_3h = df_horario[df_horario['3h Consecutivas'] == 'SÍ']
                             if len(clases_3h) > 0:
                                 st.write("**Cumplimiento de restricción de 3 horas consecutivas:**")
                                 cumple = len(clases_3h[clases_3h['Restricción 15:30'] == 'CUMPLE'])
                                 viola = len(clases_3h[clases_3h['Restricción 15:30'] == 'VIOLA'])
                                 
-                                col1, col2 = st.columns(2)
-                                with col1:
+                                col1_m, col2_m = st.columns(2)
+                                with col1_m:
                                     st.metric("✅ Cumple restricción", cumple)
-                                with col2:
+                                with col2_m:
                                     st.metric("⚠️ Viola restricción", viola)
                                 
                                 if viola > 0:
@@ -727,8 +1034,6 @@ def main():
             st.error("❌ No se pudieron cargar los datos del archivo Excel")
     else:
         st.info("📁 Por favor, carga un archivo Excel para comenzar")
-        
-        # Mostrar ejemplo de formato esperado
         with st.expander("📋 Formato esperado del archivo Excel"):
             st.write("""
             El archivo Excel debe contener al menos las siguientes columnas:
@@ -745,6 +1050,38 @@ def main():
             - El sistema detecta automáticamente las columnas relevantes
             """)
 
+def main():
+    # Configuración de la página (mejora de UI)
+    st.set_page_config(
+        page_title="Sistema de Generación de Horarios Académicos - RUM",
+        page_icon="🎓",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+
+    # Inicializar session state
+    if 'programa_seleccionado' not in st.session_state:
+        st.session_state.programa_seleccionado = None
+    if 'colegio_seleccionado' not in st.session_state:
+        st.session_state.colegio_seleccionado = None
+    if 'nivel_seleccionado' not in st.session_state:
+        st.session_state.nivel_seleccionado = None
+    if 'pagina_actual' not in st.session_state:
+        st.session_state.pagina_actual = 'seleccion'
+
+    # Header principal
+    st.markdown("""
+    <div style="text-align: center; padding: 2rem 0; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); border-radius: 10px; margin-bottom: 2rem;">
+        <h1 style="color: white; margin: 0; font-size: 2.5rem;">🎓 Sistema de Generación de Horarios RUM</h1>
+        <p style="color: white; margin: 0.5rem 0 0 0; font-size: 1.2rem;">Recinto Universitario de Mayagüez - Optimización con Algoritmos Genéticos</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Navegación
+    if st.session_state.pagina_actual == 'seleccion':
+        mostrar_seleccion_programa()
+    elif st.session_state.pagina_actual == 'generador':
+        mostrar_generador_horarios()
+
 if __name__ == "__main__":
     main()
-
