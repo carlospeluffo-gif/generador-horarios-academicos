@@ -702,7 +702,7 @@ def exportar_horario(asignaciones):
     return df
 
 # ========================================================
-# NUEVA FUNCIÓN: CALENDARIO VISUAL INTERACTIVO
+# NUEVA FUNCIÓN: CALENDARIO VISUAL INTERACTIVO CON FILTRO POR PROFESOR
 # ========================================================
 
 def generar_colores_cursos(df_horario):
@@ -724,11 +724,19 @@ def generar_colores_cursos(df_horario):
     
     return colores_cursos
 
-def crear_calendario_interactivo(df_horario):
+def crear_calendario_interactivo(df_horario, profesor_filtro=None):
     """Crea un calendario visual estilo Google Calendar con Plotly"""
     
+    # Filtrar por profesor si se especifica
+    if profesor_filtro and profesor_filtro != "Todos los profesores":
+        df_filtrado = df_horario[df_horario['Profesor'] == profesor_filtro]
+        titulo_calendario = f"📅 Calendario de {profesor_filtro}"
+    else:
+        df_filtrado = df_horario
+        titulo_calendario = "📅 Calendario Semanal de Clases - Vista Completa"
+    
     # Generar colores para cada curso
-    colores_cursos = generar_colores_cursos(df_horario)
+    colores_cursos = generar_colores_cursos(df_horario)  # Usar todos los cursos para mantener consistencia de colores
     
     # Mapeo de días a números para el eje X
     dias_map = {'Lu': 1, 'Ma': 2, 'Mi': 3, 'Ju': 4, 'Vi': 5}
@@ -738,7 +746,7 @@ def crear_calendario_interactivo(df_horario):
     fig = go.Figure()
     
     # Procesar cada clase para crear los bloques
-    for _, fila in df_horario.iterrows():
+    for _, fila in df_filtrado.iterrows():
         dia_num = dias_map[fila['Dia']]
         
         # Convertir horas a minutos desde medianoche para el eje Y
@@ -782,7 +790,7 @@ def crear_calendario_interactivo(df_horario):
     # Configurar el layout del calendario
     fig.update_layout(
         title={
-            'text': "📅 Calendario Semanal de Clases - Vista Interactiva",
+            'text': titulo_calendario,
             'x': 0.5,
             'xanchor': 'center',
             'font': {'size': 24, 'color': '#2C3E50'}
@@ -827,15 +835,23 @@ def crear_calendario_interactivo(df_horario):
     
     return fig, colores_cursos
 
-def mostrar_leyenda_cursos(colores_cursos):
-    """Muestra una leyenda de colores para los cursos"""
-    st.subheader("🎨 Leyenda de Colores por Curso")
+def mostrar_leyenda_cursos(colores_cursos, df_horario, profesor_filtro=None):
+    """Muestra una leyenda de colores para los cursos (filtrada si es necesario)"""
+    
+    # Filtrar cursos si hay un profesor seleccionado
+    if profesor_filtro and profesor_filtro != "Todos los profesores":
+        cursos_filtrados = df_horario[df_horario['Profesor'] == profesor_filtro]['Curso'].unique()
+        colores_mostrar = {curso: color for curso, color in colores_cursos.items() if curso in cursos_filtrados}
+        st.subheader(f"🎨 Cursos de {profesor_filtro}")
+    else:
+        colores_mostrar = colores_cursos
+        st.subheader("🎨 Leyenda de Colores por Curso")
     
     # Crear columnas para mostrar la leyenda
     num_cols = 3
     cols = st.columns(num_cols)
     
-    for i, (curso, color) in enumerate(colores_cursos.items()):
+    for i, (curso, color) in enumerate(colores_mostrar.items()):
         with cols[i % num_cols]:
             st.markdown(
                 f"""
@@ -1143,7 +1159,7 @@ def mostrar_generador_horarios():
                         
                         df_horario = exportar_horario(mejor)
                         
-                        # NUEVA PESTAÑA: CALENDARIO VISUAL
+                        # NUEVA PESTAÑA: CALENDARIO VISUAL CON FILTRO POR PROFESOR
                         tab1, tab2, tab3, tab4, tab5 = st.tabs([
                             "📅 Calendario Visual", 
                             "📊 Horario Completo", 
@@ -1152,24 +1168,37 @@ def mostrar_generador_horarios():
                             "📈 Estadísticas"
                         ])
                         
-                        # PESTAÑA 1: CALENDARIO VISUAL INTERACTIVO
+                        # PESTAÑA 1: CALENDARIO VISUAL INTERACTIVO CON FILTRO
                         with tab1:
                             st.subheader("📅 Vista de Calendario Interactivo")
-                            st.markdown("""
-                            <div style="background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); 
-                                        padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
-                                <p style="color: white; margin: 0; text-align: center; font-size: 1.1rem;">
-                                    🎨 <strong>Calendario estilo Google Calendar</strong> - Cada curso tiene un color único
-                                </p>
-                            </div>
-                            """, unsafe_allow_html=True)
                             
-                            # Crear y mostrar el calendario
-                            fig_calendario, colores_cursos = crear_calendario_interactivo(df_horario)
+                            # NUEVO: Selector de profesor para filtrar el calendario
+                            col1_filtro, col2_filtro = st.columns([2, 1])
+                            with col1_filtro:
+                                st.markdown("""
+                                <div style="background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); 
+                                            padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+                                    <p style="color: white; margin: 0; text-align: center; font-size: 1.1rem;">
+                                        🎨 <strong>Calendario estilo Google Calendar</strong> - Cada curso tiene un color único
+                                    </p>
+                                </div>
+                                """, unsafe_allow_html=True)
+                            
+                            with col2_filtro:
+                                # Selector de profesor
+                                profesores_disponibles = ["Todos los profesores"] + sorted(df_horario['Profesor'].unique().tolist())
+                                profesor_filtro = st.selectbox(
+                                    "👨‍🏫 Filtrar por profesor:",
+                                    profesores_disponibles,
+                                    key="filtro_profesor_calendario"
+                                )
+                            
+                            # Crear y mostrar el calendario (filtrado o completo)
+                            fig_calendario, colores_cursos = crear_calendario_interactivo(df_horario, profesor_filtro)
                             st.plotly_chart(fig_calendario, use_container_width=True)
                             
-                            # Mostrar leyenda de colores
-                            mostrar_leyenda_cursos(colores_cursos)
+                            # Mostrar leyenda de colores (filtrada si es necesario)
+                            mostrar_leyenda_cursos(colores_cursos, df_horario, profesor_filtro)
                             
                             # Información adicional
                             col1_info, col2_info = st.columns(2)
@@ -1177,6 +1206,22 @@ def mostrar_generador_horarios():
                                 st.info("💡 **Tip:** Pasa el mouse sobre los bloques para ver información detallada")
                             with col2_info:
                                 st.info("🔍 **Zoom:** Usa las herramientas de Plotly para hacer zoom y navegar")
+                            
+                            # Mostrar estadísticas del profesor seleccionado
+                            if profesor_filtro and profesor_filtro != "Todos los profesores":
+                                df_prof_stats = df_horario[df_horario['Profesor'] == profesor_filtro]
+                                st.markdown("---")
+                                st.subheader(f"📊 Estadísticas de {profesor_filtro}")
+                                
+                                col1_stats, col2_stats, col3_stats, col4_stats = st.columns(4)
+                                with col1_stats:
+                                    st.metric("📚 Cursos", len(df_prof_stats))
+                                with col2_stats:
+                                    st.metric("⏰ Horas totales", f"{df_prof_stats['Duración'].sum():.1f}h")
+                                with col3_stats:
+                                    st.metric("🎓 Créditos", df_prof_stats['Créditos'].sum())
+                                with col4_stats:
+                                    st.metric("👥 Estudiantes", df_prof_stats['Estudiantes'].sum())
                         
                         # PESTAÑA 2: HORARIO COMPLETO (original)
                         with tab2:
@@ -1190,16 +1235,37 @@ def mostrar_generador_horarios():
                                 mime="text/csv"
                             )
                         
-                        # PESTAÑA 3: POR PROFESOR (original)
+                        # PESTAÑA 3: POR PROFESOR (mejorada con calendario individual)
                         with tab3:
                             st.subheader("👨‍🏫 Horario por Profesor")
-                            for profesor in config.profesores_config.keys():
-                                with st.expander(f"Horario de {profesor}"):
-                                    df_prof = df_horario[df_horario['Profesor'] == profesor]
-                                    if not df_prof.empty:
-                                        st.dataframe(df_prof, use_container_width=True)
-                                    else:
-                                        st.warning(f"No se encontraron clases para {profesor}")
+                            
+                            # Selector de profesor para vista individual
+                            profesor_individual = st.selectbox(
+                                "Seleccionar profesor:",
+                                sorted(config.profesores_config.keys()),
+                                key="selector_profesor_individual"
+                            )
+                            
+                            if profesor_individual:
+                                df_prof = df_horario[df_horario['Profesor'] == profesor_individual]
+                                if not df_prof.empty:
+                                    # Mostrar calendario individual del profesor
+                                    fig_prof, colores_prof = crear_calendario_interactivo(df_horario, profesor_individual)
+                                    st.plotly_chart(fig_prof, use_container_width=True)
+                                    
+                                    # Mostrar tabla de datos
+                                    st.dataframe(df_prof, use_container_width=True)
+                                    
+                                    # Estadísticas del profesor
+                                    col1_prof, col2_prof, col3_prof = st.columns(3)
+                                    with col1_prof:
+                                        st.metric("📚 Total Cursos", len(df_prof))
+                                    with col2_prof:
+                                        st.metric("⏰ Horas Semanales", f"{df_prof['Duración'].sum():.1f}")
+                                    with col3_prof:
+                                        st.metric("🎓 Créditos Totales", df_prof['Créditos'].sum())
+                                else:
+                                    st.warning(f"No se encontraron clases para {profesor_individual}")
                         
                         # PESTAÑA 4: POR SALÓN (original)
                         with tab4:
