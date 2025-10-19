@@ -17,6 +17,8 @@ import plotly.express as px
 PROGRAMAS_RUM = {
     "COLEGIO DE ADMINISTRACIÓN DE EMPRESAS": {
         "color": "#FF6B6B",
+        "salones_compartidos": 18,  # NUEVO: Indica salones compartidos
+        "generacion_unificada": True,  # NUEVO: Requiere generación unificada
         "niveles": {
             "Bachilleratos en Administración de Empresas": [
                 "Contabilidad",
@@ -37,6 +39,8 @@ PROGRAMAS_RUM = {
     },
     "COLEGIO DE ARTES Y CIENCIAS": {
         "color": "#4ECDC4",
+        "salones_compartidos": 25,
+        "generacion_unificada": False,
         "niveles": {
             "Bachilleratos en Artes": [
                 "Literatura Comparada",
@@ -97,6 +101,8 @@ PROGRAMAS_RUM = {
     },
     "COLEGIO DE CIENCIAS AGRÍCOLAS": {
         "color": "#96CEB4",
+        "salones_compartidos": 15,
+        "generacion_unificada": False,
         "niveles": {
             "Bachilleratos en Ciencias Agrícolas": [
                 "Ciencias Agrícolas",
@@ -127,6 +133,8 @@ PROGRAMAS_RUM = {
     },
     "COLEGIO DE INGENIERÍA": {
         "color": "#FFEAA7",
+        "salones_compartidos": 20,
+        "generacion_unificada": False,
         "niveles": {
             "Bachilleratos en Ingeniería": [
                 "Ingeniería Química",
@@ -176,11 +184,13 @@ PROGRAMAS_RUM = {
 # ========================================================
 
 class ConfiguracionSistema:
-    def __init__(self, archivo_excel=None):
+    def __init__(self, archivo_excel=None, modo_generacion="individual"):
         self.archivo_excel = archivo_excel
+        self.modo_generacion = modo_generacion  # "individual" o "colegio_completo"
         self.profesores_config = {}
         self.salones = []
         self.cursos_df = None
+        self.programas_incluidos = []  # NUEVO: Lista de programas incluidos
         
         # Configuración por defecto de restricciones globales
         self.restricciones_globales = {
@@ -220,32 +230,110 @@ class ConfiguracionSistema:
             
             st.write(f"📊 Hojas disponibles en el Excel: {list(excel_data.keys())}")
             
-            # Buscar la hoja que contiene los datos de cursos
-            hoja_cursos = None
-            for nombre_hoja, df in excel_data.items():
-                st.write(f"\n🔍 Analizando hoja '{nombre_hoja}':")
-                st.write(f"Columnas: {list(df.columns)}")
+            # NUEVO: Detectar si hay múltiples hojas por programa
+            if self.modo_generacion == "colegio_completo":
+                self.procesar_colegio_completo(excel_data)
+            else:
+                # Modo individual (original)
+                self.procesar_individual(excel_data)
                 
-                # Verificar si esta hoja contiene información de cursos
-                columnas_df = [col.lower().strip() for col in df.columns]
-                
-                if any('profesor' in col or 'docente' in col for col in columnas_df) and any('curso' in col or 'materia' in col or 'asignatura' in col for col in columnas_df):
-                    hoja_cursos = df
-                    st.success(f"✅ Hoja '{nombre_hoja}' seleccionada como fuente de datos")
-                    break
-            
-            if hoja_cursos is None:
-                st.error("❌ No se encontró una hoja con datos de cursos válidos")
-                return
-            
-            self.cursos_df = hoja_cursos
-            self.procesar_datos_excel()
-            
         except Exception as e:
             st.error(f"❌ Error al cargar el archivo Excel: {e}")
             st.info("ℹ️ Usando configuración por defecto")
     
-    def procesar_datos_excel(self):
+    def procesar_colegio_completo(self, excel_data):
+        """Procesa datos para generación unificada de colegio completo"""
+        st.info("🏛️ Modo: Generación unificada para colegio completo")
+        
+        # Buscar hojas que correspondan a programas del colegio
+        hojas_programas = {}
+        
+        for nombre_hoja, df in excel_data.items():
+            # Verificar si la hoja contiene datos de cursos
+            columnas_df = [col.lower().strip() for col in df.columns]
+            
+            if any('profesor' in col or 'docente' in col for col in columnas_df) and \
+               any('curso' in col or 'materia' in col or 'asignatura' in col for col in columnas_df):
+                
+                # Intentar identificar el programa por el nombre de la hoja
+                programa_identificado = self.identificar_programa_por_hoja(nombre_hoja)
+                if programa_identificado:
+                    hojas_programas[programa_identificado] = df
+                    st.success(f"✅ Hoja '{nombre_hoja}' → Programa '{programa_identificado}'")
+                else:
+                    # Si no se puede identificar, usar el nombre de la hoja como programa
+                    hojas_programas[nombre_hoja] = df
+                    st.info(f"ℹ️ Hoja '{nombre_hoja}' → Programa genérico")
+        
+        if not hojas_programas:
+            st.error("❌ No se encontraron hojas con datos de cursos válidos")
+            return
+        
+        # Procesar cada programa
+        for programa, df in hojas_programas.items():
+            st.write(f"🔄 Procesando programa: {programa}")
+            self.cursos_df = df
+            self.procesar_datos_excel(programa_prefix=programa)
+            self.programas_incluidos.append(programa)
+        
+        # Configurar salones compartidos
+        colegio_actual = st.session_state.get('colegio_seleccionado', '')
+        if colegio_actual in PROGRAMAS_RUM:
+            num_salones = PROGRAMAS_RUM[colegio_actual].get('salones_compartidos', 18)
+            self.salones = [f"AE-{i+1:02d}" for i in range(num_salones)]
+            st.success(f"🏫 Configurados {num_salones} salones compartidos para el colegio")
+    
+    def procesar_individual(self, excel_data):
+        """Procesa datos para generación individual (modo original)"""
+        # Buscar la hoja que contiene los datos de cursos
+        hoja_cursos = None
+        for nombre_hoja, df in excel_data.items():
+            st.write(f"\n🔍 Analizando hoja '{nombre_hoja}':")
+            st.write(f"Columnas: {list(df.columns)}")
+            
+            # Verificar si esta hoja contiene información de cursos
+            columnas_df = [col.lower().strip() for col in df.columns]
+            
+            if any('profesor' in col or 'docente' in col for col in columnas_df) and \
+               any('curso' in col or 'materia' in col or 'asignatura' in col for col in columnas_df):
+                hoja_cursos = df
+                st.success(f"✅ Hoja '{nombre_hoja}' seleccionada como fuente de datos")
+                break
+        
+        if hoja_cursos is None:
+            st.error("❌ No se encontró una hoja con datos de cursos válidos")
+            return
+        
+        self.cursos_df = hoja_cursos
+        self.procesar_datos_excel()
+    
+    def identificar_programa_por_hoja(self, nombre_hoja):
+        """Identifica el programa basado en el nombre de la hoja"""
+        nombre_lower = nombre_hoja.lower()
+        
+        # Mapeo de palabras clave a programas
+        mapeo_programas = {
+            'contabilidad': 'Contabilidad',
+            'finanzas': 'Finanzas',
+            'recursos humanos': 'Gerencia de Recursos Humanos',
+            'rrhh': 'Gerencia de Recursos Humanos',
+            'mercadeo': 'Mercadeo',
+            'marketing': 'Mercadeo',
+            'operaciones': 'Gerencia de Operaciones',
+            'sistemas': 'Sistemas Computadorizados de Información',
+            'computadora': 'Sistemas Computadorizados de Información',
+            'oficina': 'Administración de Oficinas',
+            'administracion': 'Administración de Empresas (Programa General)',
+            'industrial': 'Gerencia Industrial'
+        }
+        
+        for palabra_clave, programa in mapeo_programas.items():
+            if palabra_clave in nombre_lower:
+                return programa
+        
+        return None
+    
+    def procesar_datos_excel(self, programa_prefix=""):
         """Procesa los datos del Excel y crea la configuración de profesores"""
         if self.cursos_df is None:
             return
@@ -260,7 +348,8 @@ class ConfiguracionSistema:
             'profesor': ['profesor', 'docente', 'teacher', 'instructor'],
             'curso': ['curso', 'materia', 'asignatura', 'subject', 'course'],
             'creditos': ['creditos', 'créditos', 'credits', 'horas'],
-            'estudiantes': ['estudiantes', 'alumnos', 'students', 'enrollment', 'seccion']
+            'estudiantes': ['estudiantes', 'alumnos', 'students', 'enrollment', 'seccion'],
+            'programa': ['programa', 'departamento', 'concentracion', 'major']
         }
         
         columnas_finales = {}
@@ -293,13 +382,20 @@ class ConfiguracionSistema:
         
         # Procesar cada profesor
         profesores_unicos = df[columnas_finales['profesor']].unique()
-        st.info(f"👨‍🏫 Profesores encontrados: {len(profesores_unicos)}")
+        st.info(f"👨‍🏫 Profesores encontrados en {programa_prefix}: {len(profesores_unicos)}")
         
         for profesor in profesores_unicos:
             if pd.isna(profesor) or str(profesor).strip() == '':
                 continue
                 
             profesor = str(profesor).strip()
+            
+            # NUEVO: Agregar prefijo del programa para evitar conflictos
+            if programa_prefix and self.modo_generacion == "colegio_completo":
+                profesor_key = f"{profesor} ({programa_prefix})"
+            else:
+                profesor_key = profesor
+            
             cursos_profesor = df[df[columnas_finales['profesor']] == profesor]
             
             cursos_lista = []
@@ -320,31 +416,42 @@ class ConfiguracionSistema:
                 except (ValueError, TypeError):
                     estudiantes = 30
                 
+                # NUEVO: Agregar información del programa al curso
+                if programa_prefix and self.modo_generacion == "colegio_completo":
+                    curso_completo = f"{curso_nombre} ({programa_prefix})"
+                else:
+                    curso_completo = curso_nombre
+                
                 if curso_nombre and curso_nombre != 'nan':
                     cursos_lista.append({
-                        "nombre": curso_nombre,
+                        "nombre": curso_completo,
+                        "nombre_original": curso_nombre,
+                        "programa": programa_prefix if programa_prefix else "General",
                         "creditos": creditos,
                         "estudiantes": estudiantes
                     })
                     creditos_totales += creditos
             
             if cursos_lista:
-                self.profesores_config[profesor] = {
+                self.profesores_config[profesor_key] = {
+                    "nombre_original": profesor,
+                    "programa": programa_prefix if programa_prefix else "General",
                     "cursos": cursos_lista,
                     "creditos_totales": creditos_totales,
                     "horario_preferido": {},
                     "horario_no_disponible": {}
                 }
                 
-                st.write(f"📚 {profesor}: {len(cursos_lista)} cursos, {creditos_totales} créditos totales")
+                st.write(f"📚 {profesor_key}: {len(cursos_lista)} cursos, {creditos_totales} créditos totales")
         
-        # Generar salones: por defecto 15 salones por departamento disponibles
-        num_salones = 15
-        self.salones = [f"Salon {i+1}" for i in range(num_salones)]
+        # Generar salones si no están configurados
+        if not self.salones:
+            num_salones = 15
+            self.salones = [f"Salon {i+1}" for i in range(num_salones)]
         
-        st.success(f"✅ Configuración completada: {len(self.profesores_config)} profesores, {num_salones} salones")
+        st.success(f"✅ Configuración completada: {len(self.profesores_config)} profesores")
 
-# Generador de bloques según especificaciones
+# Generador de bloques según especificaciones (sin cambios)
 def generar_bloques():
     bloques = []
     id_counter = 1
@@ -400,7 +507,7 @@ def generar_bloques():
 
     return bloques
 
-# Tabla de créditos adicionales por tamaño de sección
+# Tabla de créditos adicionales por tamaño de sección (sin cambios)
 tabla_creditos = {
     1: [(1,44,0),(45,74,0.5),(75,104,1),(105,134,1.5),(135,164,2),(165,194,2.5),
         (195,224,3),(225,254,3.5),(255,284,4),(285,314,4.5),(315,344,5),(345,374,5.5),
@@ -430,7 +537,7 @@ def calcular_creditos_adicionales(horas_contacto, estudiantes):
             return creditos
     return 0
 
-# Horario de 7:00 a 19:20 en intervalos de 30 minutos
+# Horario de 7:00 a 19:20 en intervalos de 30 minutos (sin cambios)
 horas_inicio = []
 for h in range(7, 20):
     for m in [0, 30]:
@@ -507,11 +614,14 @@ def cumple_horario_preferido(dia, hora_inicio, duracion, profesor):
     
     return False
 
-# Clase para representar una asignación de clase
+# Clase para representar una asignación de clase (MODIFICADA)
 class AsignacionClase:
     def __init__(self, curso_info, profesor, bloque, hora_inicio, salon):
         self.curso_nombre = curso_info["nombre"]
+        self.curso_original = curso_info.get("nombre_original", curso_info["nombre"])
+        self.programa = curso_info.get("programa", "General")  # NUEVO
         self.profesor = profesor
+        self.profesor_original = config.profesores_config[profesor].get("nombre_original", profesor)  # NUEVO
         self.bloque = bloque
         self.hora_inicio = hora_inicio
         self.estudiantes = curso_info["estudiantes"]
@@ -531,7 +641,10 @@ class AsignacionClase:
             
             horarios.append({
                 "Curso": self.curso_nombre,
+                "Curso Original": self.curso_original,  # NUEVO
+                "Programa": self.programa,  # NUEVO
                 "Profesor": self.profesor,
+                "Profesor Original": self.profesor_original,  # NUEVO
                 "Bloque": self.bloque["id"],
                 "Dia": dia,
                 "Hora Inicio": self.hora_inicio,
@@ -546,7 +659,7 @@ class AsignacionClase:
             })
         return horarios
 
-# Generador de horarios con restricciones fuertes
+# Resto de las funciones sin cambios significativos...
 def generar_horario_valido():
     """Genera un horario que cumple todas las restricciones fuertes"""
     asignaciones = []
@@ -610,7 +723,6 @@ def hay_conflictos(nueva_asignacion, asignaciones_existentes):
     
     return False
 
-# Función de evaluación
 def evaluar_horario(asignaciones):
     """Evalúa un horario considerando restricciones fuertes y suaves configurables"""
     if asignaciones is None:
@@ -702,7 +814,7 @@ def exportar_horario(asignaciones):
     return df
 
 # ========================================================
-# NUEVA FUNCIÓN: CALENDARIO VISUAL INTERACTIVO CON FILTRO POR PROFESOR
+# FUNCIONES DE VISUALIZACIÓN MEJORADAS
 # ========================================================
 
 def generar_colores_cursos(df_horario):
@@ -724,19 +836,25 @@ def generar_colores_cursos(df_horario):
     
     return colores_cursos
 
-def crear_calendario_interactivo(df_horario, profesor_filtro=None):
-    """Crea un calendario visual estilo Google Calendar con Plotly"""
+def crear_calendario_interactivo(df_horario, filtro_profesor=None, filtro_programa=None):
+    """Crea un calendario visual estilo Google Calendar con Plotly (MEJORADO)"""
     
-    # Filtrar por profesor si se especifica
-    if profesor_filtro and profesor_filtro != "Todos los profesores":
-        df_filtrado = df_horario[df_horario['Profesor'] == profesor_filtro]
-        titulo_calendario = f"📅 Calendario de {profesor_filtro}"
-    else:
-        df_filtrado = df_horario
-        titulo_calendario = "📅 Calendario Semanal de Clases - Vista Completa"
+    # Aplicar filtros
+    df_filtrado = df_horario.copy()
+    titulo_partes = ["📅 Calendario Semanal"]
+    
+    if filtro_profesor and filtro_profesor != "Todos los profesores":
+        df_filtrado = df_filtrado[df_filtrado['Profesor'] == filtro_profesor]
+        titulo_partes.append(f"Profesor: {filtro_profesor}")
+    
+    if filtro_programa and filtro_programa != "Todos los programas":
+        df_filtrado = df_filtrado[df_filtrado['Programa'] == filtro_programa]
+        titulo_partes.append(f"Programa: {filtro_programa}")
+    
+    titulo_calendario = " - ".join(titulo_partes)
     
     # Generar colores para cada curso
-    colores_cursos = generar_colores_cursos(df_horario)  # Usar todos los cursos para mantener consistencia de colores
+    colores_cursos = generar_colores_cursos(df_horario)
     
     # Mapeo de días a números para el eje X
     dias_map = {'Lu': 1, 'Ma': 2, 'Mi': 3, 'Ju': 4, 'Vi': 5}
@@ -766,20 +884,21 @@ def crear_calendario_interactivo(df_horario, profesor_filtro=None):
         )
         
         # Añadir texto de información de la clase
-        texto_clase = f"<b>{fila['Curso']}</b><br>"
-        texto_clase += f"👨‍🏫 {fila['Profesor']}<br>"
+        texto_clase = f"<b>{fila['Curso Original']}</b><br>"
+        texto_clase += f"📚 Programa: {fila['Programa']}<br>"
+        texto_clase += f"👨‍🏫 {fila['Profesor Original']}<br>"
         texto_clase += f"🏫 {fila['Salon']}<br>"
         texto_clase += f"👥 {fila['Estudiantes']} estudiantes<br>"
         texto_clase += f"⏰ {fila['Hora Inicio']} - {fila['Hora Fin']}<br>"
-        texto_clase += f"📚 {fila['Créditos']} créditos"
+        texto_clase += f"🎓 {fila['Créditos']} créditos"
         
         # Añadir texto centrado en el bloque
         fig.add_annotation(
             x=dia_num,
             y=(hora_inicio_min + hora_fin_min) / 2,
-            text=f"<b>{fila['Curso']}</b><br>{fila['Hora Inicio']}-{fila['Hora Fin']}<br>{fila['Salon']}",
+            text=f"<b>{fila['Curso Original']}</b><br>{fila['Hora Inicio']}-{fila['Hora Fin']}<br>{fila['Salon']}<br><i>{fila['Programa']}</i>",
             showarrow=False,
-            font=dict(color="white", size=10, family="Arial Black"),
+            font=dict(color="white", size=9, family="Arial Black"),
             bgcolor="rgba(0,0,0,0.7)",
             bordercolor="white",
             borderwidth=1,
@@ -793,7 +912,7 @@ def crear_calendario_interactivo(df_horario, profesor_filtro=None):
             'text': titulo_calendario,
             'x': 0.5,
             'xanchor': 'center',
-            'font': {'size': 24, 'color': '#2C3E50'}
+            'font': {'size': 20, 'color': '#2C3E50'}
         },
         xaxis=dict(
             tickmode='array',
@@ -807,14 +926,14 @@ def crear_calendario_interactivo(df_horario, profesor_filtro=None):
         ),
         yaxis=dict(
             tickmode='array',
-            tickvals=[i*60 for i in range(7, 21)],  # Cada hora desde 7:00 hasta 20:00
+            tickvals=[i*60 for i in range(7, 21)],
             ticktext=[f"{i:02d}:00" for i in range(7, 21)],
-            range=[7*60, 20*60],  # De 7:00 AM a 8:00 PM
+            range=[7*60, 20*60],
             showgrid=True,
             gridcolor='lightgray',
             title="Hora del Día",
             title_font=dict(size=16, color='#34495E'),
-            autorange='reversed'  # Invertir para que las horas tempranas estén arriba
+            autorange='reversed'
         ),
         plot_bgcolor='white',
         paper_bgcolor='#F8F9FA',
@@ -835,17 +954,27 @@ def crear_calendario_interactivo(df_horario, profesor_filtro=None):
     
     return fig, colores_cursos
 
-def mostrar_leyenda_cursos(colores_cursos, df_horario, profesor_filtro=None):
+def mostrar_leyenda_cursos(colores_cursos, df_horario, filtro_profesor=None, filtro_programa=None):
     """Muestra una leyenda de colores para los cursos (filtrada si es necesario)"""
     
-    # Filtrar cursos si hay un profesor seleccionado
-    if profesor_filtro and profesor_filtro != "Todos los profesores":
-        cursos_filtrados = df_horario[df_horario['Profesor'] == profesor_filtro]['Curso'].unique()
-        colores_mostrar = {curso: color for curso, color in colores_cursos.items() if curso in cursos_filtrados}
-        st.subheader(f"🎨 Cursos de {profesor_filtro}")
-    else:
-        colores_mostrar = colores_cursos
-        st.subheader("🎨 Leyenda de Colores por Curso")
+    # Aplicar filtros
+    df_mostrar = df_horario.copy()
+    if filtro_profesor and filtro_profesor != "Todos los profesores":
+        df_mostrar = df_mostrar[df_mostrar['Profesor'] == filtro_profesor]
+    if filtro_programa and filtro_programa != "Todos los programas":
+        df_mostrar = df_mostrar[df_mostrar['Programa'] == filtro_programa]
+    
+    cursos_filtrados = df_mostrar['Curso'].unique()
+    colores_mostrar = {curso: color for curso, color in colores_cursos.items() if curso in cursos_filtrados}
+    
+    # Título dinámico
+    titulo_partes = ["🎨 Leyenda de Colores"]
+    if filtro_programa and filtro_programa != "Todos los programas":
+        titulo_partes.append(f"- {filtro_programa}")
+    if filtro_profesor and filtro_profesor != "Todos los profesores":
+        titulo_partes.append(f"- {filtro_profesor}")
+    
+    st.subheader(" ".join(titulo_partes))
     
     # Crear columnas para mostrar la leyenda
     num_cols = 3
@@ -853,6 +982,14 @@ def mostrar_leyenda_cursos(colores_cursos, df_horario, profesor_filtro=None):
     
     for i, (curso, color) in enumerate(colores_mostrar.items()):
         with cols[i % num_cols]:
+            # Extraer programa del nombre del curso si está presente
+            if "(" in curso and ")" in curso:
+                curso_display = curso.split("(")[0].strip()
+                programa_display = curso.split("(")[1].replace(")", "").strip()
+            else:
+                curso_display = curso
+                programa_display = ""
+            
             st.markdown(
                 f"""
                 <div style="
@@ -871,14 +1008,17 @@ def mostrar_leyenda_cursos(colores_cursos, df_horario, profesor_filtro=None):
                         margin-right: 10px;
                         border-radius: 3px;
                     "></div>
-                    <span style="font-weight: 500; color: #2C3E50;">{curso}</span>
+                    <div>
+                        <span style="font-weight: 500; color: #2C3E50;">{curso_display}</span>
+                        {f'<br><small style="color: #7F8C8D;">{programa_display}</small>' if programa_display else ''}
+                    </div>
                 </div>
                 """, 
                 unsafe_allow_html=True
             )
 
 # ========================================================
-# UI DE SELECCIÓN DE PROGRAMA Y GENERADOR
+# UI DE SELECCIÓN DE PROGRAMA Y GENERADOR (MODIFICADA)
 # ========================================================
 
 # Globals usados por el generador
@@ -886,13 +1026,18 @@ config = None
 bloques = []
 
 def mostrar_seleccion_programa():
-    """Muestra la interfaz de selección de programa por colegio y nivel académico"""
+    """Muestra la interfaz de selección de programa por colegio y nivel académico (MEJORADA)"""
     st.markdown("## 🏛️ Selecciona tu Programa Académico")
     st.markdown("Elige tu programa de estudio del Recinto Universitario de Mayagüez para generar horarios optimizados.")
     
     for colegio, info in PROGRAMAS_RUM.items():
         with st.expander(f"🏛️ {colegio}", expanded=False):
             total_programas = sum(len(programas) for programas in info['niveles'].values())
+            
+            # NUEVO: Mostrar información sobre generación unificada
+            if info.get('generacion_unificada', False):
+                st.info(f"🔄 **Generación Unificada Disponible**: Este colegio comparte {info['salones_compartidos']} salones entre todos sus programas. Puedes generar un horario unificado para evitar conflictos.")
+            
             st.markdown(f"**{total_programas} programas disponibles en {len(info['niveles'])} niveles académicos**")
             
             for nivel, programas in info['niveles'].items():
@@ -919,113 +1064,156 @@ def mostrar_seleccion_programa():
                         </div>
                         """
                         st.markdown(card_html, unsafe_allow_html=True)
-                        if st.button("Seleccionar", key=f"btn_{colegio}_{nivel}_{programa}", use_container_width=True):
-                            st.session_state.programa_seleccionado = programa
-                            st.session_state.colegio_seleccionado = colegio
-                            st.session_state.nivel_seleccionado = nivel
-                            st.session_state.pagina_actual = 'generador'
-                            st.rerun()
+                        
+                        col1_btn, col2_btn = st.columns(2)
+                        with col1_btn:
+                            if st.button("Individual", key=f"btn_ind_{colegio}_{nivel}_{programa}", use_container_width=True):
+                                st.session_state.programa_seleccionado = programa
+                                st.session_state.colegio_seleccionado = colegio
+                                st.session_state.nivel_seleccionado = nivel
+                                st.session_state.modo_generacion = "individual"
+                                st.session_state.pagina_actual = 'generador'
+                                st.rerun()
+                        
+                        # NUEVO: Botón para generación unificada (solo para colegios que lo soporten)
+                        with col2_btn:
+                            if info.get('generacion_unificada', False):
+                                if st.button("Unificado", key=f"btn_unif_{colegio}_{nivel}_{programa}", use_container_width=True):
+                                    st.session_state.programa_seleccionado = "COLEGIO COMPLETO"
+                                    st.session_state.colegio_seleccionado = colegio
+                                    st.session_state.nivel_seleccionado = "Todos los niveles"
+                                    st.session_state.modo_generacion = "colegio_completo"
+                                    st.session_state.pagina_actual = 'generador'
+                                    st.rerun()
+                            else:
+                                st.write("")  # Espacio vacío
+                
                 st.markdown("---")
+    
+    # NUEVO: Información sobre modos de generación
+    with st.expander("ℹ️ Información sobre Modos de Generación"):
+        st.markdown("""
+        ### 🔄 Modo Individual
+        - Genera horario para un programa específico
+        - Ideal para departamentos pequeños o programas independientes
+        - Configuración rápida y sencilla
+        
+        ### 🏛️ Modo Unificado (Solo para colegios compatibles)
+        - Genera horario para TODOS los programas del colegio simultáneamente
+        - Evita conflictos de salones entre programas
+        - Permite filtrar y ver horarios por programa individual
+        - Recomendado para colegios con recursos compartidos
+        """)
     
     if st.session_state.programa_seleccionado:
         st.markdown("---")
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            st.success(f"✅ **Programa:** {st.session_state.programa_seleccionado}")
-            st.info(f"🎓 **Nivel:** {st.session_state.nivel_seleccionado}")
-            st.info(f"🏛️ **Colegio:** {st.session_state.colegio_seleccionado}")
+            if st.session_state.modo_generacion == "colegio_completo":
+                st.success(f"✅ **Modo:** Generación Unificada")
+                st.info(f"🏛️ **Colegio:** {st.session_state.colegio_seleccionado}")
+                st.info(f"📚 **Incluye:** Todos los programas del colegio")
+            else:
+                st.success(f"✅ **Programa:** {st.session_state.programa_seleccionado}")
+                st.info(f"🎓 **Nivel:** {st.session_state.nivel_seleccionado}")
+                st.info(f"🏛️ **Colegio:** {st.session_state.colegio_seleccionado}")
+            
             if st.button("🚀 Continuar al Generador de Horarios", type="primary", use_container_width=True):
                 st.session_state.pagina_actual = 'generador'
                 st.rerun()
 
 def mostrar_generador_horarios():
-    """Muestra la interfaz del generador de horarios con calendario visual mejorado"""
+    """Muestra la interfaz del generador de horarios con calendario visual mejorado (MODIFICADA)"""
     # Cabecera contextual del programa
     colegio_info = None
     for colegio, info in PROGRAMAS_RUM.items():
         if colegio == st.session_state.colegio_seleccionado:
             colegio_info = info
             break
+    
     if colegio_info:
-        st.markdown(f"""
-        <div style="
-            background: linear-gradient(90deg, {colegio_info['color']}30, {colegio_info['color']}10);
-            padding: 1.5rem;
-            border-radius: 10px;
-            margin-bottom: 2rem;
-            border-left: 5px solid {colegio_info['color']};
-        ">
-            <h3 style="margin: 0; color: #333;">📚 {st.session_state.programa_seleccionado}</h3>
-            <p style="margin: 0.3rem 0; color: #666; font-size: 1rem;">🎓 {st.session_state.nivel_seleccionado}</p>
-            <p style="margin: 0.3rem 0 0 0; color: #888; font-size: 0.9rem;">🏛️ {st.session_state.colegio_seleccionado}</p>
-        </div>
-        """, unsafe_allow_html=True)
+        if st.session_state.modo_generacion == "colegio_completo":
+            st.markdown(f"""
+            <div style="
+                background: linear-gradient(90deg, {colegio_info['color']}30, {colegio_info['color']}10);
+                padding: 1.5rem;
+                border-radius: 10px;
+                margin-bottom: 2rem;
+                border-left: 5px solid {colegio_info['color']};
+            ">
+                <h3 style="margin: 0; color: #333;">🏛️ {st.session_state.colegio_seleccionado}</h3>
+                <p style="margin: 0.3rem 0; color: #666; font-size: 1rem;">🔄 Generación Unificada - Todos los Programas</p>
+                <p style="margin: 0.3rem 0 0 0; color: #888; font-size: 0.9rem;">🏫 {colegio_info['salones_compartidos']} salones compartidos</p>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+            <div style="
+                background: linear-gradient(90deg, {colegio_info['color']}30, {colegio_info['color']}10);
+                padding: 1.5rem;
+                border-radius: 10px;
+                margin-bottom: 2rem;
+                border-left: 5px solid {colegio_info['color']};
+            ">
+                <h3 style="margin: 0; color: #333;">📚 {st.session_state.programa_seleccionado}</h3>
+                <p style="margin: 0.3rem 0; color: #666; font-size: 1rem;">🎓 {st.session_state.nivel_seleccionado}</p>
+                <p style="margin: 0.3rem 0 0 0; color: #888; font-size: 0.9rem;">🏛️ {st.session_state.colegio_seleccionado}</p>
+            </div>
+            """, unsafe_allow_html=True)
 
-    st.markdown("## 📁 Cargar Datos para Generación de Horarios")
-    with st.expander("📋 Instrucciones para tu programa"):
-        st.markdown(f"""
-        ### Configuración para {st.session_state.programa_seleccionado}
-        **Nivel:** {st.session_state.nivel_seleccionado}
-        
-        **Formato del archivo Excel requerido:**
-        - **Hoja:** Debe contener los datos de profesores y cursos
-        - **Columnas requeridas:** Profesor, Curso/Materia, Créditos, Estudiantes
-        """)
-        # Consideraciones por nivel y colegio
-        nivel = st.session_state.nivel_seleccionado or ""
-        colegio = st.session_state.colegio_seleccionado or ""
-        if "Bachillerato" in nivel:
-            st.markdown("""
-            - Cursos básicos y de concentración
-            - Horarios diurnos principalmente (7:30 AM - 5:00 PM)
-            - Laboratorios de 2-3 horas consecutivas
+    # Instrucciones adaptadas al modo
+    if st.session_state.modo_generacion == "colegio_completo":
+        st.markdown("## 📁 Cargar Datos para Generación Unificada")
+        with st.expander("📋 Instrucciones para Generación Unificada"):
+            st.markdown(f"""
+            ### Configuración Unificada - {st.session_state.colegio_seleccionado}
+            
+            **Formato del archivo Excel requerido:**
+            - **Múltiples hojas:** Una hoja por programa o una hoja con todos los datos
+            - **Columnas requeridas:** Profesor, Curso/Materia, Créditos, Estudiantes, Programa (opcional)
+            - **Salones compartidos:** {colegio_info['salones_compartidos']} salones disponibles para todos los programas
+            
+            **Ventajas de la generación unificada:**
+            - ✅ Evita conflictos de salones entre programas
+            - ✅ Optimización global de recursos
+            - ✅ Vista individual por programa después de generar
+            - ✅ Coordinación automática entre departamentos
             """)
-        elif "Maestría" in nivel:
-            st.markdown("""
-            - Cursos especializados y seminarios
-            - Horarios flexibles (incluyendo nocturnos)
-            - Clases de 2 horas 30 minutos típicamente
-            - Tesis y proyectos de investigación
-            """)
-        elif "Doctorado" in nivel:
-            st.markdown("""
-            - Seminarios doctorales especializados
-            - Horarios muy flexibles
-            - Investigación dirigida
-            - Defensa de disertación
-            """)
-        if "INGENIERÍA" in colegio:
-            st.markdown("""
-            **Adicional para Ingeniería:**
-            - Laboratorios requieren equipos especializados
-            - Talleres y proyectos necesitan espacios amplios
-            - Coordinación con industria para prácticas
-            """)
-        elif "CIENCIAS AGRÍCOLAS" in colegio:
-            st.markdown("""
-            **Adicional para Ciencias Agrícolas:**
-            - Trabajo de campo en horarios variables
-            - Laboratorios con organismos vivos
-            - Dependencia de condiciones climáticas
+    else:
+        st.markdown("## 📁 Cargar Datos para Generación Individual")
+        with st.expander("📋 Instrucciones para tu programa"):
+            st.markdown(f"""
+            ### Configuración para {st.session_state.programa_seleccionado}
+            **Nivel:** {st.session_state.nivel_seleccionado}
+            
+            **Formato del archivo Excel requerido:**
+            - **Hoja:** Debe contener los datos de profesores y cursos
+            - **Columnas requeridas:** Profesor, Curso/Materia, Créditos, Estudiantes
             """)
 
     # Sidebar de estado y acciones
     st.sidebar.header("⚙️ Configuración")
     st.sidebar.markdown("### 📋 Estado Actual")
     if st.session_state.programa_seleccionado:
-        st.sidebar.success(f"**Programa:** {st.session_state.programa_seleccionado}")
-        if st.session_state.nivel_seleccionado:
-            st.sidebar.info(f"**Nivel:** {st.session_state.nivel_seleccionado}")
-        if st.session_state.colegio_seleccionado:
+        if st.session_state.modo_generacion == "colegio_completo":
+            st.sidebar.success(f"**Modo:** Unificado")
             st.sidebar.info(f"**Colegio:** {st.session_state.colegio_seleccionado}")
+        else:
+            st.sidebar.success(f"**Programa:** {st.session_state.programa_seleccionado}")
+            if st.session_state.nivel_seleccionado:
+                st.sidebar.info(f"**Nivel:** {st.session_state.nivel_seleccionado}")
+            if st.session_state.colegio_seleccionado:
+                st.sidebar.info(f"**Colegio:** {st.session_state.colegio_seleccionado}")
     else:
         st.sidebar.warning("No hay programa seleccionado")
+    
     st.sidebar.markdown("---")
     if st.sidebar.button("🔄 Cambiar Programa", use_container_width=True):
         st.session_state.pagina_actual = 'seleccion'
         st.session_state.programa_seleccionado = None
         st.session_state.colegio_seleccionado = None
         st.session_state.nivel_seleccionado = None
+        st.session_state.modo_generacion = "individual"
         st.rerun()
 
     # Upload del archivo Excel en sidebar
@@ -1040,28 +1228,46 @@ def mostrar_generador_horarios():
         with open("temp_excel.xlsx", "wb") as f:
             f.write(uploaded_file.getbuffer())
         
-        # Inicializar configuración
+        # Inicializar configuración con el modo seleccionado
         global config, bloques
-        config = ConfiguracionSistema("temp_excel.xlsx")
+        config = ConfiguracionSistema("temp_excel.xlsx", st.session_state.modo_generacion)
         bloques = generar_bloques()
 
         # Control de cantidad de salones en la barra lateral
         st.sidebar.subheader("🏫 Infraestructura")
-        num_salones = st.sidebar.number_input(
-            "Salones disponibles",
-            min_value=1,
-            max_value=100,
-            value=15,
-            step=1,
-            help="Cantidad total de salones disponibles para el departamento"
-        )
-        config.salones = [f"Salon {i+1}" for i in range(int(num_salones))]
+        
+        if st.session_state.modo_generacion == "colegio_completo":
+            # Para modo unificado, usar salones predefinidos del colegio
+            num_salones_default = colegio_info.get('salones_compartidos', 18)
+            st.sidebar.info(f"Salones compartidos del colegio: {num_salones_default}")
+            num_salones = st.sidebar.number_input(
+                "Ajustar salones disponibles",
+                min_value=1,
+                max_value=100,
+                value=num_salones_default,
+                step=1,
+                help=f"Salones compartidos entre todos los programas del {st.session_state.colegio_seleccionado}"
+            )
+            # Usar nomenclatura específica del colegio
+            prefijo_salon = "AE" if "ADMINISTRACIÓN" in st.session_state.colegio_seleccionado else "SALON"
+            config.salones = [f"{prefijo_salon}-{i+1:02d}" for i in range(int(num_salones))]
+        else:
+            # Para modo individual, configuración estándar
+            num_salones = st.sidebar.number_input(
+                "Salones disponibles",
+                min_value=1,
+                max_value=100,
+                value=15,
+                step=1,
+                help="Cantidad total de salones disponibles para el programa"
+            )
+            config.salones = [f"Salon {i+1}" for i in range(int(num_salones))]
         
         if config.profesores_config:
             st.success("✅ Archivo cargado correctamente")
             
             # Resumen de datos cargados
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3, col4 = st.columns(4)
             with col1:
                 st.metric("👨‍🏫 Profesores", len(config.profesores_config))
             with col2:
@@ -1069,15 +1275,25 @@ def mostrar_generador_horarios():
                 st.metric("📚 Cursos", total_cursos)
             with col3:
                 st.metric("🏫 Salones", len(config.salones))
+            with col4:
+                if st.session_state.modo_generacion == "colegio_completo":
+                    st.metric("📋 Programas", len(config.programas_incluidos))
+            
+            # NUEVO: Mostrar programas incluidos en modo unificado
+            if st.session_state.modo_generacion == "colegio_completo" and config.programas_incluidos:
+                with st.expander("📋 Programas incluidos en la generación unificada"):
+                    for programa in config.programas_incluidos:
+                        st.write(f"✅ {programa}")
             
             # Datos cargados
             with st.expander("📋 Ver datos cargados"):
                 for profesor, data in config.profesores_config.items():
-                    st.write(f"**{profesor}** ({data['creditos_totales']} créditos)")
+                    programa_info = f" - {data['programa']}" if data.get('programa', 'General') != 'General' else ""
+                    st.write(f"**{data.get('nombre_original', profesor)}{programa_info}** ({data['creditos_totales']} créditos)")
                     for curso in data['cursos']:
-                        st.write(f"  - {curso['nombre']} ({curso['creditos']} créditos, {curso['estudiantes']} estudiantes)")
+                        st.write(f"  - {curso['nombre_original']} ({curso['creditos']} créditos, {curso['estudiantes']} estudiantes)")
             
-            # Parámetros de Optimización
+            # Resto de la configuración (sin cambios significativos)
             st.sidebar.subheader("🎯 Parámetros de Optimización")
             intentos = st.sidebar.slider("Número de iteraciones", 50, 500, 200, 50)
 
@@ -1159,46 +1375,78 @@ def mostrar_generador_horarios():
                         
                         df_horario = exportar_horario(mejor)
                         
-                        # NUEVA PESTAÑA: CALENDARIO VISUAL CON FILTRO POR PROFESOR
-                        tab1, tab2, tab3, tab4, tab5 = st.tabs([
-                            "📅 Calendario Visual", 
-                            "📊 Horario Completo", 
-                            "👨‍🏫 Por Profesor", 
-                            "🏫 Por Salón", 
-                            "📈 Estadísticas"
-                        ])
+                        # PESTAÑAS MEJORADAS CON FILTROS AVANZADOS
+                        if st.session_state.modo_generacion == "colegio_completo":
+                            tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+                                "📅 Calendario Visual", 
+                                "📊 Horario Completo", 
+                                "📚 Por Programa",
+                                "👨‍🏫 Por Profesor", 
+                                "🏫 Por Salón", 
+                                "📈 Estadísticas"
+                            ])
+                        else:
+                            tab1, tab2, tab3, tab4, tab5 = st.tabs([
+                                "📅 Calendario Visual", 
+                                "📊 Horario Completo", 
+                                "👨‍🏫 Por Profesor", 
+                                "🏫 Por Salón", 
+                                "📈 Estadísticas"
+                            ])
                         
-                        # PESTAÑA 1: CALENDARIO VISUAL INTERACTIVO CON FILTRO
+                        # PESTAÑA 1: CALENDARIO VISUAL INTERACTIVO CON FILTROS AVANZADOS
                         with tab1:
                             st.subheader("📅 Vista de Calendario Interactivo")
                             
-                            # NUEVO: Selector de profesor para filtrar el calendario
-                            col1_filtro, col2_filtro = st.columns([2, 1])
+                            # Filtros mejorados
+                            col1_filtro, col2_filtro, col3_filtro = st.columns(3)
+                            
                             with col1_filtro:
                                 st.markdown("""
                                 <div style="background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); 
                                             padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
-                                    <p style="color: white; margin: 0; text-align: center; font-size: 1.1rem;">
-                                        🎨 <strong>Calendario estilo Google Calendar</strong> - Cada curso tiene un color único
+                                    <p style="color: white; margin: 0; text-align: center; font-size: 1rem;">
+                                        🎨 <strong>Calendario Interactivo</strong>
                                     </p>
                                 </div>
                                 """, unsafe_allow_html=True)
                             
                             with col2_filtro:
+                                # NUEVO: Filtro por programa (solo en modo unificado)
+                                if st.session_state.modo_generacion == "colegio_completo":
+                                    programas_disponibles = ["Todos los programas"] + sorted(df_horario['Programa'].unique().tolist())
+                                    programa_filtro = st.selectbox(
+                                        "📚 Filtrar por programa:",
+                                        programas_disponibles,
+                                        key="filtro_programa_calendario"
+                                    )
+                                else:
+                                    programa_filtro = None
+                            
+                            with col3_filtro:
                                 # Selector de profesor
-                                profesores_disponibles = ["Todos los profesores"] + sorted(df_horario['Profesor'].unique().tolist())
+                                profesores_disponibles = ["Todos los profesores"] + sorted(df_horario['Profesor Original'].unique().tolist())
                                 profesor_filtro = st.selectbox(
                                     "👨‍🏫 Filtrar por profesor:",
                                     profesores_disponibles,
                                     key="filtro_profesor_calendario"
                                 )
                             
-                            # Crear y mostrar el calendario (filtrado o completo)
-                            fig_calendario, colores_cursos = crear_calendario_interactivo(df_horario, profesor_filtro)
+                            # Crear y mostrar el calendario (con filtros avanzados)
+                            fig_calendario, colores_cursos = crear_calendario_interactivo(
+                                df_horario, 
+                                filtro_profesor=profesor_filtro if profesor_filtro != "Todos los profesores" else None,
+                                filtro_programa=programa_filtro if programa_filtro and programa_filtro != "Todos los programas" else None
+                            )
                             st.plotly_chart(fig_calendario, use_container_width=True)
                             
-                            # Mostrar leyenda de colores (filtrada si es necesario)
-                            mostrar_leyenda_cursos(colores_cursos, df_horario, profesor_filtro)
+                            # Mostrar leyenda de colores (filtrada)
+                            mostrar_leyenda_cursos(
+                                colores_cursos, 
+                                df_horario, 
+                                filtro_profesor=profesor_filtro if profesor_filtro != "Todos los profesores" else None,
+                                filtro_programa=programa_filtro if programa_filtro and programa_filtro != "Todos los programas" else None
+                            )
                             
                             # Información adicional
                             col1_info, col2_info = st.columns(2)
@@ -1206,51 +1454,104 @@ def mostrar_generador_horarios():
                                 st.info("💡 **Tip:** Pasa el mouse sobre los bloques para ver información detallada")
                             with col2_info:
                                 st.info("🔍 **Zoom:** Usa las herramientas de Plotly para hacer zoom y navegar")
-                            
-                            # Mostrar estadísticas del profesor seleccionado
-                            if profesor_filtro and profesor_filtro != "Todos los profesores":
-                                df_prof_stats = df_horario[df_horario['Profesor'] == profesor_filtro]
-                                st.markdown("---")
-                                st.subheader(f"📊 Estadísticas de {profesor_filtro}")
-                                
-                                col1_stats, col2_stats, col3_stats, col4_stats = st.columns(4)
-                                with col1_stats:
-                                    st.metric("📚 Cursos", len(df_prof_stats))
-                                with col2_stats:
-                                    st.metric("⏰ Horas totales", f"{df_prof_stats['Duración'].sum():.1f}h")
-                                with col3_stats:
-                                    st.metric("🎓 Créditos", df_prof_stats['Créditos'].sum())
-                                with col4_stats:
-                                    st.metric("👥 Estudiantes", df_prof_stats['Estudiantes'].sum())
                         
-                        # PESTAÑA 2: HORARIO COMPLETO (original)
+                        # PESTAÑA 2: HORARIO COMPLETO (mejorada con filtros)
                         with tab2:
                             st.subheader("📊 Horario Completo")
-                            st.dataframe(df_horario, use_container_width=True)
-                            csv = df_horario.to_csv(index=False)
+                            
+                            # Filtros para la tabla
+                            col1_tabla, col2_tabla = st.columns(2)
+                            with col1_tabla:
+                                if st.session_state.modo_generacion == "colegio_completo":
+                                    programa_tabla = st.selectbox(
+                                        "Filtrar por programa:",
+                                        ["Todos"] + sorted(df_horario['Programa'].unique().tolist()),
+                                        key="filtro_programa_tabla"
+                                    )
+                                else:
+                                    programa_tabla = "Todos"
+                            
+                            with col2_tabla:
+                                profesor_tabla = st.selectbox(
+                                    "Filtrar por profesor:",
+                                    ["Todos"] + sorted(df_horario['Profesor Original'].unique().tolist()),
+                                    key="filtro_profesor_tabla"
+                                )
+                            
+                            # Aplicar filtros a la tabla
+                            df_tabla = df_horario.copy()
+                            if programa_tabla != "Todos":
+                                df_tabla = df_tabla[df_tabla['Programa'] == programa_tabla]
+                            if profesor_tabla != "Todos":
+                                df_tabla = df_tabla[df_tabla['Profesor Original'] == profesor_tabla]
+                            
+                            st.dataframe(df_tabla, use_container_width=True)
+                            
+                            csv = df_tabla.to_csv(index=False)
                             st.download_button(
-                                label="💾 Descargar horario (CSV)",
+                                label="💾 Descargar horario filtrado (CSV)",
                                 data=csv,
-                                file_name="horario_generado.csv",
+                                file_name=f"horario_{programa_tabla}_{profesor_tabla}.csv".replace(" ", "_"),
                                 mime="text/csv"
                             )
                         
-                        # PESTAÑA 3: POR PROFESOR (mejorada con calendario individual)
-                        with tab3:
+                        # PESTAÑA 3: POR PROGRAMA (NUEVA - solo en modo unificado)
+                        if st.session_state.modo_generacion == "colegio_completo":
+                            with tab3:
+                                st.subheader("📚 Horario por Programa")
+                                
+                                # Selector de programa
+                                programa_individual = st.selectbox(
+                                    "Seleccionar programa:",
+                                    sorted(df_horario['Programa'].unique().tolist()),
+                                    key="selector_programa_individual"
+                                )
+                                
+                                if programa_individual:
+                                    df_prog = df_horario[df_horario['Programa'] == programa_individual]
+                                    if not df_prog.empty:
+                                        # Mostrar calendario individual del programa
+                                        fig_prog, colores_prog = crear_calendario_interactivo(
+                                            df_horario, 
+                                            filtro_programa=programa_individual
+                                        )
+                                        st.plotly_chart(fig_prog, use_container_width=True)
+                                        
+                                        # Mostrar tabla de datos
+                                        st.dataframe(df_prog, use_container_width=True)
+                                        
+                                        # Estadísticas del programa
+                                        col1_prog, col2_prog, col3_prog, col4_prog = st.columns(4)
+                                        with col1_prog:
+                                            st.metric("📚 Total Cursos", len(df_prog))
+                                        with col2_prog:
+                                            st.metric("👨‍🏫 Profesores", df_prog['Profesor Original'].nunique())
+                                        with col3_prog:
+                                            st.metric("⏰ Horas Semanales", f"{df_prog['Duración'].sum():.1f}")
+                                        with col4_prog:
+                                            st.metric("🎓 Créditos Totales", df_prog['Créditos'].sum())
+                                    else:
+                                        st.warning(f"No se encontraron clases para el programa {programa_individual}")
+                        
+                        # PESTAÑA 4: POR PROFESOR (mejorada)
+                        with (tab4 if st.session_state.modo_generacion == "colegio_completo" else tab3):
                             st.subheader("👨‍🏫 Horario por Profesor")
                             
                             # Selector de profesor para vista individual
                             profesor_individual = st.selectbox(
                                 "Seleccionar profesor:",
-                                sorted(config.profesores_config.keys()),
+                                sorted(df_horario['Profesor Original'].unique().tolist()),
                                 key="selector_profesor_individual"
                             )
                             
                             if profesor_individual:
-                                df_prof = df_horario[df_horario['Profesor'] == profesor_individual]
+                                df_prof = df_horario[df_horario['Profesor Original'] == profesor_individual]
                                 if not df_prof.empty:
                                     # Mostrar calendario individual del profesor
-                                    fig_prof, colores_prof = crear_calendario_interactivo(df_horario, profesor_individual)
+                                    fig_prof, colores_prof = crear_calendario_interactivo(
+                                        df_horario, 
+                                        filtro_profesor=df_prof['Profesor'].iloc[0]
+                                    )
                                     st.plotly_chart(fig_prof, use_container_width=True)
                                     
                                     # Mostrar tabla de datos
@@ -1264,30 +1565,50 @@ def mostrar_generador_horarios():
                                         st.metric("⏰ Horas Semanales", f"{df_prof['Duración'].sum():.1f}")
                                     with col3_prof:
                                         st.metric("🎓 Créditos Totales", df_prof['Créditos'].sum())
+                                    
+                                    # NUEVO: Mostrar programas del profesor (en modo unificado)
+                                    if st.session_state.modo_generacion == "colegio_completo":
+                                        programas_profesor = df_prof['Programa'].unique()
+                                        if len(programas_profesor) > 1:
+                                            st.info(f"📚 Este profesor enseña en {len(programas_profesor)} programas: {', '.join(programas_profesor)}")
                                 else:
                                     st.warning(f"No se encontraron clases para {profesor_individual}")
                         
-                        # PESTAÑA 4: POR SALÓN (original)
-                        with tab4:
+                        # PESTAÑA 5: POR SALÓN
+                        with (tab5 if st.session_state.modo_generacion == "colegio_completo" else tab4):
                             st.subheader("🏫 Horario por Salón")
                             for salon in config.salones:
                                 with st.expander(f"Horario del {salon}"):
                                     df_salon = df_horario[df_horario['Salon'] == salon]
                                     if not df_salon.empty:
                                         st.dataframe(df_salon, use_container_width=True)
+                                        
+                                        # NUEVO: Mostrar utilización del salón
+                                        horas_uso = df_salon['Duración'].sum()
+                                        st.metric("⏰ Horas de uso semanal", f"{horas_uso:.1f}h")
+                                        
+                                        if st.session_state.modo_generacion == "colegio_completo":
+                                            programas_salon = df_salon['Programa'].unique()
+                                            st.info(f"📚 Programas que usan este salón: {', '.join(programas_salon)}")
                                     else:
                                         st.info(f"No hay clases asignadas al {salon}")
                         
-                        # PESTAÑA 5: ESTADÍSTICAS (mejorada)
-                        with tab5:
+                        # PESTAÑA 6: ESTADÍSTICAS (mejorada)
+                        with (tab6 if st.session_state.modo_generacion == "colegio_completo" else tab5):
                             st.subheader("📈 Estadísticas del Horario")
                             
                             # Métricas principales
-                            col1_met, col2_met, col3_met, col4_met = st.columns(4)
+                            if st.session_state.modo_generacion == "colegio_completo":
+                                col1_met, col2_met, col3_met, col4_met, col5_met = st.columns(5)
+                                with col5_met:
+                                    st.metric("📋 Programas", df_horario['Programa'].nunique())
+                            else:
+                                col1_met, col2_met, col3_met, col4_met = st.columns(4)
+                            
                             with col1_met:
                                 st.metric("📚 Total Cursos", len(df_horario))
                             with col2_met:
-                                st.metric("👨‍🏫 Profesores", df_horario['Profesor'].nunique())
+                                st.metric("👨‍🏫 Profesores", df_horario['Profesor Original'].nunique())
                             with col3_met:
                                 st.metric("🏫 Salones Usados", df_horario['Salon'].nunique())
                             with col4_met:
@@ -1298,7 +1619,7 @@ def mostrar_generador_horarios():
                             col1_stats, col2_stats = st.columns(2)
                             with col1_stats:
                                 st.write("**📊 Distribución de créditos por profesor:**")
-                                creditos_prof = df_horario.groupby('Profesor')['Créditos'].sum()
+                                creditos_prof = df_horario.groupby('Profesor Original')['Créditos'].sum()
                                 fig_creditos = px.bar(
                                     x=creditos_prof.index, 
                                     y=creditos_prof.values,
@@ -1318,6 +1639,32 @@ def mostrar_generador_horarios():
                                     title="Uso de Salones"
                                 )
                                 st.plotly_chart(fig_salones, use_container_width=True)
+                            
+                            # NUEVO: Gráfico de distribución por programa (modo unificado)
+                            if st.session_state.modo_generacion == "colegio_completo":
+                                st.write("**📚 Distribución por programa:**")
+                                col1_prog_stats, col2_prog_stats = st.columns(2)
+                                
+                                with col1_prog_stats:
+                                    cursos_por_programa = df_horario.groupby('Programa').size()
+                                    fig_prog_cursos = px.bar(
+                                        x=cursos_por_programa.index,
+                                        y=cursos_por_programa.values,
+                                        title="Cursos por Programa",
+                                        color=cursos_por_programa.values,
+                                        color_continuous_scale="plasma"
+                                    )
+                                    fig_prog_cursos.update_layout(showlegend=False)
+                                    st.plotly_chart(fig_prog_cursos, use_container_width=True)
+                                
+                                with col2_prog_stats:
+                                    estudiantes_por_programa = df_horario.groupby('Programa')['Estudiantes'].sum()
+                                    fig_prog_est = px.pie(
+                                        values=estudiantes_por_programa.values,
+                                        names=estudiantes_por_programa.index,
+                                        title="Estudiantes por Programa"
+                                    )
+                                    st.plotly_chart(fig_prog_est, use_container_width=True)
                             
                             # Análisis de restricciones
                             clases_3h = df_horario[df_horario['3h Consecutivas'] == 'SÍ']
@@ -1340,15 +1687,37 @@ def mostrar_generador_horarios():
     else:
         st.info("📁 Por favor, carga un archivo Excel para comenzar")
         with st.expander("📋 Formato esperado del archivo Excel"):
+            if st.session_state.modo_generacion == "colegio_completo":
+                st.write("""
+                ### Formato para Generación Unificada
+                
+                **Opción 1: Múltiples hojas (Recomendado)**
+                - Una hoja por programa (ej: "Contabilidad", "Finanzas", etc.)
+                - Cada hoja con columnas: Profesor, Curso/Materia, Créditos, Estudiantes
+                
+                **Opción 2: Hoja única**
+                - Una sola hoja con todos los datos
+                - Columna adicional "Programa" para identificar cada curso
+                
+                | Profesor | Curso/Materia | Créditos | Estudiantes | Programa |
+                |----------|---------------|----------|-------------|----------|
+                | Juan Pérez | Contabilidad I | 4 | 35 | Contabilidad |
+                | María García | Finanzas Corp | 3 | 28 | Finanzas |
+                """)
+            else:
+                st.write("""
+                ### Formato para Generación Individual
+                
+                El archivo Excel debe contener al menos las siguientes columnas:
+                
+                | Profesor | Curso/Materia | Créditos | Estudiantes |
+                |----------|---------------|----------|-------------|
+                | Juan Pérez | Matemáticas I | 4 | 35 |
+                | Juan Pérez | Álgebra | 3 | 28 |
+                | María García | Física I | 4 | 30 |
+                """)
+            
             st.write("""
-            El archivo Excel debe contener al menos las siguientes columnas:
-            
-            | Profesor | Curso/Materia | Créditos | Estudiantes |
-            |----------|---------------|----------|-------------|
-            | Juan Pérez | Matemáticas I | 4 | 35 |
-            | Juan Pérez | Álgebra | 3 | 28 |
-            | María García | Física I | 4 | 30 |
-            
             **Notas:**
             - Los nombres de las columnas pueden variar (profesor/docente, curso/materia/asignatura, etc.)
             - Si faltan columnas de créditos o estudiantes, se usarán valores por defecto
@@ -1394,6 +1763,8 @@ def main():
         st.session_state.colegio_seleccionado = None
     if 'nivel_seleccionado' not in st.session_state:
         st.session_state.nivel_seleccionado = None
+    if 'modo_generacion' not in st.session_state:
+        st.session_state.modo_generacion = "individual"
     if 'pagina_actual' not in st.session_state:
         st.session_state.pagina_actual = 'seleccion'
 
