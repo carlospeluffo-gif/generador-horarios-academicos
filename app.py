@@ -90,12 +90,12 @@ def mostrar_login():
             """)
         
         # Formulario de login
-        usuario = st.text_input("👤 Usuario (Colegio)", placeholder="Ej: Administración de Empresas")
-        contraseña = st.text_input("🔑 Contraseña (Programa)", type="password", placeholder="Ej: Contabilidad")
+        usuario = st.text_input("👤 Usuario (Colegio)", placeholder="Ej: Administración de Empresas", key="login_usuario")
+        contraseña = st.text_input("🔑 Contraseña (Programa)", type="password", placeholder="Ej: Contabilidad", key="login_password")
         
         col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
         with col_btn2:
-            if st.button("🚀 Iniciar Sesión", type="primary", use_container_width=True):
+            if st.button("🚀 Iniciar Sesión", type="primary", use_container_width=True, key="btn_login"):
                 if usuario and contraseña:
                     info_usuario = verificar_credenciales(usuario, contraseña)
                     if info_usuario:
@@ -159,7 +159,7 @@ def mostrar_header_usuario():
         st.sidebar.info(f"**Usuario:** {info['usuario']}")
         st.sidebar.info(f"**Programa:** {info['programa']}")
         
-        if st.sidebar.button("🚪 Cerrar Sesión", type="secondary", use_container_width=True):
+        if st.sidebar.button("🚪 Cerrar Sesión", type="secondary", use_container_width=True, key="btn_logout"):
             # Limpiar session state
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
@@ -1055,7 +1055,7 @@ def generar_colores_cursos(df_horario):
     
     return colores_cursos
 
-def crear_calendario_interactivo(df_horario, profesor_filtro=None):
+def crear_calendario_interactivo(df_horario, profesor_filtro=None, chart_key="default"):
     """Crea un calendario visual estilo Google Calendar con Plotly - MEJORADO CON PERSISTENCIA"""
     # MEJORA: No eliminar el horario al aplicar filtros
     if profesor_filtro and profesor_filtro != "Todos los profesores":
@@ -1294,7 +1294,8 @@ def mostrar_generador_horarios_mejorado():
     uploaded_file = st.sidebar.file_uploader(
         "📁 Cargar archivo Excel con datos de profesores y cursos",
         type=['xlsx', 'xls'],
-        help="El archivo debe contener columnas como: Profesor, Curso/Materia, Créditos, Estudiantes"
+        help="El archivo debe contener columnas como: Profesor, Curso/Materia, Créditos, Estudiantes",
+        key="file_uploader_main"
     )
 
     # Inicializar configuración al cargar archivo
@@ -1317,7 +1318,7 @@ def mostrar_generador_horarios_mejorado():
             st.markdown("---")
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("🗑️ Liberar Reservas Anteriores", type="secondary", key="btn_liberar_reservas"):
+                if st.button("🗑️ Liberar Reservas Anteriores", type="secondary", key="btn_liberar_reservas_main"):
                     if config.sistema_reservas.liberar_reservas_programa(st.session_state.programa_seleccionado):
                         st.success("✅ Reservas anteriores liberadas correctamente")
                         st.rerun()
@@ -1341,14 +1342,16 @@ def mostrar_generador_horarios_mejorado():
                     max_value=100,
                     value=num_salones_default,
                     step=1,
-                    help="Cantidad total de salones en el edificio"
+                    help="Cantidad total de salones en el edificio",
+                    key="num_salones_input"
                 )
                 prefijo = colegio_info.get('prefijo_salon', 'SALON')
                 config.salones = [f"{prefijo}-{i+1:02d}" for i in range(int(num_salones))]
         else:
             num_salones = st.sidebar.number_input(
                 "Salones totales del edificio",
-                min_value=1, max_value=100, value=15, step=1
+                min_value=1, max_value=100, value=15, step=1,
+                key="num_salones_default"
             )
             config.salones = [f"Salon {i+1}" for i in range(int(num_salones))]
         
@@ -1372,7 +1375,7 @@ def mostrar_generador_horarios_mejorado():
             
             # Parámetros de Optimización
             st.sidebar.subheader("🎯 Parámetros de Optimización")
-            intentos = st.sidebar.slider("Número de iteraciones", 50, 500, 200, 50)
+            intentos = st.sidebar.slider("Número de iteraciones", 50, 500, 200, 50, key="intentos_slider")
 
             # Presets por nivel
             nivel_text = st.session_state.nivel_seleccionado or ""
@@ -1397,21 +1400,21 @@ def mostrar_generador_horarios_mejorado():
                 config.restricciones_globales["hora_inicio_min"] = st.time_input(
                     "Hora inicio mínima", 
                     datetime.strptime(hora_inicio_default, "%H:%M").time(),
-                    key="hora_inicio_min"
+                    key="hora_inicio_min_input"
                 ).strftime("%H:%M")
                 
                 config.restricciones_globales["hora_fin_max"] = st.time_input(
                     "Hora fin máxima", 
                     datetime.strptime(hora_fin_default, "%H:%M").time(),
-                    key="hora_fin_max"
+                    key="hora_fin_max_input"
                 ).strftime("%H:%M")
                 
                 config.restricciones_globales["creditos_max_profesor"] = st.number_input(
-                    "Créditos máximos por profesor", 1, 20, creditos_max_default, key="creditos_max_prof"
+                    "Créditos máximos por profesor", 1, 20, creditos_max_default, key="creditos_max_prof_input"
                 )
                 
                 config.restricciones_globales["estudiantes_max_salon"] = st.number_input(
-                    "Estudiantes máximos por salón", 20, 150, 50, key="estudiantes_max_salon"
+                    "Estudiantes máximos por salón", 20, 150, 50, key="estudiantes_max_salon_input"
                 )
             
             # Preferencias de Profesores
@@ -1419,7 +1422,7 @@ def mostrar_generador_horarios_mejorado():
             profesor_seleccionado = st.sidebar.selectbox(
                 "Seleccionar profesor para configurar",
                 ["Ninguno"] + list(config.profesores_config.keys()),
-                key="prof_pref_select"
+                key="prof_pref_select_main"
             )
             
             if profesor_seleccionado != "Ninguno":
@@ -1429,9 +1432,9 @@ def mostrar_generador_horarios_mejorado():
                     for dia in dias:
                         col1_pref, col2_pref = st.columns(2)
                         with col1_pref:
-                            inicio = st.time_input(f"{dia} inicio", key=f"pref_{profesor_seleccionado}_{dia}_inicio")
+                            inicio = st.time_input(f"{dia} inicio", key=f"pref_{profesor_seleccionado}_{dia}_inicio_main")
                         with col2_pref:
-                            fin = st.time_input(f"{dia} fin", key=f"pref_{profesor_seleccionado}_{dia}_fin")
+                            fin = st.time_input(f"{dia} fin", key=f"pref_{profesor_seleccionado}_{dia}_fin_main")
                         
                         if inicio != datetime.strptime("00:00", "%H:%M").time():
                             if profesor_seleccionado not in config.profesores_config:
@@ -1447,7 +1450,7 @@ def mostrar_generador_horarios_mejorado():
             col_gen, col_borrar = st.columns(2)
             
             with col_gen:
-                if st.button("🚀 Generar Horario Optimizado", type="primary", key="btn_generar_horario"):
+                if st.button("🚀 Generar Horario Optimizado", type="primary", key="btn_generar_horario_main"):
                     with st.spinner("Generando horario optimizado..."):
                         mejor, score = buscar_mejor_horario(intentos)
                         
@@ -1471,7 +1474,7 @@ def mostrar_generador_horarios_mejorado():
                             st.rerun()
             
             with col_borrar:
-                if st.button("🗑️ Borrar Horario Generado", type="secondary", key="btn_borrar_horario"):
+                if st.button("🗑️ Borrar Horario Generado", type="secondary", key="btn_borrar_horario_main"):
                     # MEJORA: Limpiar horario generado
                     if 'asignaciones_actuales' in st.session_state:
                         del st.session_state.asignaciones_actuales
@@ -1553,11 +1556,11 @@ def _mostrar_tabs_horario_mejoradas(df_horario):
             profesor_filtro = st.selectbox(
                 "👨‍🏫 Filtrar por profesor:",
                 profesores_disponibles,
-                key="filtro_profesor_calendario_mejorado"
+                key="filtro_profesor_calendario_tab1"
             )
         
-        fig_calendario, colores_cursos = crear_calendario_interactivo(df_horario, profesor_filtro)
-        st.plotly_chart(fig_calendario, use_container_width=True)
+        fig_calendario, colores_cursos = crear_calendario_interactivo(df_horario, profesor_filtro, "tab1_calendar")
+        st.plotly_chart(fig_calendario, use_container_width=True, key="plotly_tab1_calendar")
         mostrar_leyenda_cursos(colores_cursos, df_horario, profesor_filtro)
         
         col1_info, col2_info = st.columns(2)
@@ -1569,14 +1572,14 @@ def _mostrar_tabs_horario_mejoradas(df_horario):
     # PESTAÑA 2: HORARIO COMPLETO
     with tab2:
         st.subheader("📊 Horario Completo")
-        st.dataframe(df_horario, use_container_width=True)
+        st.dataframe(df_horario, use_container_width=True, key="dataframe_tab2")
         csv = df_horario.to_csv(index=False)
         st.download_button(
             label="💾 Descargar horario (CSV)",
             data=csv,
             file_name=f"horario_{(st.session_state.programa_seleccionado or 'programa').replace(' ', '_')}.csv",
             mime="text/csv",
-            key="download_csv_horario_mejorado"
+            key="download_csv_tab2"
         )
     
     # PESTAÑA 3: POR PROFESOR CON FILTROS PERSISTENTES
@@ -1589,16 +1592,16 @@ def _mostrar_tabs_horario_mejoradas(df_horario):
         profesor_individual = st.selectbox(
             "Seleccionar profesor:",
             sorted(df_horario['Profesor'].unique()),
-            key="selector_profesor_individual_mejorado"
+            key="selector_profesor_tab3"
         )
         
         if profesor_individual:
             df_prof = df_horario[df_horario['Profesor'] == profesor_individual]
             if not df_prof.empty:
-                fig_prof, colores_prof = crear_calendario_interactivo(df_horario, profesor_individual)
-                st.plotly_chart(fig_prof, use_container_width=True)
+                fig_prof, colores_prof = crear_calendario_interactivo(df_horario, profesor_individual, "tab3_prof")
+                st.plotly_chart(fig_prof, use_container_width=True, key="plotly_tab3_prof")
                 
-                st.dataframe(df_prof, use_container_width=True)
+                st.dataframe(df_prof, use_container_width=True, key="dataframe_tab3_prof")
                 
                 # Métricas del profesor (créditos corregidos por cursos únicos)
                 creditos_por_profesor = _creditos_unicos_por_profesor(df_prof)
@@ -1621,7 +1624,7 @@ def _mostrar_tabs_horario_mejoradas(df_horario):
         for salon in sorted(salones_usados):
             with st.expander(f"Horario del {salon}"):
                 df_salon = df_horario[df_horario['Salon'] == salon]
-                st.dataframe(df_salon, use_container_width=True)
+                st.dataframe(df_salon, use_container_width=True, key=f"dataframe_salon_{salon}")
                 horas_uso = df_salon['Duración'].sum()
                 st.metric("⏰ Horas de uso semanal", f"{horas_uso:.1f}h")
         
@@ -1651,7 +1654,7 @@ def _mostrar_tabs_horario_mejoradas(df_horario):
             color_continuous_scale="viridis"
         )
         fig_creditos.update_layout(showlegend=False)
-        st.plotly_chart(fig_creditos, use_container_width=True)
+        st.plotly_chart(fig_creditos, use_container_width=True, key="plotly_creditos_tab5")
         
         # Utilización de salones
         uso_salones = df_horario.groupby('Salon').size()
@@ -1660,7 +1663,7 @@ def _mostrar_tabs_horario_mejoradas(df_horario):
             names=uso_salones.index,
             title="Uso de Salones"
         )
-        st.plotly_chart(fig_salones, use_container_width=True)
+        st.plotly_chart(fig_salones, use_container_width=True, key="plotly_salones_tab5")
 
 def _mostrar_botones_persistencia_mejorados(df_horario):
     """MEJORA: Muestra los botones de persistencia con mejor funcionalidad."""
@@ -1670,7 +1673,7 @@ def _mostrar_botones_persistencia_mejorados(df_horario):
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        if st.button("💾 Guardar Horario", type="primary", use_container_width=True, key="btn_guardar_horario_mejorado"):
+        if st.button("💾 Guardar Horario", type="primary", use_container_width=True, key="btn_guardar_persistencia"):
             if df_horario is None or df_horario.empty:
                 st.error("No hay horario para guardar.")
             else:
@@ -1684,7 +1687,7 @@ def _mostrar_botones_persistencia_mejorados(df_horario):
                     st.error("❌ Error al guardar el horario.")
     
     with col2:
-        if st.button("🔄 Generar Nuevo Horario", use_container_width=True, key="btn_generar_nuevo_mejorado"):
+        if st.button("🔄 Generar Nuevo Horario", use_container_width=True, key="btn_generar_nuevo_persistencia"):
             if not os.path.exists("temp_excel.xlsx"):
                 st.warning("Primero carga un archivo Excel en la barra lateral para poder generar un nuevo horario.")
             else:
@@ -1697,7 +1700,7 @@ def _mostrar_botones_persistencia_mejorados(df_horario):
                 st.rerun()
     
     with col3:
-        if st.button("📤 Exportar a Google Calendar", use_container_width=True, key="btn_exportar_google"):
+        if st.button("📤 Exportar a Google Calendar", use_container_width=True, key="btn_exportar_google_persistencia"):
             st.info("🚀 **Próximamente**: Integración con Google Calendar API para exportar horarios directamente.")
             st.markdown("""
             **Mientras tanto, puedes:**
