@@ -382,7 +382,7 @@ class SistemaReservasSalones:
 # CONFIGURACIÓN RUM ACTUALIZADA CON ARTES Y CIENCIAS
 # ========================================================
 
-PROGRAMAS_RUCOLEGIO DE ADMINISTRACIÓN DE EMPRESAS": {
+"PROGRAMAS_RUCOLEGIO DE ADMINISTRACIÓN DE EMPRESAS": {
         "color": "#FF6B6B",
         "salones_compartidos": len(AE_SALONES_FIJOS),
         "prefijo_salon": "AE",
