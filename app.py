@@ -17,38 +17,33 @@ import hashlib
 # ========================================================
 
 def generar_credenciales():
-    """Genera el diccionario de credenciales basado en PROGRAMAS_RUM con nombres simplificados"""
+    """Genera el diccionario de credenciales basado en PROGRAMAS_RUM"""
     credenciales = {}
     
-    # Mapear colegios a usuarios simplificados (SIN TILDES NI CARACTERES ESPECIALES)
+    # Mapear colegios a usuarios simplificados
     mapeo_usuarios = {
-        "COLEGIO DE ADMINISTRACIÓN DE EMPRESAS": "administracion",
-        "COLEGIO DE ARTES Y CIENCIAS": "artes", 
-        "COLEGIO DE CIENCIAS AGRÍCOLAS": "agricolas",
-        "COLEGIO DE INGENIERÍA": "ingenieria",
-        "DEPARTAMENTO DE MATEMÁTICAS": "matematicas"
+        "COLEGIO DE ADMINISTRACIÓN DE EMPRESAS": "Administración de Empresas",
+        "COLEGIO DE ARTES Y CIENCIAS": "Artes y Ciencias", 
+        "COLEGIO DE CIENCIAS AGRÍCOLAS": "Ciencias Agrícolas",
+        "COLEGIO DE INGENIERÍA": "Ingeniería",
+        "DEPARTAMENTO DE MATEMÁTICAS": "Matemáticas"
     }
     
     for colegio_completo, info in PROGRAMAS_RUM.items():
-        usuario_base = mapeo_usuarios.get(colegio_completo, "usuario")
+        usuario = mapeo_usuarios.get(colegio_completo, colegio_completo)
         
-        # NUEVO: Manejo especial para Artes y Ciencias con nombres simplificados
+        # NUEVO: Manejo especial para Artes y Ciencias
         if colegio_completo == "COLEGIO DE ARTES Y CIENCIAS":
             for division, departamentos in info['divisiones'].items():
                 for dept_nombre, dept_info in departamentos.items():
-                    # Usuario simplificado = división + departamento (sin espacios ni tildes)
-                    division_simple = division.lower().replace("í", "i").replace("ó", "o")
-                    dept_simple = dept_nombre.lower().replace("í", "i").replace("ó", "o").replace("ú", "u").replace("é", "e").replace("á", "a")
-                    usuario_dept = f"{division_simple}_{dept_simple}"
+                    # Usuario = División + Departamento
+                    usuario_dept = f"{division} - {dept_nombre}"
                     
                     for nivel, programas in dept_info['niveles'].items():
                         for programa in programas:
-                            # Contraseña simplificada (sin tildes, espacios, ni caracteres especiales)
-                            programa_simple = programa.lower().replace(" ", "_").replace("-", "_").replace("í", "i").replace("ó", "o").replace("ú", "u").replace("é", "e").replace("á", "a").replace("ñ", "n")
-                            
-                            credenciales[f"{usuario_dept}|{programa_simple}"] = {
+                            credenciales[f"{usuario_dept}|{programa}"] = {
                                 'usuario': usuario_dept,
-                                'contraseña': programa_simple,
+                                'contraseña': programa,
                                 'colegio_completo': colegio_completo,
                                 'division': division,
                                 'departamento': dept_nombre,
@@ -56,14 +51,12 @@ def generar_credenciales():
                                 'programa': programa
                             }
         else:
-            # Manejo normal para otros colegios con nombres simplificados
+            # Manejo normal para otros colegios
             for nivel, programas in info['niveles'].items():
                 for programa in programas:
-                    programa_simple = programa.lower().replace(" ", "_").replace("-", "_").replace("í", "i").replace("ó", "o").replace("ú", "u").replace("é", "e").replace("á", "a").replace("ñ", "n")
-                    
-                    credenciales[f"{usuario_base}|{programa_simple}"] = {
-                        'usuario': usuario_base,
-                        'contraseña': programa_simple,
+                    credenciales[f"{usuario}|{programa}"] = {
+                        'usuario': usuario,
+                        'contraseña': programa,
                         'colegio_completo': colegio_completo,
                         'nivel': nivel,
                         'programa': programa
@@ -100,35 +93,32 @@ def mostrar_login():
         
         st.markdown("### 📋 Credenciales de Acceso")
         
-        # Información de ayuda ACTUALIZADA con credenciales simplificadas
+        # Información de ayuda ACTUALIZADA
         with st.expander("ℹ️ ¿Cómo obtener mis credenciales?", expanded=False):
             st.markdown("""
-            **CREDENCIALES SIMPLIFICADAS (sin tildes ni espacios)**
+            **Usuario:** Nombre de su colegio/departamento
+            - Administración de Empresas
+            - **Artes - [Departamento]** (ej: Artes - Humanidades)
+            - **Ciencias - [Departamento]** (ej: Ciencias - Biología)
+            - Ciencias Agrícolas
+            - Ingeniería
+            - Matemáticas
             
-            **Usuario:** Nombre simplificado de su colegio/departamento
-            - administracion (Administración de Empresas)
-            - **artes_[departamento]** (ej: artes_humanidades, artes_psicologia)
-            - **ciencias_[departamento]** (ej: ciencias_biologia, ciencias_quimica)
-            - agricolas (Ciencias Agrícolas)
-            - ingenieria (Ingeniería)
-            - matematicas (Matemáticas)
-            
-            **Contraseña:** Nombre simplificado de su programa académico (sin espacios, tildes ni guiones)
+            **Contraseña:** Nombre exacto de su programa académico
             
             **Ejemplos:**
-            - Usuario: `artes_humanidades`, Contraseña: `literatura_comparada`
-            - Usuario: `ciencias_biologia`, Contraseña: `biologia`
-            - Usuario: `administracion`, Contraseña: `contabilidad`
-            - Usuario: `artes_psicologia`, Contraseña: `psicologia`
+            - Usuario: `Artes - Humanidades`, Contraseña: `Literatura Comparada`
+            - Usuario: `Ciencias - Biología`, Contraseña: `Biología`
+            - Usuario: `Administración de Empresas`, Contraseña: `Contabilidad`
             """)
         
         # Formulario de login
-        usuario = st.text_input("👤 Usuario", placeholder="Ej: artes_humanidades", key="login_usuario_unique")
-        contraseña = st.text_input("🔑 Contraseña", type="password", placeholder="Ej: literatura_comparada", key="login_password_unique")
+        usuario = st.text_input("👤 Usuario (Colegio/Departamento)", placeholder="Ej: Artes - Humanidades", key="login_usuario")
+        contraseña = st.text_input("🔑 Contraseña (Programa)", type="password", placeholder="Ej: Literatura Comparada", key="login_password")
         
         col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
         with col_btn2:
-            if st.button("🚀 Iniciar Sesión", type="primary", use_container_width=True, key="btn_login_unique"):
+            if st.button("🚀 Iniciar Sesión", type="primary", use_container_width=True, key="btn_login"):
                 if usuario and contraseña:
                     info_usuario = verificar_credenciales(usuario, contraseña)
                     if info_usuario:
@@ -160,31 +150,23 @@ def mostrar_login():
                 if 'division' in info:
                     # Para Artes y Ciencias
                     clave_colegio = f"{info['division']} - {info['departamento']}"
-                    usuario_mostrar = info['usuario']
                 else:
                     # Para otros colegios
-                    clave_colegio = info['colegio_completo']
-                    usuario_mostrar = info['usuario']
+                    clave_colegio = info['usuario']
                 
                 if clave_colegio not in programas_por_colegio:
-                    programas_por_colegio[clave_colegio] = {'usuario': usuario_mostrar, 'programas': []}
-                
-                programa_info = {
-                    'programa_original': info['programa'],
-                    'contraseña_simple': info['contraseña']
-                }
-                if programa_info not in programas_por_colegio[clave_colegio]['programas']:
-                    programas_por_colegio[clave_colegio]['programas'].append(programa_info)
+                    programas_por_colegio[clave_colegio] = []
+                if info['programa'] not in programas_por_colegio[clave_colegio]:
+                    programas_por_colegio[clave_colegio].append(info['programa'])
             
-            for colegio, data in sorted(programas_por_colegio.items()):
+            for colegio, programas in sorted(programas_por_colegio.items()):
                 if "Artes -" in colegio or "Ciencias -" in colegio:
                     emoji = "🎨" if "Artes -" in colegio else "🔬"
                 else:
                     emoji = "🏛️"
                 st.markdown(f"**{emoji} {colegio}**")
-                st.markdown(f"*Usuario: `{data['usuario']}`*")
-                for programa_info in sorted(data['programas'], key=lambda x: x['programa_original']):
-                    st.markdown(f"  • {programa_info['programa_original']} → Contraseña: `{programa_info['contraseña_simple']}`")
+                for programa in sorted(programas):
+                    st.markdown(f"  • {programa}")
                 st.markdown("---")
         
         st.markdown("</div>", unsafe_allow_html=True)
@@ -201,8 +183,8 @@ def mostrar_header_usuario():
             usuario_display = f"{info['division']} - {info['departamento']}"
         else:
             titulo_programa = f"🎓 {info['programa']}"
-            subtitulo = f"🏛️ {info['colegio_completo']} • 📚 {info['nivel']}"
-            usuario_display = info['colegio_completo']
+            subtitulo = f"🏛️ {info['usuario']} • 📚 {info['nivel']}"
+            usuario_display = info['usuario']
         
         # Header con información del usuario
         st.markdown(f"""
@@ -220,15 +202,13 @@ def mostrar_header_usuario():
         </div>
         """, unsafe_allow_html=True)
         
-        # Botón de cerrar sesión en sidebar con key único
+        # Botón de cerrar sesión en sidebar
         st.sidebar.markdown("---")
         st.sidebar.markdown("### 👤 Sesión Actual")
         st.sidebar.info(f"**Usuario:** {usuario_display}")
         st.sidebar.info(f"**Programa:** {info['programa']}")
         
-        # Usar un key único basado en el timestamp para evitar duplicados
-        logout_key = f"btn_logout_{hash(str(info))}"
-        if st.sidebar.button("🚪 Cerrar Sesión", type="secondary", use_container_width=True, key=logout_key):
+        if st.sidebar.button("🚪 Cerrar Sesión", type="secondary", use_container_width=True, key="btn_logout"):
             # Limpiar session state
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
@@ -382,7 +362,8 @@ class SistemaReservasSalones:
 # CONFIGURACIÓN RUM ACTUALIZADA CON ARTES Y CIENCIAS
 # ========================================================
 
-"PROGRAMAS_RUCOLEGIO DE ADMINISTRACIÓN DE EMPRESAS": {
+PROGRAMAS_RUM = {
+    "COLEGIO DE ADMINISTRACIÓN DE EMPRESAS": {
         "color": "#FF6B6B",
         "salones_compartidos": len(AE_SALONES_FIJOS),
         "prefijo_salon": "AE",
@@ -685,7 +666,7 @@ class ConfiguracionSistema:
             
             hoja_cursos = None
             for nombre_hoja, df in excel_data.items():
-                st.e(f"\n🔍 Analizando hoja '{nombre_hoja}':")
+                st.write(f"\n🔍 Analizando hoja '{nombre_hoja}':")
                 st.write(f"Columnas: {list(df.columns)}")
                 
                 columnas_df = [col.lower().strip() for col in df.columns]
@@ -814,7 +795,7 @@ class ConfiguracionSistema:
         if self.colegio_actual and self.colegio_actual in PROGRAMAS_RUM:
             colegio_info = PROGRAMAS_RUM[self.colegio_actual]
             if self.colegio_actual == "COLEGIO DE ADMINISTRACIÓN DE EMPRESAS":
-                self.salones = ANES_FIJOS.copy()
+                self.salones = AE_SALONES_FIJOS.copy()
             elif self.colegio_actual == "DEPARTAMENTO DE MATEMÁTICAS":
                 self.salones = MATEMATICAS_SALONES_FIJOS.copy()
             elif self.colegio_actual == "COLEGIO DE ARTES Y CIENCIAS":
@@ -1271,7 +1252,7 @@ def exportar_horario(asignaciones):
     df = pd.DataFrame(registros)
 
     # Limpiar columnas innecesarias
-    forol in ["3h Consecutivas", "Restricción 15:30"]:
+    for col in ["3h Consecutivas", "Restricción 15:30"]:
         if col in df.columns:
             df = df.drop(columns=[col])
 
@@ -1306,7 +1287,7 @@ def cargar_horario_json(departamento):
     return None
 
 # ========================================================
-# FUNCIONES DE VISUALIZACIÓN MEJORADAS
+# FUNCIONES DE VISUALIZACIÓN ACTUALIZADAS
 # ========================================================
 
 def generar_colores_cursos(df_horario):
@@ -1325,121 +1306,6 @@ def generar_colores_cursos(df_horario):
         colores_cursos[curso] = colores_base[i % len(colores_base)]
     
     return colores_cursos
-
-def crear_horario_tabla_mejorado(df_horario, filtro_tipo="profesor", filtro_valor=None):
-    """Crea una tabla de horario estilo la imagen proporcionada"""
-    # Filtros por tipo
-    if filtro_tipo == "profesor" and filtro_valor and filtro_valor != "Todos los profesores":
-        df_filtrado = df_horario[df_horario['Profesor'] == filtro_valor]
-        titulo = f"📅 Horario de {filtro_valor}"
-    elif filtro_tipo == "programa" and filtro_valor and filtro_valor != "Todos los programas":
-        df_filtrado = df_horario[df_horario['Programa'] == filtro_valor]
-        titulo = f"📅 Horario del Programa: {filtro_valor}"
-    elif filtro_tipo == "salon" and filtro_valor and filtro_valor != "Todos los salones":
-        df_filtrado = df_horario[df_horario['Salon'] == filtro_valor]
-        titulo = f"🏫 Horario del Salón: {filtro_valor}"
-    else:
-        df_filtrado = df_horario
-        titulo = "📅 Horario Semanal Completo"
-    
-    # Crear estructura de horario por períodos
-    periodos = []
-    hora_al = 7 * 60 + 30  # 7:30 AM en minutos
-    while hora_actual < 19 * 60:  # Hasta 7:00 PM
-        hora_fin = hora_actual + 50  # 50 minutos por período
-        periodo_inicio = f"{hora_actual//60:02d}:{hora_actual%60:02d}"
-        periodo_fin = f"{hora_fin//60:02d}:{hora_fin%60:02d}"
-        periodos.append({
-            'inicio': periodo_inicio,
-            'fin': periodo_fin,
-            'inicio_min': hora_actual,
-            'fin_min': hora_fin
-        })
-        hora_actual += 50  # Avanzar 50 minutos
-    
-    # Crear tabla HTML
-    html_content = f"""
-    <div style="font-family: 'Courier New', monospace; background-color: #000; color: #00ff00; padding: 20px; border-radius: 10px; overflow-x: auto;">
-        <h2 style="text-align: center; color: #00ff00; margin-bottom: 20px;">{titulo}</h2>
-        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
-            <thead>
-                <tr style="background-color: #333; color: #00ff00;">
-                    <th style="border: 1px solid #00ff00; padding: 8px; text-align: center;">Períodos</th>
-                    <th style="border: 1px solid #00ff00; padding: 8px; text-align: center;">Lunes</th>
-                    <th style="border: 1px solid #00ff00; padding: 8px; text-align: center;">Martes</th>
-                    <th style="border: 1px solid #00ff00; padding: 8px; text-align: center;">Miércoles</th>
-                    <th style="border: 1px solid #00ff00; padding: 8px; text-align: center;">Jueves</th>
-                    <th style="border: 1px solid #00ff00; padding: 8px; text-align: center;">Viernes</th>
-                    <th style="border: 1px solid #00ff00; padding: 8px; text-align: center;">Sábado</th>
-                </tr>
-            </thead>
-            <tbody>
-    """
-    
-    # Mapeo de días
-    dias_map = {'Lu': 'Lunes', 'Ma': 'Martes', 'Mi': 'Miércoles', 'Ju': 'Jueves', 'Vi': 'Viernes', 'Sa': 'Sábado'}
-    dias_orden = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa']
-    
-    # Llenar cada período
-    for periodo in periodos:
-        html_content += f"""
-            <tr>
-                <td style="border: 1px solid #00ff00; padding: 8px; text-align: center; font-weight: bold;">
-                    {periodo['inicio']}-{periodo['fin']}
-                </td>
-        """
-        
-        # Para cada día de la semana
-        for dia_code in dias_orden:
-            clases_periodo = []
-            
-            # Buscar clases que coincidan con este período y día
-            for _, fila in df_filtrado.iterrows():
-                if fila['Dia'] == dia_code:
-                    inicio_clase = a_minutos(fila['Hora Inicio'])
-                    fin_clase = a_minutos(fila['Hora Fin'])
-                    
-                    # Verificar si la clase se superpone con este período
-                    if not (fin_clase <= periodo['inicio_min'] or inicio_clase >= periodo['fin_min']):
-                        clase_info = f"{fila['Curso']} - {fila['Seccion']}"
-                        if clase_info not in clases_periodo:
-                            clases_periodo.append(clase_info)
-            
-            # Mostrar las clases del período
-            if clases_periodo:
-                contenido_celda = "<br>".join(clases_periodo)
-                html_content += f'<td style="border: 1px solid #00ff00; padding: 8px; text-align: center; background-color: #003300;">{contenido_celda}</td>'
-            else:
-                html_content += '<td style="border: 1px solid #00ff00; padding: 8px; text-align: center;"></td>'
-        
-        html_content += "</tr>"
-    
-    # Agregar información de horarios especiales
-    html_content += """
-            <tr style="background-color: #333;">
-                <td colspan="7" style="border: 1px solid #00ff00; padding: 8px; text-align: center; color: #ffff00;">
-                    <strong>Hora Universal</strong> - Martes y Jueves 10:30-12:00
-                </td>
-            </tr>
-    """
-    
-    html_content += """
-            </tbody>
-        </table>
-    """
-    
-    # Agregar estadísticas al final
-    total_cursos = df_filtrado['Curso'].nunique()
-    total_creditos = df_filtrado.groupby('Curso')['Créditos'].first().sum()
-    
-    html_content += f"""
-        <div style="margin-top: 20px; text-align: center; color: #00ff00;">
-            <strong>Cursos: {total_cursos} - Créditos: {total_creditos}</strong>
-        </div>
-    </div>
-    """
-    
-    return html_content
 
 def crear_calendario_interactivo(df_horario, filtro_tipo="profesor", filtro_valor=None, chart_key="default"):
     """Crea un calendario visual estilo Google Calendar con Plotly"""
@@ -1508,12 +1374,12 @@ def crear_calendario_interactivo(df_horario, filtro_tipo="profesor", filtro_valo
         
         # Texto mejorado con información del departamento
         texto_clase = f"<b>{fila['Curso']}</b><br>"
-        texto_ce += f"📝 Sección: {fila.get('Seccion', '001')}<br>"
+        texto_clase += f"📝 Sección: {fila.get('Seccion', '001')}<br>"
         texto_clase += f"👨‍🏫 {fila['Profesor']}<br>"
         texto_clase += f"🏫 {fila['Salon']}<br>"
         texto_clase += f"👥 {fila['Estudiantes']} estudiantes<br>"
         texto_clase += f"⏰ {fila['Hora Inicio']} - {fila['Hora Fin']}<br>"
-        textase += f"📚 {fila['Créditos']} créditos"
+        texto_clase += f"📚 {fila['Créditos']} créditos"
         
         # Mostrar sección en el bloque principal
         texto_bloque = f"<b>{fila['Curso']}</b><br>{fila['Hora Inicio']}-{fila['Hora Fin']}<br>Sec: {fila.get('Seccion', '001')}<br>{fila['Salon']}"
@@ -1640,13 +1506,13 @@ def mostrar_estado_reservas():
     if not config or not config.usa_reservas or not config.sistema_reservas:
         return
     
-  bheader("🏫 Estado Actual de Reservas de Salones Compartidos")
+    st.subheader("🏫 Estado Actual de Reservas de Salones Compartidos")
     
     stats = config.sistema_reservas.obtener_estadisticas_uso()
     
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-       t.metric("📋 Total Reservas", stats['total_reservas'])
+        st.metric("📋 Total Reservas", stats['total_reservas'])
     with col2:
         st.metric("🏛️ Departamentos Activos", stats['departamentos_activos'])
     with col3:
@@ -1698,7 +1564,7 @@ def mostrar_generador_horarios_artes_ciencias():
     departamento = info_usuario.get('departamento', '')
     
     # Información del departamento
- st.info(f"🎯 **Generando horarios para**: {division} - {departamento}")
+    st.info(f"🎯 **Generando horarios para**: {division} - {departamento}")
     st.info("🏫 **Salones Compartidos**: Los salones son compartidos entre todos los departamentos de Artes y Ciencias. El sistema evitará conflictos automáticamente.")
     
     st.markdown("## 📁 Cargar Datos para Generación de Horarios")
@@ -1711,7 +1577,7 @@ def mostrar_generador_horarios_artes_ciencias():
         "📁 Cargar archivo Excel con datos de profesores y cursos",
         type=['xlsx', 'xls'],
         help="El archivo debe contener columnas como: Profesor, Curso/Materia, Créditos, Estudiantes, Programa, Sección",
-        key="file_uploader_artes_ciencias_unique"
+        key="file_uploader_artes_ciencias"
     )
 
     # Inicializar configuración al cargar archivo
@@ -1735,7 +1601,7 @@ def mostrar_generador_horarios_artes_ciencias():
         st.markdown("---")
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("🗑️ Liberar Reservas del Departamento", type="secondary", key="btn_liberar_reservas_dept_unique"):
+            if st.button("🗑️ Liberar Reservas del Departamento", type="secondary", key="btn_liberar_reservas_dept"):
                 if config.sistema_reservas.liberar_reservas_departamento(departamento_key):
                     st.success("✅ Reservas del departamento liberadas correctamente")
                     st.rerun()
@@ -1746,7 +1612,7 @@ def mostrar_generador_horarios_artes_ciencias():
 
         # Infraestructura
         st.sidebar.subheader("🏫 Infraestructura")
-        st.si.info("Salones compartidos (AC y LAB):")
+        st.sidebar.info("Salones compartidos (AC y LAB):")
         st.sidebar.write(", ".join(ARTES_CIENCIAS_SALONES_COMPARTIDOS[:10]) + "...")
         config.salones = ARTES_CIENCIAS_SALONES_COMPARTIDOS.copy()
         
@@ -1772,28 +1638,28 @@ def mostrar_generador_horarios_artes_ciencias():
             
             # Parámetros de Optimización
             st.sidebar.subheader("🎯 Parámetros de Optimización")
-            intentos = st.sidebar.slider("Número de iteraciones", 50, 500, 250, 50, key="intentos_slider_ac_unique")
+            intentos = st.sidebar.slider("Número de iteraciones", 50, 500, 250, 50, key="intentos_slider_ac")
 
             # Restricciones específicas para Artes y Ciencias
             with st.sidebar.expander("🔒 Restricciones Globales"):
                 config.restricciones_globales["hora_inicio_min"] = st.time_input(
                     "Hora inicio mínima", 
                     datetime.strptime("07:30", "%H:%M").time(),
-                    key="hora_inicio_min_ac_unique"
+                    key="hora_inicio_min_ac"
                 ).strftime("%H:%M")
                 
                 config.restricciones_globales["hora_fin_max"] = st.time_input(
                     "Hora fin máxima", 
                     datetime.strptime("19:30", "%H:%M").time(),
-                    key="hora_fin_max_ac_unique"
+                    key="hora_fin_max_ac"
                 ).strftime("%H:%M")
                 
                 config.restricciones_globales["creditos_max_profesor"] = st.number_input(
-                    "Créditos máximos por  1, 20, 15, key="creditos_max_prof_ac_unique"
+                    "Créditos máximos por profesor", 1, 20, 15, key="creditos_max_prof_ac"
                 )
                 
                 config.restricciones_globales["estudiantes_max_salon"] = st.number_input(
-                    "Estudiantes máximos por salón", 20, 150, 50, key="estudiantes_max_salon_ac_unique"
+                    "Estudiantes máximos por salón", 20, 150, 50, key="estudiantes_max_salon_ac"
                 )
             
             # Preferencias de Profesores
@@ -1801,7 +1667,7 @@ def mostrar_generador_horarios_artes_ciencias():
             profesor_seleccionado = st.sidebar.selectbox(
                 "Seleccionar profesor para configurar",
                 ["Ninguno"] + list(config.profesores_config.keys()),
-                key="prof_pref_select_ac_unique"
+                key="prof_pref_select_ac"
             )
             
             if profesor_seleccionado != "Ninguno":
@@ -1811,9 +1677,9 @@ def mostrar_generador_horarios_artes_ciencias():
                     for dia in dias:
                         col1_pref, col2_pref = st.columns(2)
                         with col1_pref:
-                            inicio = st.time_input(f"{dia} inicio", key=f"pref_{profesor_seleccionado}_{dia}_inicio_ac_unique")
+                            inicio = st.time_input(f"{dia} inicio", key=f"pref_{profesor_seleccionado}_{dia}_inicio_ac")
                         with col2_pref:
-                            fin = st.time_input(f"{dia} fin", key=f"pref_{profesor_seleccionado}_{dia}_fin_ac_unique")
+                            fin = st.time_input(f"{dia} fin", key=f"pref_{profesor_seleccionado}_{dia}_fin_ac")
                         
                         if inicio != datetime.strptime("00:00", "%H:%M").time():
                             if profesor_seleccionado not in config.profesores_config:
@@ -1829,7 +1695,7 @@ def mostrar_generador_horarios_artes_ciencias():
             col_gen, col_borrar = st.columns(2)
             
             with col_gen:
-                if st.button("🚀 Generar Horario Optimizado", type="primary", key="btn_generar_horario_ac_unique"):
+                if st.button("🚀 Generar Horario Optimizado", type="primary", key="btn_generar_horario_ac"):
                     with st.spinner("Generando horario optimizado..."):
                         mejor, score = buscar_mejor_horario(intentos)
                         
@@ -1851,7 +1717,7 @@ def mostrar_generador_horarios_artes_ciencias():
                             st.rerun()
             
             with col_borrar:
-                if st.button("🗑️ Borrar Horario Generado", type="secondary", key="btn_borrar_horario_ac_unique"):
+                if st.button("🗑️ Borrar Horario Generado", type="secondary", key="btn_borrar_horario_ac"):
                     # Limpiar horario generado
                     if 'asignaciones_actuales' in st.session_state:
                         del st.session_state.asignaciones_actuales
@@ -1878,7 +1744,7 @@ def mostrar_generador_horarios_artes_ciencias():
             _mostrar_tabs_horario_departamental(df_guardado, division, departamento)
             _mostrar_botones_persistencia_departamental(df_guardado, departamento_key)
         else:
-         st.info("📁 Por favor, carga un archivo Excel para comenzar o guarda un horario para recuperarlo luego.")
+            st.info("📁 Por favor, carga un archivo Excel para comenzar o guarda un horario para recuperarlo luego.")
             with st.expander("📋 Formato esperado del archivo Excel"):
                 st.write("""
                 El archivo Excel debe contener al menos las siguientes columnas:
@@ -1906,62 +1772,16 @@ def _creditos_unicos_por_profesor(df):
 def _mostrar_tabs_horario_departamental(df_horario, division, departamento):
     """Renderiza las pestañas de visualización del horario para departamentos"""
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-        "📅 Vista Tabla", 
-        "📊 Calendario Visual", 
-  "👨‍🏫 Por Profesor", 
+        "📅 Calendario Visual", 
+        "📊 Horario Completo", 
+        "👨‍🏫 Por Profesor", 
         "📚 Por Programa",
         "🏫 Por Salón", 
         "📈 Estadísticas"
-     
-    # PESTAÑA 1: VISTA TABLA MEJORADA (COMO LA IMAGEN)
-    with tab1:
-        st.subheader(f"📅 Horario Tabular - {division} - {departamento}")
-        
-        st.info("✨ **Vista de Tabla**: Horario organizado por períodos como en la imagen de referencia")
-        
-        col1_filtro, col2_filtro = st.columns([2, 1])
-        with col1_filtro:
-            st.markdown(f"""
-            <div style="background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); 
-                        padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
-                <p style="color: white; margin: 0; text-align: center; font-size: 1.1rem;">
-                    🏛️ <strong>{division} - {departamento}</strong> - Horario Tabular
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-        with col2_filtro:
-            tipo_filtro_tabla = st.selectbox(
-                "🔍 Filtrar por:",
-                ["Completo", "Profesor", "Programa", "Salón"],
-                key="tipo_filtro_tabla_dept"
-            )
-            
-            if tipo_filtro_tabla == "Profesor":
-                profesores_disponibles = ["Todos los profesores"] + sorted(df_horario['Profesor'].unique().tolist())
-                filtro_valor_tabla = st.selectbox("👨‍🏫 Seleccionar profesor:", profesores_disponibles, key="filtro_profesor_tabla_dept")
-                html_tabla = crear_horario_tabla_mejorado(df_horario, "profesor", filtro_valor_tabla)
-            elif tipo_filtro_tabla == "Programa":
-                programas_disponibles = ["Todos los programas"] + sorted(df_horario['Programa'].unique().tolist())
-                filtro_valor_tabla = st.selectbox("📚 Seleccionar programa:", programas_disponibles, key="filtro_programa_tabla_dept")
-                html_tabla = crear_horario_tabla_mejorado(df_horario, "programa", filtro_valor_tabla)
-            elif tipo_filtro_tabla == "Salón":
-                salones_disponibles = ["Todos los salones"] + sorted(df_horario['Salon'].unique().tolist())
-                filtro_valor_tabla = st.selectbox("🏫 Seleccionar salón:", salones_disponibles, key="filtro_salon_tabla_dept")
-                html_tabla = crear_horario_tabla_mejorado(df_horario, "salon", filtro_valor_tabla)
-            else:
-                html_tabla = crear_horario_tabla_mejorado(df_horario)
-        
-        # Mostrar la tabla HTML
-        st.markdown(html_tabla, unsafe_allow_html=True)
-        
-        col1_info, col2_info = st.columns(2)
-        with col1_info:
-            st.info("💡 Tip: Esta vista replica el formato tradicional de horarios académicos.")
-        with col2_info:
-            st.info("🖨️ Tip: Puedes capturar pantalla de esta tabla para imprimir o compartir.")
+    ])
     
-    # PESTAÑA 2: CALENDARIO VISUAL CON FILTROS
-    with tab2:
+    # PESTAÑA 1: CALENDARIO VISUAL CON FILTROS
+    with tab1:
         st.subheader(f"📅 Vista de Calendario - {division} - {departamento}")
         
         st.info("✨ **Calendario Departamental**: Vista optimizada para tu departamento con salones compartidos.")
@@ -1980,30 +1800,46 @@ def _mostrar_tabs_horario_departamental(df_horario, division, departamento):
             tipo_filtro = st.selectbox(
                 "🔍 Filtrar por:",
                 ["Salón", "Profesor", "Programa"],
-                key="tipo_filtro_calendario_dept_unique"
+                key="tipo_filtro_calendario_dept"
             )
             
             if tipo_filtro == "Salón":
                 salones_disponibles = ["Todos los salones"] + sorted(df_horario['Salon'].unique().tolist())
-                filtro_valor = st.selectbox("🏫 Seleccionar salón:", salones_disponibles, key="filtro_salon_dept_unique")
-                fig_calendario, colores_cursos = crear_calendario_interactivo(df_horario, "salon", filtro_valor, "dept_calendar_unique")
+                filtro_valor = st.selectbox("🏫 Seleccionar salón:", salones_disponibles, key="filtro_salon_dept")
+                fig_calendario, colores_cursos = crear_calendario_interactivo(df_horario, "salon", filtro_valor, "dept_calendar")
             elif tipo_filtro == "Profesor":
                 profesores_disponibles = ["Todos los profesores"] + sorted(df_horario['Profesor'].unique().tolist())
-                filtro_valor = st.stbox("👨‍🏫 Seleccionar profesor:", profesores_disponibles, key="filtro_profesor_dept_unique")
-                fig_calendario, colores_cursos = crear_calendario_interactivo(df_horario, "profesor", filtro_valor, "dept_calendar_unique")
+                filtro_valor = st.selectbox("👨‍🏫 Seleccionar profesor:", profesores_disponibles, key="filtro_profesor_dept")
+                fig_calendario, colores_cursos = crear_calendario_interactivo(df_horario, "profesor", filtro_valor, "dept_calendar")
             elif tipo_filtro == "Programa":
                 programas_disponibles = ["Todos los programas"] + sorted(df_horario['Programa'].unique().tolist())
-                filtro_valor = st.selectbox("📚 Seleccionar programa:", programas_disponibles, key="filtro_programa_dept_unique")
-                fig_calendario, colores_cursos = crear_calendario_interactivo(df_horario, "programa", filtro_valor, "dept_calendar_unique")
+                filtro_valor = st.selectbox("📚 Seleccionar programa:", programas_disponibles, key="filtro_programa_dept")
+                fig_calendario, colores_cursos = crear_calendario_interactivo(df_horario, "programa", filtro_valor, "dept_calendar")
         
-        st.plotly_chart(fig_calendario, use_container_width=True, key="plotly_dept_calendar_unique")
+        st.plotly_chart(fig_calendario, use_container_width=True, key="plotly_dept_calendar")
         mostrar_leyenda_cursos(colores_cursos, df_horario, tipo_filtro.lower(), filtro_valor)
         
         col1_info, col2_info = st.columns(2)
         with col1_info:
             st.info("💡 Tip: Los salones mostrados son compartidos con otros departamentos.")
         with col2_info:
-     fo("🔍 Zoom: Usa las herramientas de Plotly para hacer zoom y navegar.")
+            st.info("🔍 Zoom: Usa las herramientas de Plotly para hacer zoom y navegar.")
+    
+    # PESTAÑA 2: HORARIO COMPLETO
+    with tab2:
+        st.subheader("📊 Horario Completo del Departamento")
+        
+        df_ordenado = df_horario.sort_values(['Dia', 'Hora Inicio', 'Salon'])
+        st.dataframe(df_ordenado, use_container_width=True, key="dataframe_dept")
+        
+        csv = df_ordenado.to_csv(index=False)
+        st.download_button(
+            label="💾 Descargar horario (CSV)",
+            data=csv,
+            file_name=f"horario_{division}_{departamento}.csv",
+            mime="text/csv",
+            key="download_csv_dept"
+        )
     
     # PESTAÑA 3: POR PROFESOR
     with tab3:
@@ -2012,17 +1848,17 @@ def _mostrar_tabs_horario_departamental(df_horario, division, departamento):
         profesor_individual = st.selectbox(
             "Seleccionar profesor:",
             sorted(df_horario['Profesor'].unique()),
-            key="selector_profesor_dept_unique"
+            key="selector_profesor_dept"
         )
         
         if profesor_individual:
             df_prof = df_horario[df_horario['Profesor'] == profesor_individual]
             if not df_prof.empty:
-                fig_prof, colores_prof = crear_calendario_interactivo(df_horario, "profesor", profesor_individual, "dept_prof_unique")
-                st.plotly_chart(fig_prof, use_container_width=True, key="plotly_dept_prof_unique")
+                fig_prof, colores_prof = crear_calendario_interactivo(df_horario, "profesor", profesor_individual, "dept_prof")
+                st.plotly_chart(fig_prof, use_container_width=True, key="plotly_dept_prof")
                 
                 df_prof_ordenado = df_prof.sort_values(['Dia', 'Hora Inicio'])
-                st.dataframe(df_prof_ordenado, use_container_width=True, key="dataframe_dept_prof_unique")
+                st.dataframe(df_prof_ordenado, use_container_width=True, key="dataframe_dept_prof")
                 
                 # Métricas del profesor
                 creditos_por_profesor = _creditos_unicos_por_profesor(df_prof)
@@ -2042,22 +1878,22 @@ def _mostrar_tabs_horario_departamental(df_horario, division, departamento):
     with tab4:
         st.subheader("📚 Horario por Programa/Carrera")
         
-      nfo(f"🎯 **Vista por Programa**: Programas del departamento {departamento}")
+        st.info(f"🎯 **Vista por Programa**: Programas del departamento {departamento}")
         
         programa_individual = st.selectbox(
             "Seleccionar programa:",
             sorted(df_horario['Programa'].unique()),
-            key="selector_programa_dept_unique"
+            key="selector_programa_dept"
         )
         
         if programa_individual:
             df_programa = df_horario[df_horario['Programa'] == programa_individual]
             if not df_programa.empty:
-                fig_programa, colores_programa = crear_calendario_interactivo(df_horario, "programa", programa_individual, "dept_programa_unique")
-                st.plotly_chart(fig_programa, use_container_width=True, key="plotly_dept_programa_unique")
+                fig_programa, colores_programa = crear_calendario_interactivo(df_horario, "programa", programa_individual, "dept_programa")
+                st.plotly_chart(fig_programa, use_container_width=True, key="plotly_dept_programa")
                 
                 df_programa_ordenado = df_programa.sort_values(['Dia', 'Hora Inicio'])
-                st.dataframe(df_programa_ordenado, use_container_width=True, key="dataframe_dept_programa_unique")
+                st.dataframe(df_programa_ordenado, use_container_width=True, key="dataframe_dept_programa")
                 
                 # Métricas del programa
                 col1_prog, col2_prog, col3_prog, col4_prog = st.columns(4)
@@ -2081,17 +1917,17 @@ def _mostrar_tabs_horario_departamental(df_horario, division, departamento):
         salon_individual = st.selectbox(
             "Seleccionar salón:",
             sorted(df_horario['Salon'].unique()),
-            key="selector_salon_dept_unique"
+            key="selector_salon_dept"
         )
         
         if salon_individual:
             df_salon = df_horario[df_horario['Salon'] == salon_individual]
             if not df_salon.empty:
-                fig_salon, colores_salon = crear_calendario_interactivo(df_horario, "salon", salon_individual, "dept_salon_unique")
-                st.plotly_chart(fig_salon, use_container_width=True, key="plotly_dept_salon_unique")
+                fig_salon, colores_salon = crear_calendario_interactivo(df_horario, "salon", salon_individual, "dept_salon")
+                st.plotly_chart(fig_salon, use_container_width=True, key="plotly_dept_salon")
                 
                 df_salon_ordenado = df_salon.sort_values(['Dia', 'Hora Inicio'])
-                st.dataframe(df_salon_ordenado, use_container_wrue, key=f"dataframe_salon_dept_{salon_individual}_unique")
+                st.dataframe(df_salon_ordenado, use_container_width=True, key=f"dataframe_salon_dept_{salon_individual}")
                 
                 # Métricas del salón
                 col1_salon, col2_salon, col3_salon = st.columns(3)
@@ -2127,7 +1963,7 @@ def _mostrar_tabs_horario_departamental(df_horario, division, departamento):
             'Curso': 'nunique',
             'Profesor': 'nunique',
             'Salon': 'nunique',
-         s': 'sum',
+            'Estudiantes': 'sum',
             'Duración': 'sum'
         }).round(1)
         stats_programa.columns = ['Cursos', 'Profesores', 'Salones', 'Estudiantes', 'Horas Totales']
@@ -2143,7 +1979,7 @@ def _mostrar_tabs_horario_departamental(df_horario, division, departamento):
             color_continuous_scale="viridis"
         )
         fig_creditos.update_layout(showlegend=False)
-        st.plotly_chart(fig_creditos, use_container_width=True, key="plotly_creditos_dept_unique")
+        st.plotly_chart(fig_creditos, use_container_width=True, key="plotly_creditos_dept")
         
         # Utilización de salones
         uso_salones = df_horario.groupby('Salon').agg({
@@ -2160,7 +1996,7 @@ def _mostrar_tabs_horario_departamental(df_horario, division, departamento):
             color='Horas Totales',
             color_continuous_scale="blues"
         )
-        st.plotly_chart(fig_salones, use_container_width=True, key="plotly_salones_dept_unique")
+        st.plotly_chart(fig_salones, use_container_width=True, key="plotly_salones_dept")
 
 def _mostrar_botones_persistencia_departamental(df_horario, departamento_key):
     """Muestra los botones de persistencia para departamentos."""
@@ -2170,7 +2006,7 @@ def _mostrar_botones_persistencia_departamental(df_horario, departamento_key):
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        if st.button("💾 Guardar Horario", type="primary", use_container_width=True, key="btn_guardar_dept_unique"):
+        if st.button("💾 Guardar Horario", type="primary", use_container_width=True, key="btn_guardar_dept"):
             if df_horario is None or df_horario.empty:
                 st.error("No hay horario para guardar.")
             else:
@@ -2184,7 +2020,7 @@ def _mostrar_botones_persistencia_departamental(df_horario, departamento_key):
                     st.error("❌ Error al guardar el horario.")
     
     with col2:
-        if st.button("🔄 Generar Nuevo Horario", use_container_width=True, key="btn_generar_nuevo_dept_unique"):
+        if st.button("🔄 Generar Nuevo Horario", use_container_width=True, key="btn_generar_nuevo_dept"):
             if not os.path.exists("temp_excel.xlsx"):
                 st.warning("Primero carga un archivo Excel en la barra lateral para poder generar un nuevo horario.")
             else:
@@ -2197,7 +2033,7 @@ def _mostrar_botones_persistencia_departamental(df_horario, departamento_key):
                 st.rerun()
     
     with col3:
-        if st.button("📤 Exportar Departamental", use_container_width=True, key="btn_exportar_dept_unique"):
+        if st.button("📤 Exportar Departamental", use_container_width=True, key="btn_exportar_dept"):
             st.info("📋 **Exportación Departamental**: Descarga el horario desde la pestaña 'Horario Completo' o usa las capturas del calendario visual.")
 
 # NUEVA FUNCIÓN: Guardar reservas del horario por departamento
@@ -2278,21 +2114,199 @@ def main():
             </div>
             """, unsafe_allow_html=True)
             
-            st.markdown("## 🚀 Características del Sistema - Mejorado")
+            st.markdown("## 🚀 Características del Sistema - Artes y Ciencias Actualizado")
             
             col1, col2 = st.columns(2)
             
             with col1:
                 st.markdown("""
                 ### ✨ Funcionalidades Principales
-                - 🔐 **Acceso Simplificado**: Credenciales sin tildes ni espacios
-                - 📅 **Vista Tabla Mejorada**: Horario estilo tradicional organizado
-                - 🏫 **Salones Compartidos**: Gestión automática de conflictos
-                - 🎨 **Visualización Mejorada**: Interfaz más clara y presentable
+                - 🔐 **Acceso por Departamento**: Sistema específico para cada departamento
+                - 🏫 **Salones Compartidos**: Gestión automática de conflictos entre departamentos
+                - 📅 **Calendario Departamental**: Vista optimizada por departamento
+                - 🔄 **Filtros por Programa**: Visualización por carrera dentro del departamento
                 - 💾 **Persistencia Departamental**: Guarda horarios por departamento
                 - 📊 **Estadísticas Avanzadas**: Análisis específico del departamento
                 """)
+            
+            with col2:
+                st.markdown("""
+                ### 🏛️ Estructura de Artes y Ciencias
                 
+                **🎨 División de Artes:**
+                - Humanidades, Economía, Inglés, Sociales
+                - Estudios Hispánicos, Educación Física, Psicología
+                
+                **🔬 División de Ciencias:**
+                - Biología, Química, Geología, Matemática
+                - Enfermería, Física, Ciencias Marinas
+                
+                ### 🎯 Nuevas Mejoras
+                - **Gestión Departamental**: Cada departamento genera sus horarios independientemente
+                - **Salones Compartidos**: Sistema de reservas para evitar conflictos
+                - **Filtros por Carrera**: Vista específica por programa dentro del departamento
+                """)
+            
+            st.markdown("---")
+            st.info("💡 **Para comenzar**: Inicia sesión con las credenciales de tu departamento en la pestaña 'Iniciar Sesión'.")
+    
+    else:
+        # Usuario autenticado: verificar si es Artes y Ciencias
+        if st.session_state.colegio_seleccionado == "COLEGIO DE ARTES Y CIENCIAS":
+            # Mostrar interfaz específica para Artes y Ciencias
+            tab_horarios, tab_config, tab_ayuda = st.tabs(["📅 Generador de Horarios", "⚙️ Configuración", "❓ Ayuda"])
+            
+            with tab_horarios:
+                mostrar_generador_horarios_artes_ciencias()
+            
+            with tab_config:
+                st.markdown("## ⚙️ Configuración del Departamento")
+                
+                mostrar_header_usuario()
+                
+                info_usuario = st.session_state.info_usuario
+                division = info_usuario.get('division', '')
+                departamento = info_usuario.get('departamento', '')
+                
+                st.markdown("### 🔧 Configuraciones Disponibles")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown(f"""
+                    #### 🏛️ Información del Departamento
+                    - **División:** {division}
+                    - **Departamento:** {departamento}
+                    - **Salones:** Compartidos entre departamentos
+                    - **Sistema de Reservas:** Activo
+                    """)
+                    
+                    st.success("✅ Sistema de reservas activo para salones compartidos")
+                    st.info("🏫 Salones compartidos con otros departamentos de Artes y Ciencias")
+                
+                with col2:
+                    st.markdown("""
+                    #### ⏰ Restricciones Temporales
+                    - Horarios prohibidos: Martes y Jueves 11:00-12:30 (Hora de facultad)
+                    - Límites de horas por día configurables
+                    - Restricciones de bloques de 3 horas después de 15:30
+                    """)
+                    
+                    st.info(f"📚 Configurado para: {st.session_state.nivel_seleccionado}")
+                    st.warning("⚠️ Horarios prohibidos: Martes y Jueves 11:00-12:30")
+                
+                st.markdown("---")
+                st.markdown("### 📊 Estado del Sistema")
+                
+                if os.path.exists("temp_excel.xlsx"):
+                    st.success("✅ Archivo de datos cargado")
+                else:
+                    st.warning("⚠️ No hay archivo de datos cargado")
+                
+                if 'horario_generado' in st.session_state:
+                    st.success("✅ Horario generado disponible")
+                else:
+                    st.info("ℹ️ No hay horario generado")
+            
+            with tab_ayuda:
+                st.markdown("## ❓ Ayuda - Artes y Ciencias")
+                
+                mostrar_header_usuario()
+                
+                st.markdown("### 🚀 Guía de Uso para Departamentos")
+                
+                with st.expander("1️⃣ Acceso por Departamento", expanded=True):
+                    st.markdown("""
+                    **Credenciales de Acceso:**
+                    - Usuario: `[División] - [Departamento]` (ej: `Artes - Humanidades`)
+                    - Contraseña: Nombre exacto del programa (ej: `Literatura Comparada`)
+                    
+                    **Ejemplos:**
+                    - Artes - Humanidades | Literatura Comparada
+                    - Ciencias - Biología | Biología
+                    - Artes - Psicología | Psicología
+                    """)
+                
+                with st.expander("2️⃣ Salones Compartidos"):
+                    st.markdown("""
+                    **Sistema de Reservas:**
+                    - Los salones AC y LAB son compartidos entre todos los departamentos
+                    - El sistema evita automáticamente conflictos de horarios
+                    - Puedes ver el estado de reservas de otros departamentos
+                    - Libera las reservas de tu departamento si necesitas regenerar horarios
+                    """)
+                
+                with st.expander("3️⃣ Filtros por Programa"):
+                    st.markdown("""
+                    **Visualización por Carrera:**
+                    - Cada departamento puede tener múltiples programas/carreras
+                    - Usa los filtros para ver horarios específicos por programa
+                    - El calendario muestra todos los programas del departamento
+                    - Las estadísticas se desglosan por programa
+                    """)
+                
+                with st.expander("4️⃣ Gestión Departamental"):
+                    st.markdown("""
+                    **Administración de Horarios:**
+                    - Cada departamento gestiona sus horarios independientemente
+                    - Los horarios se guardan por departamento
+                    - Las reservas de salones se manejan automáticamente
+                    - Coordina con otros departamentos para optimizar el uso de salones
+                    """)
+                
+                st.markdown("---")
+                st.markdown("### 🔧 Solución de Problemas Específicos")
+                
+                with st.expander("❌ No hay salones disponibles"):
+                    st.markdown("""
+                    **Posibles causas:**
+                    - Otros departamentos están usando los salones en esos horarios
+                    - Verifica el estado de reservas en la sección principal
+                    - Coordina con otros departamentos para liberar salones
+                    - Ajusta los horarios de tus cursos para evitar horas pico
+                    """)
+                
+                with st.expander("🏫 Conflictos de salones"):
+                    st.markdown("""
+                    **Resolución de conflictos:**
+                    - El sistema previene automáticamente conflictos
+                    - Si hay problemas, libera las reservas de tu departamento
+                    - Contacta otros departamentos si es necesario
+                    - Usa horarios menos populares (temprano en la mañana o tarde)
+                    """)
+        
+        else:
+            # Para otros colegios, mostrar mensaje de redirección
+            st.markdown("## 🔄 Sistema en Desarrollo")
+            mostrar_header_usuario()
+            
+            st.info("""
+            **Este demo está enfocado en el Colegio de Artes y Ciencias.**
+            
+            Para otros colegios, el sistema original sigue disponible. 
+            Esta versión demuestra las nuevas funcionalidades para:
+            
+            - 🎨 División de Artes (7 departamentos)
+            - 🔬 División de Ciencias (7 departamentos)
+            - 🏫 Sistema de salones compartidos
+            - 📊 Gestión departamental independiente
+            """)
+            
+            st.markdown("### 🎯 Funcionalidades Implementadas")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("""
+                **✅ Completado:**
+                - Sistema de autenticación por departamento
+                - Gestión de salones compartidos
+                - Reservas automáticas para evitar conflictos
+                - Interfaz específica por departamento
+                - Filtros por programa/carrera
+                - Persistencia de datos por departamento
+                """)
+            
             with col2:
                 st.markdown("""
                 **🚀 Beneficios:**
