@@ -681,15 +681,15 @@ class ConfiguracionSistema:
     def _obtener_horarios_prohibidos(self):
         if self.colegio_actual == "COLEGIO DE ADMINISTRACIÓN DE EMPRESAS":
             return {
-                "Ma": [("10:00", "12:00")],
-                "Ju": [("10:00", "12:00")]
+                "Ma": [("10:30", "12:30")],
+                "Ju": [("10:30", "12:30")]
             }
         elif self.colegio_actual == "DEPARTAMENTO DE MATEMÁTICAS":
             return {}
         elif self.colegio_actual == "COLEGIO DE ARTES Y CIENCIAS":
             return {
-                "Ma": [("11:00", "12:30")],
-                "Ju": [("11:00", "12:30")]
+                "Ma": [("10:30", "12:30")],
+                "Ju": [("10:30", "12:30")]
             }
         else:
             return {
@@ -2193,9 +2193,9 @@ def main():
                 
                 # Mostrar restricciones específicas del colegio
                 if info_usuario['colegio_completo'] == "COLEGIO DE ADMINISTRACIÓN DE EMPRESAS":
-                    st.warning("⚠️ Horarios prohibidos: Martes y Jueves 10:00-12:00")
+                    st.warning("⚠️ Horarios prohibidos: Martes y Jueves 10:30-12:30")
                 elif info_usuario['colegio_completo'] == "COLEGIO DE ARTES Y CIENCIAS":
-                    st.warning("⚠️ Horarios prohibidos: Martes y Jueves 11:00-12:30")
+                    st.warning("⚠️ Horarios prohibidos: Martes y Jueves 10:30-12:30")
                 elif info_usuario['colegio_completo'] == "DEPARTAMENTO DE MATEMÁTICAS":
                     st.success("✅ Sin horarios prohibidos específicos")
                 else:
