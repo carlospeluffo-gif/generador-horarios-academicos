@@ -5,6 +5,7 @@ import json
 import numpy as np
 from datetime import datetime, timedelta
 import io
+import time
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.express as px
@@ -235,7 +236,7 @@ def mostrar_header_usuario_corregido():
         st.sidebar.info(f"**Programa:** {info['programa']}")
         
         # CORREGIDO: Clave única para evitar duplicados
-        logout_key = f"btn_logout_{info['usuario']}_{hash(info['programa']) % 1000}"
+        logout_key = f"btn_logout_{info['usuario']}_{info['programa']}_{int(time.time()*1000)}"
         if st.sidebar.button("🚪 Cerrar Sesión", type="secondary", use_container_width=True, key=logout_key):
             # Limpiar session state
             for key in list(st.session_state.keys()):
