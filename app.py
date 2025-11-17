@@ -49,11 +49,13 @@ def generar_credenciales_simplificadas():
             "computacion": "Ciencias de la Computación"
         },
         "COLEGIO DE ARTES Y CIENCIAS": {
+            # Artes - Humanidades
             "literatura": "Literatura Comparada",
             "frances": "Lengua y Literatura Francesa",
             "filosofia": "Filosofía",
             "artes_plasticas": "Artes Plásticas",
             "teoria_arte": "Teoría del Arte",
+            # Artes - Otros
             "economia": "Economía",
             "ingles": "Inglés",
             "historia": "Historia",
@@ -62,6 +64,7 @@ def generar_credenciales_simplificadas():
             "hispanicos": "Estudios Hispánicos",
             "educacion_fisica": "Educación Física – Pedagogía en Educación Física",
             "psicologia": "Psicología",
+            # Ciencias
             "biologia": "Biología",
             "microbiologia": "Microbiología Industrial",
             "premedica": "Pre-Médica",
@@ -100,7 +103,7 @@ def generar_credenciales_simplificadas():
                     'contraseña': programa_key,
                     'colegio_completo': colegio_completo,
                     'programa': programa_nombre,
-                    'nivel': "Bachillerato" 
+                    'nivel': "Bachillerato"  # Simplificado
                 }
     
     return credenciales
@@ -124,6 +127,7 @@ def mostrar_login_simplificado():
     </div>
     """, unsafe_allow_html=True)
     
+    # Centrar el formulario de login
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
@@ -132,7 +136,8 @@ def mostrar_login_simplificado():
         """, unsafe_allow_html=True)
         
         st.markdown("### 📋 Credenciales de Acceso Simplificadas")
-
+        
+        # Información de ayuda SIMPLIFICADA
         with st.expander("ℹ️ ¿Cómo obtener mis credenciales?", expanded=False):
             st.markdown("""
             **🎯 CREDENCIALES SIMPLIFICADAS (sin tildes ni espacios):**
@@ -156,6 +161,7 @@ def mostrar_login_simplificado():
             - Contraseña: `biologia`
             """)
         
+        # Formulario de login
         usuario = st.text_input("👤 Usuario", placeholder="Ej: artes_ciencias", key="login_usuario_simple")
         contraseña = st.text_input("🔑 Contraseña", type="password", placeholder="Ej: biologia", key="login_password_simple")
         
@@ -165,6 +171,7 @@ def mostrar_login_simplificado():
                 if usuario and contraseña:
                     info_usuario = verificar_credenciales_simplificadas(usuario, contraseña)
                     if info_usuario:
+                        # Guardar información de sesión
                         st.session_state.usuario_autenticado = True
                         st.session_state.info_usuario = info_usuario
                         st.session_state.programa_seleccionado = info_usuario['programa']
@@ -178,6 +185,7 @@ def mostrar_login_simplificado():
                 else:
                     st.warning("⚠️ Por favor complete todos los campos.")
         
+        # Mostrar programas disponibles para referencia
         with st.expander("📚 Ver todos los programas disponibles"):
             credenciales = generar_credenciales_simplificadas()
             programas_por_colegio = {}
@@ -204,7 +212,8 @@ def mostrar_header_usuario_corregido():
         titulo_programa = f"🎓 {info['programa']}"
         subtitulo = f"🏛️ {info['colegio_completo']} • 📚 {info['nivel']}"
         usuario_display = info['usuario']
-
+        
+        # Header con información del usuario
         st.markdown(f"""
         <div style="background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); padding: 1.5rem; border-radius: 10px; margin-bottom: 2rem;">
             <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -220,13 +229,16 @@ def mostrar_header_usuario_corregido():
         </div>
         """, unsafe_allow_html=True)
         
+        # Botón de cerrar sesión en sidebar - CLAVE ÚNICA
         st.sidebar.markdown("---")
         st.sidebar.markdown("### 👤 Sesión Actual")
         st.sidebar.info(f"**Usuario:** {usuario_display}")
         st.sidebar.info(f"**Programa:** {info['programa']}")
         
+        # CORREGIDO: Clave única para evitar duplicados
         logout_key = f"btn_logout_{info['usuario']}_{info['programa']}_{int(time.time()*1000)}"
         if st.sidebar.button("🚪 Cerrar Sesión", type="secondary", use_container_width=True, key=logout_key):
+            # Limpiar session state
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
             st.rerun()
@@ -238,6 +250,7 @@ def mostrar_header_usuario_corregido():
 def crear_tabla_horario_profesional(df_horario, filtro_tipo="completo", filtro_valor=None):
     """Crea una tabla de horarios profesional similar a la imagen"""
     
+    # Filtrar datos según el tipo
     if filtro_tipo == "profesor" and filtro_valor and filtro_valor != "Todos los profesores":
         df_filtrado = df_horario[df_horario['Profesor'] == filtro_valor]
         titulo = f"📅 Horario de {filtro_valor}"
@@ -255,10 +268,12 @@ def crear_tabla_horario_profesional(df_horario, filtro_tipo="completo", filtro_v
         st.warning("No hay datos para mostrar con los filtros seleccionados.")
         return
     
+    # Crear estructura de períodos de tiempo
     periodos = []
     hora_inicio = 7 * 60 + 30  # 7:30 AM en minutos
     hora_fin = 19 * 60 + 30    # 7:30 PM en minutos
     
+    # Generar períodos cada 30 minutos
     tiempo_actual = hora_inicio
     while tiempo_actual < hora_fin:
         hora = tiempo_actual // 60
@@ -275,12 +290,16 @@ def crear_tabla_horario_profesional(df_horario, filtro_tipo="completo", filtro_v
         })
         tiempo_actual += 30
     
+    # Días de la semana
     dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
+    dias_cortos = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
     
+    # Crear matriz de horarios
     matriz_horario = {}
     for periodo in periodos:
         matriz_horario[periodo['periodo']] = {dia: '' for dia in dias}
     
+    # Llenar la matriz con los cursos
     for _, fila in df_filtrado.iterrows():
         dia_completo = {
             'Lu': 'Lunes', 'Ma': 'Martes', 'Mi': 'Miércoles', 
@@ -289,10 +308,12 @@ def crear_tabla_horario_profesional(df_horario, filtro_tipo="completo", filtro_v
         
         if dia_completo not in dias:
             continue
-        
+            
+        # Convertir horas a minutos
         inicio_clase = a_minutos(fila['Hora Inicio'])
         fin_clase = a_minutos(fila['Hora Fin'])
         
+        # Información del curso
         if filtro_tipo == "salon":
             info_curso = f"{fila['Curso']} - {fila.get('Seccion', '001')}\n{fila['Profesor']}"
         elif filtro_tipo == "profesor":
@@ -300,11 +321,13 @@ def crear_tabla_horario_profesional(df_horario, filtro_tipo="completo", filtro_v
         else:
             info_curso = f"{fila['Curso']} - {fila.get('Seccion', '001')}\n{fila['Profesor']}\n{fila['Salon']}"
         
+        # Buscar períodos que se solapan con la clase
         for periodo in periodos:
             if not (fin_clase <= periodo['inicio_min'] or inicio_clase >= periodo['fin_min']):
                 if matriz_horario[periodo['periodo']][dia_completo] == '':
                     matriz_horario[periodo['periodo']][dia_completo] = info_curso
     
+    # Mostrar título
     st.markdown(f"""
     <div style="text-align: center; padding: 1rem; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); 
                 border-radius: 10px; margin-bottom: 1rem;">
@@ -312,11 +335,13 @@ def crear_tabla_horario_profesional(df_horario, filtro_tipo="completo", filtro_v
     </div>
     """, unsafe_allow_html=True)
     
+    # Crear DataFrame para la tabla
     tabla_data = []
     for periodo_info in periodos:
         periodo = periodo_info['periodo']
         fila_data = {'Períodos': periodo}
         
+        # Verificar si hay alguna clase en este período
         tiene_clases = any(matriz_horario[periodo][dia] != '' for dia in dias)
         
         if tiene_clases:
@@ -330,6 +355,7 @@ def crear_tabla_horario_profesional(df_horario, filtro_tipo="completo", filtro_v
     
     df_tabla = pd.DataFrame(tabla_data)
     
+    # Aplicar estilos CSS para que se vea como la imagen
     st.markdown("""
     <style>
     .horario-tabla {
@@ -363,15 +389,20 @@ def crear_tabla_horario_profesional(df_horario, filtro_tipo="completo", filtro_v
     </style>
     """, unsafe_allow_html=True)
     
+    # Convertir DataFrame a HTML con estilos
     html_tabla = df_tabla.to_html(escape=False, index=False, classes='horario-tabla')
+    
+    # Personalizar el HTML para que se vea mejor
     html_tabla = html_tabla.replace('<td>Períodos</td>', '<td class="periodo-col">Períodos</td>')
     
+    # Aplicar clase especial a la columna de períodos
     for periodo_info in periodos:
         periodo = periodo_info['periodo']
         html_tabla = html_tabla.replace(f'<td>{periodo}</td>', f'<td class="periodo-col">{periodo}</td>')
     
     st.markdown(html_tabla, unsafe_allow_html=True)
     
+    # Estadísticas resumidas
     if not df_filtrado.empty:
         col1, col2, col3, col4 = st.columns(4)
         with col1:
@@ -390,9 +421,10 @@ def crear_tabla_horario_profesional(df_horario, filtro_tipo="completo", filtro_v
             st.metric("👥 Total Estudiantes", int(df_filtrado['Estudiantes'].sum()))
 
 # ========================================================
-# CONFIGURACION Y DATOS DEL SISTEMA
+# RESTO DEL CÓDIGO ORIGINAL (MANTENIDO)
 # ========================================================
 
+# Lista fija de salones (mantenida igual)
 AE_SALONES_FIJOS = [
     "AE 102", "AE 103", "AE 104", "AE 105", "AE 106", "AE 203C",
     "AE 236", "AE 302", "AE 303", "AE 304", "AE 305", "AE 306",
@@ -414,6 +446,7 @@ ARTES_CIENCIAS_SALONES_COMPARTIDOS = [
     "LAB 101", "LAB 102", "LAB 103", "LAB 104", "LAB 105", "LAB 106", "LAB 107", "LAB 108"
 ]
 
+# Sistema de reservas de salones (mantenido igual)
 class SistemaReservasSalones:
     def __init__(self, archivo_reservas="reservas_salones_compartidos.json"):
         self.archivo_reservas = archivo_reservas
@@ -487,6 +520,13 @@ class SistemaReservasSalones:
         
         return self.guardar_reservas()
     
+    def obtener_reservas_departamento(self, departamento):
+        reservas_departamento = {}
+        for clave, reserva in self.reservas.items():
+            if reserva.get('departamento') == departamento:
+                reservas_departamento[clave] = reserva
+        return reservas_departamento
+    
     def obtener_salones_disponibles(self, dia, hora_inicio, hora_fin, departamento, lista_salones):
         salones_disponibles = []
         for salon in lista_salones:
@@ -513,6 +553,7 @@ class SistemaReservasSalones:
         
         return stats
 
+# Configuración RUM (simplificada)
 PROGRAMAS_RUM = {
     "COLEGIO DE ADMINISTRACIÓN DE EMPRESAS": {
         "color": "#FF6B6B",
@@ -591,6 +632,7 @@ PROGRAMAS_RUM = {
     }
 }
 
+# Configuración del sistema (simplificada)
 class ConfiguracionSistema:
     def __init__(self, archivo_excel=None, programa_actual=None, colegio_actual=None, departamento_actual=None):
         self.archivo_excel = archivo_excel
@@ -659,13 +701,19 @@ class ConfiguracionSistema:
         try:
             excel_data = pd.read_excel(self.archivo_excel, sheet_name=None)
             
+            st.write(f"📊 Hojas disponibles en el Excel: {list(excel_data.keys())}")
+            
             hoja_cursos = None
             for nombre_hoja, df in excel_data.items():
+                st.write(f"\n🔍 Analizando hoja '{nombre_hoja}':")
+                st.write(f"Columnas: {list(df.columns)}")
+                
                 columnas_df = [col.lower().strip() for col in df.columns]
                 
                 if any('profesor' in col or 'docente' in col for col in columnas_df) and \
                    any('curso' in col or 'materia' in col or 'asignatura' in col for col in columnas_df):
                     hoja_cursos = df
+                    st.success(f"✅ Hoja '{nombre_hoja}' seleccionada como fuente de datos")
                     break
             
             if hoja_cursos is None:
@@ -677,14 +725,18 @@ class ConfiguracionSistema:
             
         except Exception as e:
             st.error(f"❌ Error al cargar el archivo Excel: {e}")
+            st.info("ℹ️ Usando configuración por defecto")
     
     def procesar_datos_excel(self):
         if self.cursos_df is None:
             return
         
         df = self.cursos_df.copy()
+        
+        # Normalizar nombres de columnas
         df.columns = [col.lower().strip().replace(' ', '_') for col in df.columns]
         
+        # Mapear columnas comunes
         mapeo_columnas = {
             'profesor': ['profesor', 'docente', 'teacher', 'instructor'],
             'curso': ['curso', 'materia', 'asignatura', 'subject', 'course'],
@@ -701,17 +753,22 @@ class ConfiguracionSistema:
                     columnas_finales[campo] = col
                     break
         
+        st.write(f"🔗 Mapeo de columnas: {columnas_finales}")
+        
         if 'profesor' not in columnas_finales or 'curso' not in columnas_finales:
             st.error("❌ Error: No se encontraron las columnas básicas (profesor, curso)")
             return
         
+        # Valores por defecto para columnas faltantes
         if 'creditos' not in columnas_finales:
             df['creditos_default'] = 3
             columnas_finales['creditos'] = 'creditos_default'
+            st.warning("⚠️ No se encontró columna de créditos, usando 3 por defecto")
         
         if 'estudiantes' not in columnas_finales:
             df['estudiantes_default'] = 30
             columnas_finales['estudiantes'] = 'estudiantes_default'
+            st.warning("⚠️ No se encontró columna de estudiantes, usando 30 por defecto")
         
         if 'programa' not in columnas_finales:
             df['programa_default'] = self.programa_actual or 'Programa General'
@@ -724,6 +781,7 @@ class ConfiguracionSistema:
         df = df.dropna(subset=[columnas_finales['profesor'], columnas_finales['curso']])
         
         profesores_unicos = df[columnas_finales['profesor']].unique()
+        st.info(f"👨‍🏫 Profesores encontrados: {len(profesores_unicos)}")
         
         for profesor in profesores_unicos:
             if pd.isna(profesor) or str(profesor).strip() == '':
@@ -768,7 +826,10 @@ class ConfiguracionSistema:
                     "horario_preferido": {},
                     "horario_no_disponible": {}
                 }
+                
+                st.write(f"📚 {profesor}: {len(cursos_lista)} cursos, {creditos_totales} créditos totales")
         
+        # Configurar salones según el colegio
         if self.colegio_actual and self.colegio_actual in PROGRAMAS_RUM:
             colegio_info = PROGRAMAS_RUM[self.colegio_actual]
             if self.colegio_actual == "COLEGIO DE ADMINISTRACIÓN DE EMPRESAS":
@@ -784,15 +845,15 @@ class ConfiguracionSistema:
         else:
             num_salones = 15
             self.salones = [f"Salon {i+1}" for i in range(num_salones)]
+        
+        st.success(f"✅ Configuración completada: {len(self.profesores_config)} profesores, {len(self.salones)} salones")
 
-# ========================================================
-# FUNCIONES AUXILIARES Y GENERACION DE HORARIOS
-# ========================================================
-
+# Funciones auxiliares (mantenidas igual)
 def generar_bloques():
     bloques = []
     id_counter = 1
 
+    # Bloques de 4 créditos (4 días, 1 hora cada día)
     combinaciones_4dias = [
         ["Lu","Ma","Mi","Ju"],
         ["Lu","Ma","Mi","Vi"],
@@ -804,6 +865,7 @@ def generar_bloques():
         bloques.append({"id": id_counter, "dias": dias, "horas": [1]*4, "creditos": 4})
         id_counter += 1
 
+    # Bloques de 4 créditos (2 días, 2 horas cada día)
     combinaciones_2dias = [
         ["Lu","Mi"],
         ["Lu","Vi"],
@@ -814,11 +876,13 @@ def generar_bloques():
         bloques.append({"id": id_counter, "dias": dias, "horas": [2,2], "creditos": 4})
         id_counter += 1
 
+    # Bloques de 3 créditos
     bloques.append({"id": id_counter, "dias": ["Lu","Mi","Vi"], "horas": [1,1,1], "creditos": 3})
     id_counter += 1
     bloques.append({"id": id_counter, "dias": ["Ma","Ju"], "horas": [1.5,1.5], "creditos": 3})
     id_counter += 1
 
+    # Bloques de 5 créditos
     combinaciones_5creditos = [
         (["Lu","Mi","Vi"], [2,2,1]),
         (["Lu","Ma","Mi","Vi"], [1,1,1,2]),
@@ -833,6 +897,7 @@ def generar_bloques():
         bloques.append({"id": id_counter, "dias": dias, "horas": horas, "creditos": 5})
         id_counter += 1
 
+    # Bloques de 3 créditos (un solo día con 3 horas)
     for dia in ["Lu","Ma","Mi","Ju","Vi"]:
         bloques.append({"id": id_counter, "dias": [dia], "horas": [3], "creditos": 3})
         id_counter += 1
@@ -1185,6 +1250,7 @@ def buscar_mejor_horario(intentos=250):
                 mejor_score = score
                 mejor_asignaciones = asignaciones
         except Exception as e:
+            st.warning(f"Error en iteración {i+1}: {e}")
             continue
     
     status_text.text(f"✅ Generación completada. Mejor puntuación: {mejor_score}")
@@ -1195,6 +1261,11 @@ def exportar_horario(asignaciones):
     for asig in asignaciones:
         registros.extend(asig.get_horario_detallado())
     df = pd.DataFrame(registros)
+
+    for col in ["3h Consecutivas", "Restricción 15:30"]:
+        if col in df.columns:
+            df = df.drop(columns=[col])
+
     return df
 
 def _nombre_archivo_horario(departamento):
@@ -1220,6 +1291,7 @@ def cargar_horario_json(departamento):
             df = pd.DataFrame(data)
             return df
         except Exception as e:
+            st.warning(f"Error al cargar horario guardado: {e}")
             return None
     return None
 
@@ -1240,6 +1312,7 @@ def generar_colores_cursos(df_horario):
     return colores_cursos
 
 def crear_calendario_interactivo(df_horario, filtro_tipo="profesor", filtro_valor=None, chart_key="default"):
+    # Filtros por tipo (profesor, programa, salon, departamento)
     if filtro_tipo == "profesor" and filtro_valor and filtro_valor != "Todos los profesores":
         df_filtrado = df_horario[df_horario['Profesor'] == filtro_valor]
         titulo_calendario = f"📅 Calendario de {filtro_valor}"
@@ -1253,35 +1326,44 @@ def crear_calendario_interactivo(df_horario, filtro_tipo="profesor", filtro_valo
         df_filtrado = df_horario
         titulo_calendario = "📅 Calendario Semanal de Clases - Vista Completa"
     
+    # Generar colores para cada curso
     colores_cursos = generar_colores_cursos(df_horario)
     
+    # Mapeo de días a números para el eje X
     dias_map = {'Lu': 1, 'Ma': 2, 'Mi': 3, 'Ju': 4, 'Vi': 5}
     dias_nombres = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
     
+    # Preparar columnas por salón para cada día
     salones_por_dia = {}
     for dia in dias_map.keys():
         salones_unicos = df_filtrado[df_filtrado['Dia'] == dia]['Salon'].unique().tolist()
         salones_por_dia[dia] = sorted(salones_unicos)
     
+    # Crear figura
     fig = go.Figure()
     
+    # Procesar cada clase para crear los bloques
     for _, fila in df_filtrado.iterrows():
         dia = fila['Dia']
         dia_num = dias_map[dia]
         
+        # Columnas por salón
         salones_dia = salones_por_dia.get(dia, [])
         total_cols = max(len(salones_dia), 1)
         salon_idx = salones_dia.index(fila['Salon']) if fila['Salon'] in salones_dia else 0
         
+        # Ancho por columna dentro del día
         dia_ancho_total = 0.9
         col_ancho = dia_ancho_total / total_cols
         x_center = (dia_num - 0.45) + (salon_idx + 0.5) * col_ancho
         x0 = x_center - (col_ancho * 0.45)
         x1 = x_center + (col_ancho * 0.45)
-    
+        
+        # Convertir horas a minutos desde medianoche para el eje Y
         hora_inicio_min = a_minutos(fila['Hora Inicio'])
         hora_fin_min = a_minutos(fila['Hora Fin'])
         
+        # Crear el bloque de la clase
         fig.add_shape(
             type="rect",
             x0=x0,
@@ -1293,6 +1375,7 @@ def crear_calendario_interactivo(df_horario, filtro_tipo="profesor", filtro_valo
             line=dict(color="#222", width=1),
         )
         
+        # Texto mejorado con información del departamento
         texto_clase = f"<b>{fila['Curso']}</b><br>"
         texto_clase += f"📝 Sección: {fila.get('Seccion', '001')}<br>"
         texto_clase += f"👨‍🏫 {fila['Profesor']}<br>"
@@ -1301,8 +1384,10 @@ def crear_calendario_interactivo(df_horario, filtro_tipo="profesor", filtro_valo
         texto_clase += f"⏰ {fila['Hora Inicio']} - {fila['Hora Fin']}<br>"
         texto_clase += f"📚 {fila['Créditos']} créditos"
         
+        # Mostrar sección en el bloque principal
         texto_bloque = f"<b>{fila['Curso']}</b><br>{fila['Hora Inicio']}-{fila['Hora Fin']}<br>Sec: {fila.get('Seccion', '001')}<br>{fila['Salon']}"
         
+        # Añadir anotación centrada en el bloque
         fig.add_annotation(
             x=x_center,
             y=(hora_inicio_min + hora_fin_min) / 2,
@@ -1316,6 +1401,7 @@ def crear_calendario_interactivo(df_horario, filtro_tipo="profesor", filtro_valo
             hovertext=texto_clase
         )
     
+    # Configurar el layout del calendario
     hora_min = 7 * 60 if config and config.usa_horarios_exactos else 7 * 60
     hora_max = 19 * 60 if config and config.usa_horarios_exactos else 20 * 60
     
@@ -1354,6 +1440,7 @@ def crear_calendario_interactivo(df_horario, filtro_tipo="profesor", filtro_valo
         margin=dict(l=80, r=80, t=100, b=80)
     )
     
+    # Líneas de cuadrícula más prominentes para las horas
     for hora in range(8, 20):
         fig.add_hline(
             y=hora*60, 
@@ -1461,16 +1548,20 @@ def mostrar_estado_reservas():
 
 def mostrar_generador_horarios_simplificado():
     """Interfaz del generador de horarios simplificada"""
+    # Mostrar header del usuario autenticado
     mostrar_header_usuario_corregido()
     
+    # Obtener información del usuario
     info_usuario = st.session_state.info_usuario
     
     st.info(f"🎯 **Generando horarios para**: {info_usuario['programa']}")
     
     st.markdown("## 📁 Cargar Datos para Generación de Horarios")
 
+    # Sidebar de configuración
     st.sidebar.header("⚙️ Configuración del Sistema")
     
+    # Upload del archivo Excel en sidebar
     uploaded_file = st.sidebar.file_uploader(
         "📁 Cargar archivo Excel con datos de profesores y cursos",
         type=['xlsx', 'xls'],
@@ -1478,6 +1569,7 @@ def mostrar_generador_horarios_simplificado():
         key="file_uploader_simplificado"
     )
 
+    # Inicializar configuración al cargar archivo
     if uploaded_file is not None:
         with open("temp_excel.xlsx", "wb") as f:
             f.write(uploaded_file.getbuffer())
@@ -1491,6 +1583,7 @@ def mostrar_generador_horarios_simplificado():
         )
         bloques = generar_bloques()
 
+        # Mostrar estado de reservas si aplica
         if config.usa_reservas:
             mostrar_estado_reservas()
             
@@ -1506,6 +1599,7 @@ def mostrar_generador_horarios_simplificado():
             with col2:
                 st.info("💡 Libera las reservas si necesitas regenerar el horario")
 
+        # Infraestructura
         st.sidebar.subheader("🏫 Infraestructura")
         if config.colegio_actual == "COLEGIO DE ADMINISTRACIÓN DE EMPRESAS":
             st.sidebar.info("Salones AE:")
@@ -1537,9 +1631,11 @@ def mostrar_generador_horarios_simplificado():
                         seccion_info = f" (Sec: {curso.get('seccion', '001')})"
                         st.write(f"  - {curso['nombre']}{seccion_info}{programa_info} ({curso['creditos']} créditos, {curso['estudiantes']} estudiantes)")
             
+            # Parámetros de Optimización
             st.sidebar.subheader("🎯 Parámetros de Optimización")
             intentos = st.sidebar.slider("Número de iteraciones", 50, 500, 250, 50, key="intentos_slider_simple")
 
+            # Restricciones
             with st.sidebar.expander("🔒 Restricciones Globales"):
                 config.restricciones_globales["hora_inicio_min"] = st.time_input(
                     "Hora inicio mínima", 
@@ -1561,6 +1657,7 @@ def mostrar_generador_horarios_simplificado():
                     "Estudiantes máximos por salón", 20, 150, 50, key="estudiantes_max_salon_simple"
                 )
             
+            # Preferencias de Profesores
             st.sidebar.subheader("👤 Preferencias de Profesores")
             profesor_seleccionado = st.sidebar.selectbox(
                 "Seleccionar profesor para configurar",
@@ -1588,6 +1685,7 @@ def mostrar_generador_horarios_simplificado():
                                 (inicio.strftime("%H:%M"), fin.strftime("%H:%M"))
                             ]
             
+            # Botones de control del horario
             st.markdown("---")
             col_gen, col_borrar = st.columns(2)
             
@@ -1603,17 +1701,20 @@ def mostrar_generador_horarios_simplificado():
                         else:
                             st.success(f"✅ Horario generado. Puntuación: {score}")
                             
+                            # Guardar reservas si aplica
                             if config.usa_reservas and guardar_reservas_horario(mejor, info_usuario['usuario']):
                                 st.success("🔄 Reservas de salones guardadas correctamente")
                             elif config.usa_reservas:
                                 st.warning("⚠️ Horario generado pero hubo problemas al guardar las reservas")
                             
+                            # Guardar en session state para persistencia
                             st.session_state.asignaciones_actuales = mejor
                             st.session_state.horario_generado = exportar_horario(mejor)
                             st.rerun()
             
             with col_borrar:
                 if st.button("🗑️ Borrar Horario Generado", type="secondary", key="btn_borrar_horario_simple"):
+                    # Limpiar horario generado
                     if 'asignaciones_actuales' in st.session_state:
                         del st.session_state.asignaciones_actuales
                     if 'horario_generado' in st.session_state:
@@ -1621,6 +1722,7 @@ def mostrar_generador_horarios_simplificado():
                     st.success("✅ Horario borrado correctamente")
                     st.rerun()
             
+            # Mostrar horario si existe
             if 'horario_generado' in st.session_state and st.session_state.horario_generado is not None:
                 st.markdown("---")
                 mostrar_tabs_horario_mejoradas(st.session_state.horario_generado)
@@ -1629,6 +1731,7 @@ def mostrar_generador_horarios_simplificado():
         else:
             st.error("❌ No se pudieron cargar los datos del archivo Excel")
     else:
+        # Sin archivo cargado: intentar cargar horario guardado
         df_guardado = cargar_horario_json(info_usuario['usuario'])
         if df_guardado is not None and not df_guardado.empty:
             st.success("✅ Se cargó el último horario guardado.")
@@ -1670,6 +1773,7 @@ def mostrar_tabs_horario_mejoradas(df_horario):
         "📈 Estadísticas"
     ])
     
+    # PESTAÑA 1: TABLA PROFESIONAL (NUEVA - ESTILO IMAGEN)
     with tab1:
         st.subheader("📅 Vista de Tabla Profesional")
         
@@ -1707,6 +1811,7 @@ def mostrar_tabs_horario_mejoradas(df_horario):
             else:
                 crear_tabla_horario_profesional(df_horario, "completo", None)
     
+    # PESTAÑA 2: CALENDARIO VISUAL (MANTENIDA)
     with tab2:
         st.subheader("🎨 Vista de Calendario Visual")
         
@@ -1749,6 +1854,7 @@ def mostrar_tabs_horario_mejoradas(df_horario):
         with col2_info:
             st.info("🔍 Hover: Pasa el cursor sobre los bloques para ver más información.")
     
+    # PESTAÑA 3: HORARIO COMPLETO (MANTENIDA)
     with tab3:
         st.subheader("📊 Horario Completo")
         
@@ -1764,6 +1870,7 @@ def mostrar_tabs_horario_mejoradas(df_horario):
             key="download_csv_completo"
         )
     
+    # PESTAÑA 4: POR PROFESOR (MEJORADA)
     with tab4:
         st.subheader("👨‍🏫 Horario por Profesor")
         
@@ -1776,6 +1883,7 @@ def mostrar_tabs_horario_mejoradas(df_horario):
         if profesor_individual:
             df_prof = df_horario[df_horario['Profesor'] == profesor_individual]
             if not df_prof.empty:
+                # Mostrar tabla profesional para el profesor
                 crear_tabla_horario_profesional(df_horario, "profesor", profesor_individual)
                 
                 st.markdown("---")
@@ -1783,6 +1891,7 @@ def mostrar_tabs_horario_mejoradas(df_horario):
                 df_prof_ordenado = df_prof.sort_values(['Dia', 'Hora Inicio'])
                 st.dataframe(df_prof_ordenado, use_container_width=True, key="dataframe_profesor_individual")
                 
+                # Métricas del profesor
                 creditos_por_profesor = _creditos_unicos_por_profesor(df_prof)
                 creditos_total_prof = int(creditos_por_profesor.get(profesor_individual, 0))
                 
@@ -1796,6 +1905,7 @@ def mostrar_tabs_horario_mejoradas(df_horario):
             else:
                 st.warning(f"No se encontraron clases para {profesor_individual}")
     
+    # PESTAÑA 5: POR SALÓN (MEJORADA)
     with tab5:
         st.subheader("🏫 Horario por Salón")
         
@@ -1808,6 +1918,7 @@ def mostrar_tabs_horario_mejoradas(df_horario):
         if salon_individual:
             df_salon = df_horario[df_horario['Salon'] == salon_individual]
             if not df_salon.empty:
+                # Mostrar tabla profesional para el salón
                 crear_tabla_horario_profesional(df_horario, "salon", salon_individual)
                 
                 st.markdown("---")
@@ -1815,6 +1926,7 @@ def mostrar_tabs_horario_mejoradas(df_horario):
                 df_salon_ordenado = df_salon.sort_values(['Dia', 'Hora Inicio'])
                 st.dataframe(df_salon_ordenado, use_container_width=True, key=f"dataframe_salon_individual_{salon_individual}")
                 
+                # Métricas del salón
                 col1_salon, col2_salon, col3_salon = st.columns(3)
                 with col1_salon:
                     horas_uso = df_salon['Duración'].sum()
@@ -1826,6 +1938,7 @@ def mostrar_tabs_horario_mejoradas(df_horario):
             else:
                 st.warning(f"No se encontraron clases para {salon_individual}")
     
+    # PESTAÑA 6: ESTADÍSTICAS (MANTENIDA)
     with tab6:
         st.subheader("📈 Estadísticas Generales")
         col1_met, col2_met, col3_met, col4_met = st.columns(4)
@@ -1839,6 +1952,7 @@ def mostrar_tabs_horario_mejoradas(df_horario):
             total_estudiantes = df_horario['Estudiantes'].sum()
             st.metric("👥 Total Estudiantes", int(total_estudiantes))
         
+        # Estadísticas por programa
         st.subheader("📊 Estadísticas por Programa")
         stats_programa = df_horario.groupby('Programa').agg({
             'Curso': 'nunique',
@@ -1850,18 +1964,19 @@ def mostrar_tabs_horario_mejoradas(df_horario):
         stats_programa.columns = ['Cursos', 'Profesores', 'Salones', 'Estudiantes', 'Horas Totales']
         st.dataframe(stats_programa, use_container_width=True)
         
+        # Créditos por profesor
         creditos_prof = _creditos_unicos_por_profesor(df_horario)
-        if not creditos_prof.empty:
-            fig_creditos = px.bar(
-                x=list(creditos_prof.index), 
-                y=list(creditos_prof.values),
-                title="Créditos por Profesor (por curso único)",
-                color=list(creditos_prof.values),
-                color_continuous_scale="viridis"
-            )
-            fig_creditos.update_layout(showlegend=False)
-            st.plotly_chart(fig_creditos, use_container_width=True, key="plotly_creditos_general")
+        fig_creditos = px.bar(
+            x=list(creditos_prof.index), 
+            y=list(creditos_prof.values),
+            title="Créditos por Profesor (por curso único)",
+            color=list(creditos_prof.values),
+            color_continuous_scale="viridis"
+        )
+        fig_creditos.update_layout(showlegend=False)
+        st.plotly_chart(fig_creditos, use_container_width=True, key="plotly_creditos_general")
         
+        # Utilización de salones
         uso_salones = df_horario.groupby('Salon').agg({
             'Duración': 'sum',
             'Curso': 'nunique'
@@ -1892,6 +2007,7 @@ def mostrar_botones_persistencia(df_horario, usuario_key):
             else:
                 ok = guardar_horario_json(df_horario, usuario_key)
                 if ok:
+                    # Guardar reservas también si aplica
                     if config and config.usa_reservas and 'asignaciones_actuales' in st.session_state:
                         guardar_reservas_horario(st.session_state.asignaciones_actuales, usuario_key)
                     st.success("✅ Horario guardado correctamente.")
@@ -1903,6 +2019,7 @@ def mostrar_botones_persistencia(df_horario, usuario_key):
             if not os.path.exists("temp_excel.xlsx"):
                 st.warning("Primero carga un archivo Excel en la barra lateral para poder generar un nuevo horario.")
             else:
+                # Limpiar horario actual
                 if 'asignaciones_actuales' in st.session_state:
                     del st.session_state.asignaciones_actuales
                 if 'horario_generado' in st.session_state:
@@ -1919,8 +2036,10 @@ def guardar_reservas_horario(asignaciones, usuario_key):
     if not config or not config.usa_reservas or not config.sistema_reservas:
         return True
     
+    # Primero liberar reservas anteriores del usuario
     config.sistema_reservas.liberar_reservas_departamento(usuario_key)
     
+    # Guardar nuevas reservas
     for asig in asignaciones:
         for dia, duracion in zip(asig.bloque["dias"], asig.bloque["horas"]):
             hora_fin_min = a_minutos(asig.hora_inicio) + int(duracion * 60)
@@ -1940,7 +2059,7 @@ def guardar_reservas_horario(asignaciones, usuario_key):
     return True
 
 # ========================================================
-# MAIN
+# MAIN ACTUALIZADO Y CORREGIDO
 # ========================================================
 
 config = None
@@ -1954,6 +2073,7 @@ def main():
         initial_sidebar_state="expanded"
     )
 
+    # CSS personalizado
     st.markdown("""
     <style>
     .main > div { padding-top: 2rem; }
@@ -1969,12 +2089,15 @@ def main():
     </style>
     """, unsafe_allow_html=True)
 
+    # Inicializar session state para autenticación
     if 'usuario_autenticado' not in st.session_state:
         st.session_state.usuario_autenticado = False
     if 'info_usuario' not in st.session_state:
         st.session_state.info_usuario = None
 
+    # Sistema principal
     if not st.session_state.usuario_autenticado:
+        # Pestaña de Login
         tab_login, tab_info = st.tabs(["🔐 Iniciar Sesión", "ℹ️ Información del Sistema"])
         
         with tab_login:
@@ -2025,21 +2148,82 @@ def main():
             st.info("💡 **Para comenzar**: Inicia sesión con las credenciales simplificadas en la pestaña 'Iniciar Sesión'.")
     
     else:
-        tab_horarios, tab_config, tab_ayuda = st.tabs(["📅 Generador de Horarios", "❓ Ayuda"])
+        # Usuario autenticado: mostrar interfaz principal
+        tab_horarios, tab_config, tab_ayuda = st.tabs(["📅 Generador de Horarios", "⚙️ Configuración", "❓ Ayuda"])
         
         with tab_horarios:
             mostrar_generador_horarios_simplificado()
         
         with tab_config:
-            st.markdown("## ❓ Ayuda del Sistema")
+            st.markdown("## ⚙️ Configuración del Sistema")
             
             mostrar_header_usuario_corregido()
-
-            st.markdown("### 🚀 Guia de Uso")
+            
+            info_usuario = st.session_state.info_usuario
+            
+            st.markdown("### 🔧 Configuraciones Disponibles")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown(f"""
+                #### 🏛️ Información del Usuario
+                - **Colegio:** {info_usuario['colegio_completo']}
+                - **Programa:** {info_usuario['programa']}
+                - **Nivel:** {info_usuario['nivel']}
+                - **Usuario:** {info_usuario['usuario']}
+                """)
+                
+                if info_usuario['colegio_completo'] in ["COLEGIO DE ADMINISTRACIÓN DE EMPRESAS", "DEPARTAMENTO DE MATEMÁTICAS", "COLEGIO DE ARTES Y CIENCIAS"]:
+                    st.success("✅ Sistema de reservas activo para salones compartidos")
+                    st.info("🏫 Salones compartidos con otros departamentos")
+                else:
+                    st.info("🏫 Salones dedicados al colegio")
+            
+            with col2:
+                st.markdown("""
+                #### ⏰ Restricciones Temporales
+                - Horarios prohibidos configurables por colegio
+                - Límites de horas por día configurables
+                - Restricciones de bloques de 3 horas después de 15:30
+                - Créditos máximos y mínimos por profesor
+                """)
+                
+                st.info(f"📚 Configurado para: {info_usuario['nivel']}")
+                
+                # Mostrar restricciones específicas del colegio
+                if info_usuario['colegio_completo'] == "COLEGIO DE ADMINISTRACIÓN DE EMPRESAS":
+                    st.warning("⚠️ Horarios prohibidos: Martes y Jueves 10:30-12:30")
+                elif info_usuario['colegio_completo'] == "COLEGIO DE ARTES Y CIENCIAS":
+                    st.warning("⚠️ Horarios prohibidos: Martes y Jueves 10:30-12:30")
+                elif info_usuario['colegio_completo'] == "DEPARTAMENTO DE MATEMÁTICAS":
+                    st.success("✅ Sin horarios prohibidos específicos")
+                else:
+                    st.warning("⚠️ Horarios prohibidos: Martes y Jueves 10:30-12:30")
+            
+            st.markdown("---")
+            st.markdown("### 📊 Estado del Sistema")
+            
+            if os.path.exists("temp_excel.xlsx"):
+                st.success("✅ Archivo de datos cargado")
+            else:
+                st.warning("⚠️ No hay archivo de datos cargado")
+            
+            if 'horario_generado' in st.session_state:
+                st.success("✅ Horario generado disponible")
+            else:
+                st.info("ℹ️ No hay horario generado")
+        
+        with tab_ayuda:
+            st.markdown("## ❓ Ayuda - Sistema Mejorado")
+            
+            mostrar_header_usuario_corregido()
+            
+            st.markdown("### 🚀 Guía de Uso del Sistema Mejorado")
             
             with st.expander("1️⃣ Credenciales Simplificadas", expanded=True):
                 st.markdown("""
-                **🎯 SISTEMA DE LOGIN:**
+                **🎯 NUEVO SISTEMA DE LOGIN:**
                 - **Sin tildes**: Todas las credenciales usan solo letras, números y guiones bajos
                 - **Sin espacios**: Se usan guiones bajos en lugar de espacios
                 - **Fácil de recordar**: Nombres intuitivos y cortos
@@ -2048,6 +2232,7 @@ def main():
                 - Usuario: `artes_ciencias` | Contraseña: `biologia`
                 - Usuario: `admin_empresas` | Contraseña: `contabilidad`
                 - Usuario: `ingenieria` | Contraseña: `ing_civil`
+                - Usuario: `matematicas` | Contraseña: `estadistica`
                 """)
             
             with st.expander("2️⃣ Nueva Vista de Tabla Profesional"):
@@ -2057,14 +2242,33 @@ def main():
                 - Similar a horarios universitarios tradicionales
                 - Fácil de leer e imprimir
                 - Filtros por profesor, salón o programa
+                - Información completa en cada celda
                 
                 **Cómo usar:**
                 1. Ve a la pestaña "Tabla Profesional"
                 2. Selecciona el tipo de filtro
                 3. Elige el elemento específico a mostrar
+                4. La tabla se actualiza automáticamente
                 """)
             
-            with st.expander("3️⃣ Gestión de Salones Mejorada"):
+            with st.expander("3️⃣ Visualización Dual"):
+                st.markdown("""
+                **🎨 DOS TIPOS DE VISUALIZACIÓN:**
+                
+                **Tabla Profesional:**
+                - Formato tradicional de horarios universitarios
+                - Períodos de tiempo en filas
+                - Días de la semana en columnas
+                - Ideal para imprimir y compartir
+                
+                **Calendario Visual:**
+                - Bloques de colores interactivos
+                - Herramientas de zoom y navegación
+                - Información detallada al pasar el cursor
+                - Leyenda de colores por curso
+                """)
+            
+            with st.expander("4️⃣ Gestión de Salones Mejorada"):
                 st.markdown("""
                 **🏫 SISTEMA DE RESERVAS:**
                 - Salones compartidos entre departamentos (AE, M, AC)
@@ -2073,11 +2277,41 @@ def main():
                 - Liberación de reservas por departamento
                 
                 **Salones por Colegio:**
-                - **AE**: Administración de Empresas
-                - **M**: Matemáticas
+                - **AE**: Administración de Empresas (AE 102, AE 103, etc.)
+                - **M**: Matemáticas (M 102, M 104, etc.)
                 - **AC/LAB**: Artes y Ciencias compartidos
                 - **ING**: Ingeniería (dedicados)
                 - **CA**: Ciencias Agrícolas (dedicados)
+                """)
+            
+            st.markdown("---")
+            st.markdown("### 🔧 Solución de Problemas")
+            
+            with st.expander("❌ Error de claves duplicadas (CORREGIDO)"):
+                st.markdown("""
+                **Problema resuelto:**
+                - Se eliminaron las claves duplicadas en botones
+                - Cada elemento tiene una clave única
+                - No más errores de `StreamlitDuplicateElementKey`
+                
+                **Si aún tienes problemas:**
+                - Recarga la página (F5)
+                - Borra el caché del navegador
+                - Cierra sesión y vuelve a entrar
+                """)
+            
+            with st.expander("🔐 Problemas de login (SOLUCIONADO)"):
+                st.markdown("""
+                **Credenciales simplificadas:**
+                - Ya no necesitas tildes (ñ, á, é, í, ó, ú)
+                - No hay espacios en las credenciales
+                - Usa guiones bajos (_) en lugar de espacios
+                - Todas las letras en minúsculas
+                
+                **Si no puedes entrar:**
+                - Verifica que no uses tildes
+                - Usa guiones bajos en lugar de espacios
+                - Consulta la lista completa en "Ver todos los programas disponibles"
                 """)
 
 if __name__ == "__main__":
