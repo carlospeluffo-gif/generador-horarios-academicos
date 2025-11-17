@@ -1259,7 +1259,7 @@ def calcular_score(asignaciones: list[AsignacionClase], config: ConfiguracionSis
 
     return bonus - penalizacion
 
-def buscar_mejor_horario(intentos=250, config: ConfiguracionSistema, bloques, horas_inicio):
+def buscar_mejor_horario(config: ConfiguracionSistema, bloques, horas_inicio, intentos=250):
     """Búsqueda iterativa de un buen horario (simulación de AG simple)"""
     mejor_asignaciones = None
     mejor_score = -float('inf')
