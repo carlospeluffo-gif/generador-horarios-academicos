@@ -1,21 +1,11 @@
 import streamlit as st
 import pandas as pd
 import random
-import json
-import numpy as np
-from datetime import datetime, timedelta
-import io
-import time
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import plotly.express as px
-import os
-from pathlib import Path
 import re
-import csv
+from datetime import datetime
 
 # ========================================================
-# CONFIGURACIÓN DE ZONAS (CENTRAL vs PERIFÉRICA)
+# CONFIGURACIÓN DE ZONAS
 # ========================================================
 
 class ZonaConfig:
@@ -28,7 +18,7 @@ class ZonaConfig:
             "Ma": [("10:30", "12:30")],
             "Ju": [("10:30", "12:30")]
         },
-        "descripcion": "Horarios cada 60 min desde 7:30. Restricción: No clases Ma-Ju 10:30-12:30"
+        "descripcion": "⏰ Horarios cada 60 min desde 7:30 AM\n🚫 Hora Universal: No clases Ma-Ju 10:30-12:30"
     }
     
     PERIFERICA = {
@@ -41,247 +31,146 @@ class ZonaConfig:
             "Ju": [("10:00", "12:00")],
             "Vi": [("10:00", "12:00")]
         },
-        "descripcion": "Horarios cada 60 min desde 7:00. Restricción: No clases 10:00-12:00"
+        "descripcion": "⏰ Horarios cada 60 min desde 7:00 AM\n🚫 Hora Universal: No clases 10:00-12:00"
     }
 
 # ========================================================
-# PROCESADOR DE EXCEL/CSV DEL FORMULARIO DE GOOGLE (MEJORADO)
+# PROCESADOR DE EXCEL/CSV
 # ========================================================
 
 class ProcesadorExcelFormulario:
-    """Procesa el Excel/CSV generado por el formulario de Google Forms"""
+    """Procesa el Excel/CSV del formulario de Google Forms"""
     
     def __init__(self, archivo):
         self.archivo = archivo
         self.df_original = None
         self.profesores_data = {}
         
-    def detectar_y_cargar_archivo(self):
-        """Detecta el formato del archivo y lo carga apropiadamente"""
+    def cargar_archivo(self):
+        """Carga el archivo Excel o CSV"""
         try:
-            # Leer el contenido del archivo
-            if hasattr(self.archivo, 'read'):
-                contenido = self.archivo.read()
-                self.archivo.seek(0)  # Resetear el puntero
-            else:
-                with open(self.archivo, 'rb') as f:
-                    contenido = f.read()
+            # Intentar cargar como Excel
+            try:
+                df = pd.read_excel(self.archivo, sheet_name=0)
+                st.success(f"✅ Excel cargado: {len(df)} filas")
+            except:
+                # Intentar como CSV
+                self.archivo.seek(0)
+                df = pd.read_csv(self.archivo)
+                st.success(f"✅ CSV cargado: {len(df)} filas")
             
-            # Detectar si es CSV (contiene muchas comas)
-            contenido_str = contenido.decode('utf-8', errors='ignore')[:1000]
-            num_comas = contenido_str.count(',')
-            num_tabs = contenido_str.count('\t')
-            
-            st.info(f"Detectando formato... Comas: {num_comas}, Tabs: {num_tabs}")
-            
-            # Intentar cargar como CSV primero
-            if num_comas > num_tabs * 2:
-                st.info("📄 Detectado formato CSV (separado por comas)")
-                try:
-                    # Intentar diferentes encodings
-                    for encoding in ['utf-8', 'latin-1', 'iso-8859-1', 'cp1252']:
-                        try:
-                            self.archivo.seek(0)
-                            self.df_original = pd.read_csv(self.archivo, encoding=encoding)
-                            st.success(f"✅ CSV cargado con encoding: {encoding}")
-                            break
-                        except:
-                            continue
-                    
-                    if self.df_original is None:
-                        # Último intento: leer como texto y parsear manualmente
-                        self.archivo.seek(0)
-                        contenido_texto = self.archivo.read().decode('utf-8', errors='ignore')
-                        lineas = contenido_texto.strip().split('\n')
-                        
-                        # Parsear CSV manualmente
-                        reader = csv.reader(lineas)
-                        datos = list(reader)
-                        
-                        if len(datos) > 1:
-                            self.df_original = pd.DataFrame(datos[1:], columns=datos[0])
-                            st.success("✅ CSV parseado manualmente")
-                        else:
-                            raise ValueError("No se pudo parsear el CSV")
+            # Verificar si las columnas están en la primera fila
+            if len(df.columns) == 1 or ',' in str(df.columns[0]):
+                st.warning("⚠️ Detectado formato especial, reprocessando...")
                 
-                except Exception as e:
-                    st.error(f"Error al cargar CSV: {e}")
-                    return False
-            
-            else:
-                # Intentar cargar como Excel
-                st.info("📊 Detectado formato Excel")
+                # Leer de nuevo sin header
+                self.archivo.seek(0)
                 try:
+                    df_raw = pd.read_excel(self.archivo, sheet_name=0, header=None)
+                except:
                     self.archivo.seek(0)
-                    self.df_original = pd.read_excel(self.archivo, sheet_name=0)
-                    st.success("✅ Excel cargado correctamente")
-                except Exception as e:
-                    st.error(f"Error al cargar Excel: {e}")
-                    return False
+                    df_raw = pd.read_csv(self.archivo, header=None)
+                
+                # Buscar la fila con los headers
+                for idx, row in df_raw.iterrows():
+                    row_str = str(row[0])
+                    if 'SERIES' in row_str or 'PROFESSORS' in row_str:
+                        # Encontramos los headers
+                        headers = row_str.split(',')
+                        headers = [h.strip().strip('"') for h in headers]
+                        
+                        # Extraer datos
+                        data_rows = []
+                        for idx2 in range(idx + 1, len(df_raw)):
+                            row_data = str(df_raw.iloc[idx2, 0]).split(',')
+                            row_data = [d.strip().strip('"') for d in row_data]
+                            if len(row_data) == len(headers):
+                                data_rows.append(row_data)
+                        
+                        df = pd.DataFrame(data_rows, columns=headers)
+                        st.success(f"✅ Formato corregido: {len(df)} filas, {len(df.columns)} columnas")
+                        break
             
-            # Mostrar información del DataFrame cargado
-            if self.df_original is not None:
-                st.success(f"✅ Archivo cargado: {len(self.df_original)} filas, {len(self.df_original.columns)} columnas")
-                
-                # Mostrar columnas detectadas
-                with st.expander("🔍 Ver columnas detectadas"):
-                    st.write("**Columnas encontradas:**")
-                    for i, col in enumerate(self.df_original.columns):
-                        st.write(f"{i+1}. `{col}`")
-                
-                # Mostrar primeras filas
-                with st.expander("👀 Ver primeras filas del archivo"):
-                    st.dataframe(self.df_original.head(3))
-                
-                return True
-            else:
-                st.error("No se pudo cargar el archivo")
-                return False
-                
+            self.df_original = df
+            
+            # Mostrar columnas detectadas
+            with st.expander("🔍 Columnas detectadas"):
+                for i, col in enumerate(df.columns):
+                    st.write(f"{i+1}. `{col}`")
+            
+            # Mostrar muestra de datos
+            with st.expander("👀 Primeras filas"):
+                st.dataframe(df.head(3))
+            
+            return True
+            
         except Exception as e:
-            st.error(f"Error general al cargar archivo: {e}")
+            st.error(f"❌ Error al cargar archivo: {e}")
             import traceback
             st.code(traceback.format_exc())
             return False
     
     def extraer_profesor_y_porcentaje(self, profesor_str):
-        """Extrae nombre del profesor y porcentaje de carga"""
+        """Extrae nombre del profesor y porcentaje"""
         if pd.isna(profesor_str) or str(profesor_str).strip() == '':
             return None, 100
         
-        # Formato: "Edwin Florez Gomez (100%)"
         match = re.search(r'(.+?)\s*\((\d+)%\)', str(profesor_str))
         if match:
-            nombre = match.group(1).strip()
-            porcentaje = int(match.group(2))
-            return nombre, porcentaje
-        else:
-            return str(profesor_str).strip(), 100
-    
-    def parsear_horario_meetings(self, meetings_str):
-        """Parsea el campo MEETINGS para extraer días, horas y salón"""
-        if pd.isna(meetings_str) or str(meetings_str).strip() == '':
-            return None
-        
-        try:
-            meetings_str = str(meetings_str).strip()
-            
-            # Extraer horas
-            time_pattern = r'(\d{1,2}:\d{2}\s*[ap]m)\s*-\s*(\d{1,2}:\d{2}\s*[ap]m)'
-            time_match = re.search(time_pattern, meetings_str, re.IGNORECASE)
-            
-            if not time_match:
-                return None
-            
-            hora_inicio = time_match.group(1).strip()
-            hora_fin = time_match.group(2).strip()
-            
-            # Extraer días
-            resto = meetings_str[time_match.end():].strip()
-            dias_pattern = r'([LMWJV]+)'
-            dias_match = re.search(dias_pattern, resto)
-            
-            if not dias_match:
-                return None
-            
-            dias_str = dias_match.group(1)
-            dias_map = {'L': 'Lu', 'M': 'Ma', 'W': 'Mi', 'J': 'Ju', 'V': 'Vi'}
-            dias = [dias_map.get(d, d) for d in dias_str if d in dias_map]
-            
-            # Extraer salón
-            resto_salon = resto[dias_match.end():].strip()
-            salon_pattern = r'(M\s*\d+)'
-            salon_match = re.search(salon_pattern, resto_salon)
-            salon = salon_match.group(1).strip() if salon_match else "M 316"
-            
-            return {
-                'hora_inicio': hora_inicio,
-                'hora_fin': hora_fin,
-                'dias': dias,
-                'salon': salon
-            }
-        except Exception as e:
-            return None
-    
-    def normalizar_nombre_columna(self, col_name):
-        """Normaliza nombres de columnas para búsqueda flexible"""
-        if pd.isna(col_name):
-            return ""
-        return str(col_name).strip().upper().replace(" ", "_")
-    
-    def buscar_columna(self, posibles_nombres):
-        """Busca una columna por varios nombres posibles"""
-        columnas_normalizadas = {self.normalizar_nombre_columna(col): col for col in self.df_original.columns}
-        
-        for nombre in posibles_nombres:
-            nombre_norm = self.normalizar_nombre_columna(nombre)
-            if nombre_norm in columnas_normalizadas:
-                return columnas_normalizadas[nombre_norm]
-        
-        return None
+            return match.group(1).strip(), int(match.group(2))
+        return str(profesor_str).strip(), 100
     
     def procesar_datos(self):
-        """Procesa los datos del Excel/CSV y extrae información de profesores y cursos"""
-        if self.df_original is None or self.df_original.empty:
-            st.error("No hay datos para procesar")
+        """Procesa los datos y extrae información de profesores"""
+        if self.df_original is None:
             return False
         
-        # Buscar columnas de forma flexible
-        col_series = self.buscar_columna(['SERIES', 'CODIGO', 'CODE', 'COURSE_CODE'])
-        col_nombre = self.buscar_columna(['NAME SPA', 'NAME_SPA', 'NOMBRE', 'NAME', 'COURSE_NAME'])
-        col_creditos = self.buscar_columna(['CREDITS', 'CREDITOS', 'CREDIT'])
-        col_profesores = self.buscar_columna(['PROFESSORS', 'PROFESOR', 'TEACHER', 'INSTRUCTOR'])
-        col_email = self.buscar_columna(['PROFESSORS EMAIL', 'PROFESSORS_EMAIL', 'EMAIL', 'CORREO'])
-        col_meetings = self.buscar_columna(['MEETINGS', 'HORARIO', 'SCHEDULE'])
-        col_capacidad = self.buscar_columna(['CAPACITY', 'CAPACIDAD', 'CAP', 'ESTUDIANTES'])
-        col_seccion = self.buscar_columna(['SECTION', 'SECCION', 'SEC'])
+        # Mapeo de columnas
+        col_map = {}
+        for col in self.df_original.columns:
+            col_upper = str(col).upper()
+            if 'SERIES' in col_upper or 'CODIGO' in col_upper:
+                col_map['codigo'] = col
+            elif 'NAME SPA' in col_upper or 'NOMBRE' in col_upper:
+                col_map['nombre'] = col
+            elif 'CREDIT' in col_upper:
+                col_map['creditos'] = col
+            elif 'PROFESSOR' in col_upper and 'EMAIL' not in col_upper:
+                col_map['profesor'] = col
+            elif 'EMAIL' in col_upper:
+                col_map['email'] = col
+            elif 'CAPACITY' in col_upper or 'CAPACIDAD' in col_upper:
+                col_map['capacidad'] = col
+            elif 'SECTION' in col_upper or 'SECCION' in col_upper:
+                col_map['seccion'] = col
         
-        st.info("🔍 Columnas mapeadas:")
-        mapeo = {
-            'Código': col_series,
-            'Nombre': col_nombre,
-            'Créditos': col_creditos,
-            'Profesores': col_profesores,
-            'Email': col_email,
-            'Horario': col_meetings,
-            'Capacidad': col_capacidad,
-            'Sección': col_seccion
-        }
+        st.info("📋 Mapeo de columnas:")
+        for key, val in col_map.items():
+            st.success(f"✅ {key}: `{val}`")
         
-        for campo, columna in mapeo.items():
-            if columna:
-                st.success(f"✅ {campo}: `{columna}`")
-            else:
-                st.warning(f"⚠️ {campo}: No encontrada (usando valores por defecto)")
-        
-        # Procesar cada fila
-        filas_procesadas = 0
-        filas_con_error = 0
+        # Procesar filas
+        filas_ok = 0
+        filas_error = 0
         
         for idx, fila in self.df_original.iterrows():
             try:
-                # Extraer datos básicos
-                codigo_curso = fila.get(col_series, f'CURSO_{idx}') if col_series else f'CURSO_{idx}'
-                nombre_curso = fila.get(col_nombre, 'Curso sin nombre') if col_nombre else 'Curso sin nombre'
-                creditos = fila.get(col_creditos, 3) if col_creditos else 3
-                capacidad = fila.get(col_capacidad, 30) if col_capacidad else 30
-                profesores_str = fila.get(col_profesores, '') if col_profesores else ''
-                email = fila.get(col_email, '') if col_email else ''
-                meetings = fila.get(col_meetings, '') if col_meetings else ''
-                seccion = fila.get(col_seccion, '001') if col_seccion else '001'
+                # Extraer datos
+                codigo = fila.get(col_map.get('codigo', ''), f'CURSO_{idx}')
+                nombre = fila.get(col_map.get('nombre', ''), 'Sin nombre')
+                creditos = fila.get(col_map.get('creditos', ''), 3)
+                capacidad = fila.get(col_map.get('capacidad', ''), 30)
+                profesor_str = fila.get(col_map.get('profesor', ''), '')
+                email = fila.get(col_map.get('email', ''), '')
+                seccion = fila.get(col_map.get('seccion', ''), '001')
                 
                 # Saltar filas vacías
-                if pd.isna(codigo_curso) or str(codigo_curso).strip() == '':
+                if pd.isna(codigo) or str(codigo).strip() == '':
                     continue
                 
                 # Extraer profesor
-                profesor_nombre, porcentaje = self.extraer_profesor_y_porcentaje(profesores_str)
-                
+                profesor_nombre, porcentaje = self.extraer_profesor_y_porcentaje(profesor_str)
                 if not profesor_nombre:
                     profesor_nombre = f"Profesor_{idx}"
-                
-                # Parsear horario
-                horario_info = self.parsear_horario_meetings(meetings)
                 
                 # Inicializar profesor
                 if profesor_nombre not in self.profesores_data:
@@ -289,144 +178,56 @@ class ProcesadorExcelFormulario:
                         'email': email,
                         'cursos': [],
                         'creditos_totales': 0,
-                        'horario_preferido': {},
-                        'horario_no_disponible': {},
                         'dias_preferidos': [],
                         'turno_preferido': 'Mañana'
                     }
                 
-                # Convertir créditos y capacidad a números
+                # Convertir valores
                 try:
-                    creditos_num = int(float(creditos)) if not pd.isna(creditos) else 3
+                    creditos_num = int(float(creditos))
                 except:
                     creditos_num = 3
                 
                 try:
-                    capacidad_num = int(float(capacidad)) if not pd.isna(capacidad) else 30
+                    capacidad_num = int(float(capacidad))
                 except:
                     capacidad_num = 30
                 
                 # Agregar curso
                 curso_info = {
-                    'codigo': str(codigo_curso),
-                    'nombre': str(nombre_curso),
+                    'codigo': str(codigo),
+                    'nombre': str(nombre),
                     'creditos': creditos_num,
                     'estudiantes': capacidad_num,
                     'porcentaje_carga': porcentaje,
-                    'horario_actual': horario_info,
                     'seccion': str(seccion)
                 }
                 
                 self.profesores_data[profesor_nombre]['cursos'].append(curso_info)
-                self.profesores_data[profesor_nombre]['creditos_totales'] += curso_info['creditos']
+                self.profesores_data[profesor_nombre]['creditos_totales'] += creditos_num
                 
-                filas_procesadas += 1
+                filas_ok += 1
                 
             except Exception as e:
-                filas_con_error += 1
-                st.warning(f"⚠️ Error en fila {idx}: {e}")
+                filas_error += 1
                 continue
         
         st.success(f"✅ Procesamiento completado:")
-        st.info(f"• {filas_procesadas} cursos procesados correctamente")
+        st.info(f"• {filas_ok} cursos procesados")
         st.info(f"• {len(self.profesores_data)} profesores identificados")
-        if filas_con_error > 0:
-            st.warning(f"• {filas_con_error} filas con errores (ignoradas)")
-        
-        # Mostrar resumen de profesores
-        with st.expander("👥 Ver resumen de profesores"):
-            for profesor, data in self.profesores_data.items():
-                st.write(f"**{profesor}** - {len(data['cursos'])} cursos, {data['creditos_totales']} créditos")
+        if filas_error > 0:
+            st.warning(f"• {filas_error} filas con errores")
         
         return len(self.profesores_data) > 0
     
     def obtener_profesores_config(self):
-        """Retorna la configuración de profesores"""
         return self.profesores_data
 
 # ========================================================
-# EDITOR DE PREFERENCIAS DE PROFESORES
+# GENERACIÓN DE HORARIOS
 # ========================================================
 
-def mostrar_editor_preferencias_profesor(profesor_nombre, profesor_config, zona_seleccionada):
-    """Interfaz para editar las preferencias de horario de un profesor"""
-    
-    st.markdown(f"### Preferencias de {profesor_nombre}")
-    
-    # Información del profesor
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Cursos asignados", len(profesor_config['cursos']))
-    with col2:
-        st.metric("Créditos totales", profesor_config['creditos_totales'])
-    with col3:
-        email = profesor_config.get('email', 'No disponible')
-        st.info(f"📧 {email}")
-    
-    # Lista de cursos
-    with st.expander("Ver cursos asignados", expanded=False):
-        for curso in profesor_config['cursos']:
-            st.write(f"• {curso['codigo']} - {curso['nombre']} ({curso['creditos']} créditos)")
-    
-    st.markdown("---")
-    
-    # Preferencias de días
-    st.markdown("#### Días Preferidos")
-    
-    dias_opciones = {
-        "Lu-Mi-Vi": ["Lu", "Mi", "Vi"],
-        "Ma-Ju": ["Ma", "Ju"],
-        "Lu-Ma-Mi-Ju": ["Lu", "Ma", "Mi", "Ju"],
-        "Todos los días": ["Lu", "Ma", "Mi", "Ju", "Vi"],
-        "Personalizado": []
-    }
-    
-    dias_pref_key = f"dias_pref_{profesor_nombre}_{hash(profesor_nombre)}"
-    dias_seleccion = st.selectbox(
-        "Patrón de días preferidos",
-        list(dias_opciones.keys()),
-        key=dias_pref_key
-    )
-    
-    if dias_seleccion == "Personalizado":
-        dias_custom = st.multiselect(
-            "Seleccionar días específicos",
-            ["Lu", "Ma", "Mi", "Ju", "Vi"],
-            default=profesor_config.get('dias_preferidos', []),
-            key=f"dias_custom_{profesor_nombre}_{hash(profesor_nombre)}"
-        )
-        dias_preferidos = dias_custom
-    else:
-        dias_preferidos = dias_opciones[dias_seleccion]
-    
-    profesor_config['dias_preferidos'] = dias_preferidos
-    
-    st.markdown("---")
-    
-    # Preferencias de turno
-    st.markdown("#### Turno Preferido")
-    
-    turno_pref = st.radio(
-        "Preferencia de horario",
-        ["Mañana (antes de 12:30)", "Tarde (después de 12:30)", "Sin preferencia"],
-        index=0 if profesor_config.get('turno_preferido') == 'Mañana' else 1,
-        key=f"turno_{profesor_nombre}_{hash(profesor_nombre)}"
-    )
-    
-    if turno_pref == "Mañana (antes de 12:30)":
-        profesor_config['turno_preferido'] = 'Mañana'
-    elif turno_pref == "Tarde (después de 12:30)":
-        profesor_config['turno_preferido'] = 'Tarde'
-    else:
-        profesor_config['turno_preferido'] = 'Sin preferencia'
-    
-    return profesor_config
-
-# ========================================================
-# SISTEMA DE GENERACIÓN DE HORARIOS
-# ========================================================
-
-MATEMATICAS_SALONES_FIJOS = [
+SALONES = [
     "M 102", "M 104", "M 105", "M 110", "M 112", "M 203", "M 205", "M 210", 
     "M 213", "M 214", "M 215", "M 220", "M 222", "M 236", "M 238", "M 302", 
     "M 303", "M 304", "M 305", "M 306", "M 311", "M 315", "M 316", "M 317", 
@@ -439,24 +240,11 @@ def generar_bloques_horarios():
     id_counter = 1
 
     # Bloques de 4 créditos
-    combinaciones_4dias = [
-        ["Lu","Ma","Mi","Ju"],
-        ["Lu","Ma","Mi","Vi"],
-        ["Lu","Ma","Ju","Vi"],
-        ["Lu","Mi","Ju","Vi"],
-        ["Ma","Mi","Ju","Vi"],
-    ]
-    for dias in combinaciones_4dias:
+    for dias in [["Lu","Ma","Mi","Ju"], ["Lu","Ma","Mi","Vi"], ["Ma","Mi","Ju","Vi"]]:
         bloques.append({"id": id_counter, "dias": dias, "horas": [1]*4, "creditos": 4})
         id_counter += 1
 
-    combinaciones_2dias = [
-        ["Lu","Mi"],
-        ["Lu","Vi"],
-        ["Ma","Ju"],
-        ["Mi","Vi"],
-    ]
-    for dias in combinaciones_2dias:
+    for dias in [["Lu","Mi"], ["Ma","Ju"]]:
         bloques.append({"id": id_counter, "dias": dias, "horas": [2,2], "creditos": 4})
         id_counter += 1
 
@@ -467,18 +255,8 @@ def generar_bloques_horarios():
     id_counter += 1
 
     # Bloques de 5 créditos
-    combinaciones_5creditos = [
-        (["Lu","Mi","Vi"], [2,2,1]),
-        (["Lu","Ma","Mi","Vi"], [1,1,1,2]),
-        (["Ma","Ju","Vi"], [1.5,1.5,2]),
-        (["Lu","Ma","Mi","Ju","Vi"], [1,1,1,1,1]),
-    ]
-    for dias, horas in combinaciones_5creditos:
+    for dias, horas in [(["Lu","Mi","Vi"], [2,2,1]), (["Ma","Ju","Vi"], [1.5,1.5,2])]:
         bloques.append({"id": id_counter, "dias": dias, "horas": horas, "creditos": 5})
-        id_counter += 1
-
-    for dia in ["Lu","Ma","Mi","Ju","Vi"]:
-        bloques.append({"id": id_counter, "dias": [dia], "horas": [3], "creditos": 3})
         id_counter += 1
 
     return bloques
@@ -491,8 +269,8 @@ def a_minutos(hhmm):
     except:
         return 0
 
-def horario_valido_zona(dia, hora_inicio, duracion, zona_config, profesor_config=None):
-    """Verifica validez del horario"""
+def horario_valido_zona(dia, hora_inicio, duracion, zona_config):
+    """Verifica si el horario es válido según restricciones de zona"""
     ini_min = a_minutos(hora_inicio)
     fin_min = ini_min + int(duracion * 60)
     
@@ -504,46 +282,7 @@ def horario_valido_zona(dia, hora_inicio, duracion, zona_config, profesor_config
             if not (fin_min <= r_ini_min or ini_min >= r_fin_min):
                 return False
     
-    if profesor_config and 'horario_no_disponible' in profesor_config:
-        if dia in profesor_config['horario_no_disponible']:
-            for nd_ini, nd_fin in profesor_config['horario_no_disponible'][dia]:
-                nd_ini_min = a_minutos(nd_ini)
-                nd_fin_min = a_minutos(nd_fin)
-                if not (fin_min <= nd_ini_min or ini_min >= nd_fin_min):
-                    return False
-    
     return True
-
-def cumple_preferencias_profesor(dia, hora_inicio, duracion, profesor_config):
-    """Calcula score de preferencias"""
-    score = 0
-    
-    if 'dias_preferidos' in profesor_config and profesor_config['dias_preferidos']:
-        if dia in profesor_config['dias_preferidos']:
-            score += 30
-        else:
-            score -= 20
-    
-    if 'turno_preferido' in profesor_config:
-        hora_min = a_minutos(hora_inicio)
-        mediodia = a_minutos("12:30")
-        
-        if profesor_config['turno_preferido'] == 'Mañana' and hora_min < mediodia:
-            score += 20
-        elif profesor_config['turno_preferido'] == 'Tarde' and hora_min >= mediodia:
-            score += 20
-    
-    if 'horario_preferido' in profesor_config and dia in profesor_config['horario_preferido']:
-        ini_min = a_minutos(hora_inicio)
-        fin_min = ini_min + int(duracion * 60)
-        
-        for pref_ini, pref_fin in profesor_config['horario_preferido'][dia]:
-            pref_ini_min = a_minutos(pref_ini)
-            pref_fin_min = a_minutos(pref_fin)
-            if ini_min >= pref_ini_min and fin_min <= pref_fin_min:
-                score += 50
-    
-    return score
 
 class AsignacionClase:
     def __init__(self, curso_info, profesor, bloque, hora_inicio, salon):
@@ -579,7 +318,7 @@ class AsignacionClase:
         return horarios
 
 def hay_conflictos(nueva_asignacion, asignaciones_existentes):
-    """Verifica conflictos"""
+    """Verifica conflictos de profesor o salón"""
     for asignacion in asignaciones_existentes:
         for dia_nuevo, dur_nuevo in zip(nueva_asignacion.bloque["dias"], nueva_asignacion.bloque["horas"]):
             ini_nuevo = a_minutos(nueva_asignacion.hora_inicio)
@@ -598,10 +337,10 @@ def hay_conflictos(nueva_asignacion, asignaciones_existentes):
     
     return False
 
-def generar_horario_optimizado(profesores_config, zona_config, salones, intentos=250):
+def generar_horario_optimizado(profesores_config, zona_config, intentos=200):
     """Genera horario optimizado"""
     mejor_asignaciones = None
-    mejor_score = -float('inf')
+    mejor_score = -1
     
     bloques = generar_bloques_horarios()
     horas_inicio = zona_config['horarios_inicio']
@@ -614,7 +353,6 @@ def generar_horario_optimizado(profesores_config, zona_config, salones, intentos
         status_text.text(f"Generando horarios... {intento+1}/{intentos}")
         
         asignaciones = []
-        score_total = 0
         
         for profesor, prof_config in profesores_config.items():
             for curso_info in prof_config['cursos']:
@@ -623,21 +361,17 @@ def generar_horario_optimizado(profesores_config, zona_config, salones, intentos
                     bloques_compatibles = bloques[:5]
                 
                 mejor_asignacion_curso = None
-                mejor_score_curso = -float('inf')
                 
-                for _ in range(50):
+                for _ in range(30):
                     bloque = random.choice(bloques_compatibles)
                     hora_inicio = random.choice(horas_inicio)
-                    salon = random.choice(salones)
+                    salon = random.choice(SALONES)
                     
                     valido = True
-                    score_curso = 0
-                    
                     for dia, duracion in zip(bloque["dias"], bloque["horas"]):
-                        if not horario_valido_zona(dia, hora_inicio, duracion, zona_config, prof_config):
+                        if not horario_valido_zona(dia, hora_inicio, duracion, zona_config):
                             valido = False
                             break
-                        score_curso += cumple_preferencias_profesor(dia, hora_inicio, duracion, prof_config)
                     
                     if not valido:
                         continue
@@ -645,70 +379,32 @@ def generar_horario_optimizado(profesores_config, zona_config, salones, intentos
                     nueva_asignacion = AsignacionClase(curso_info, profesor, bloque, hora_inicio, salon)
                     
                     if not hay_conflictos(nueva_asignacion, asignaciones):
-                        if score_curso > mejor_score_curso:
-                            mejor_score_curso = score_curso
-                            mejor_asignacion_curso = nueva_asignacion
+                        mejor_asignacion_curso = nueva_asignacion
+                        break
                 
                 if mejor_asignacion_curso:
                     asignaciones.append(mejor_asignacion_curso)
-                    score_total += mejor_score_curso
         
         total_cursos = sum(len(prof['cursos']) for prof in profesores_config.values())
-        if len(asignaciones) == total_cursos and score_total > mejor_score:
-            mejor_score = score_total
+        if len(asignaciones) >= mejor_score:
+            mejor_score = len(asignaciones)
             mejor_asignaciones = asignaciones
+            
+            if len(asignaciones) == total_cursos:
+                status_text.text(f"✅ Solución completa encontrada en intento {intento+1}")
+                break
     
-    status_text.text(f"Generación completada. Mejor puntuación: {mejor_score}")
+    progress_bar.progress(1.0)
+    status_text.text(f"Completado. Cursos asignados: {mejor_score}/{total_cursos}")
+    
     return mejor_asignaciones, mejor_score
 
 def exportar_horario(asignaciones):
-    """Exporta horario"""
+    """Exporta horario a DataFrame"""
     registros = []
     for asig in asignaciones:
         registros.extend(asig.get_horario_detallado())
     return pd.DataFrame(registros)
-
-# ========================================================
-# VISUALIZACIÓN
-# ========================================================
-
-def crear_tabla_horario_visual(df_horario):
-    """Crea tabla visual"""
-    if df_horario.empty:
-        st.warning("No hay datos para mostrar")
-        return
-    
-    dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
-    dias_map = {'Lu': 'Lunes', 'Ma': 'Martes', 'Mi': 'Miércoles', 'Ju': 'Jueves', 'Vi': 'Viernes'}
-    
-    horas_unicas = sorted(df_horario['Hora Inicio'].unique())
-    
-    st.markdown("### Vista de Horario Semanal")
-    
-    for hora in horas_unicas:
-        st.markdown(f"**{hora}**")
-        cols = st.columns(5)
-        
-        for idx, dia in enumerate(dias):
-            dia_corto = [k for k, v in dias_map.items() if v == dia][0]
-            clases_hora_dia = df_horario[
-                (df_horario['Hora Inicio'] == hora) & 
-                (df_horario['Día'] == dia_corto)
-            ]
-            
-            with cols[idx]:
-                if not clases_hora_dia.empty:
-                    for _, clase in clases_hora_dia.iterrows():
-                        st.info(f"""
-                        **{clase['Curso']}**  
-                        Prof: {clase['Profesor']}  
-                        Salón: {clase['Salón']}  
-                        {clase['Hora Inicio']} - {clase['Hora Fin']}
-                        """)
-                else:
-                    st.write("")
-        
-        st.markdown("---")
 
 # ========================================================
 # INTERFAZ PRINCIPAL
@@ -716,61 +412,81 @@ def crear_tabla_horario_visual(df_horario):
 
 def main():
     st.set_page_config(
-        page_title="Sistema de Horarios - Departamento de Matemáticas",
+        page_title="Sistema de Horarios - Matemáticas RUM",
         page_icon="📊",
         layout="wide"
     )
     
     st.title("📊 Sistema de Generación de Horarios")
     st.markdown("### Departamento de Matemáticas - RUM")
-    st.markdown("**Versión 2.0** - Soporte mejorado para CSV y Excel")
     
-    # Sidebar
-    st.sidebar.header("Configuración")
+    # ===== PASO 1: SELECCIÓN DE ZONA =====
+    st.markdown("---")
+    st.markdown("## 🗺️ Paso 1: Seleccionar Zona del Campus")
     
-    # Selector de zona
-    st.sidebar.subheader("1. Seleccionar Zona")
-    zona_seleccionada = st.sidebar.radio(
-        "Zona del campus:",
-        ["Central", "Periférica"],
-        help="Central: 7:30, 8:30... | Periférica: 7:00, 8:00..."
-    )
+    col1, col2 = st.columns(2)
     
-    zona_config = ZonaConfig.CENTRAL if zona_seleccionada == "Central" else ZonaConfig.PERIFERICA
+    with col1:
+        zona_central = st.button(
+            "🏛️ ZONA CENTRAL",
+            use_container_width=True,
+            type="primary" if st.session_state.get('zona_seleccionada') == 'Central' else "secondary"
+        )
+        if zona_central:
+            st.session_state.zona_seleccionada = 'Central'
+        
+        if st.session_state.get('zona_seleccionada') == 'Central':
+            st.info(ZonaConfig.CENTRAL['descripcion'])
     
-    st.sidebar.info(f"**{zona_config['nombre']}**\n\n{zona_config['descripcion']}")
+    with col2:
+        zona_periferica = st.button(
+            "🏘️ ZONA PERIFÉRICA",
+            use_container_width=True,
+            type="primary" if st.session_state.get('zona_seleccionada') == 'Periférica' else "secondary"
+        )
+        if zona_periferica:
+            st.session_state.zona_seleccionada = 'Periférica'
+        
+        if st.session_state.get('zona_seleccionada') == 'Periférica':
+            st.info(ZonaConfig.PERIFERICA['descripcion'])
     
-    # Cargar archivo
-    st.sidebar.subheader("2. Cargar Archivo")
-    uploaded_file = st.sidebar.file_uploader(
-        "Subir Excel o CSV",
+    # Verificar que se haya seleccionado zona
+    if 'zona_seleccionada' not in st.session_state:
+        st.warning("⚠️ Por favor selecciona una zona para continuar")
+        return
+    
+    zona_config = ZonaConfig.CENTRAL if st.session_state.zona_seleccionada == 'Central' else ZonaConfig.PERIFERICA
+    
+    # ===== PASO 2: CARGAR ARCHIVO =====
+    st.markdown("---")
+    st.markdown("## 📁 Paso 2: Cargar Archivo de Cursos")
+    
+    uploaded_file = st.file_uploader(
+        "Subir Excel (.xlsx) o CSV (.csv)",
         type=['xlsx', 'xls', 'csv'],
-        help="Archivo del formulario de Google Forms"
+        help="Archivo del formulario de Google Forms con información de cursos"
     )
     
     # Session state
-    if 'procesador' not in st.session_state:
-        st.session_state.procesador = None
     if 'profesores_config' not in st.session_state:
         st.session_state.profesores_config = {}
     if 'horario_generado' not in st.session_state:
         st.session_state.horario_generado = None
     
-    # Procesar archivo
     if uploaded_file is not None:
-        if st.sidebar.button("🔄 Procesar Archivo", type="primary"):
+        if st.button("🔄 Procesar Archivo", type="primary"):
             with st.spinner("Procesando archivo..."):
                 procesador = ProcesadorExcelFormulario(uploaded_file)
-                if procesador.detectar_y_cargar_archivo():
+                if procesador.cargar_archivo():
                     if procesador.procesar_datos():
-                        st.session_state.procesador = procesador
                         st.session_state.profesores_config = procesador.obtener_profesores_config()
                         st.success("✅ Archivo procesado correctamente")
-                        st.rerun()
+                        st.balloons()
     
-    # Mostrar interfaz principal
+    # ===== PASO 3: GENERAR HORARIO =====
     if st.session_state.profesores_config:
         st.markdown("---")
+        st.markdown("## 🚀 Paso 3: Generar Horario")
         
         # Métricas
         col1, col2, col3 = st.columns(3)
@@ -780,149 +496,77 @@ def main():
             total_cursos = sum(len(p['cursos']) for p in st.session_state.profesores_config.values())
             st.metric("Cursos totales", total_cursos)
         with col3:
-            total_creditos = sum(p['creditos_totales'] for p in st.session_state.profesores_config.values())
-            st.metric("Créditos totales", total_creditos)
+            st.metric("Zona", st.session_state.zona_seleccionada)
         
-        # Tabs
-        tab1, tab2, tab3 = st.tabs(["📝 Editar Preferencias", "🔄 Generar Horario", "📊 Ver Horario"])
+        intentos = st.slider("Iteraciones de optimización", 50, 500, 200, 50)
+        
+        if st.button("🎯 Generar Horario Optimizado", type="primary"):
+            with st.spinner("Generando horario..."):
+                asignaciones, score = generar_horario_optimizado(
+                    st.session_state.profesores_config,
+                    zona_config,
+                    intentos
+                )
+                
+                if asignaciones:
+                    st.session_state.horario_generado = exportar_horario(asignaciones)
+                    total_cursos = sum(len(p['cursos']) for p in st.session_state.profesores_config.values())
+                    st.success(f"✅ Horario generado: {score}/{total_cursos} cursos asignados")
+                    st.balloons()
+                else:
+                    st.error("❌ No se pudo generar horario")
+    
+    # ===== PASO 4: VISUALIZAR HORARIO =====
+    if st.session_state.horario_generado is not None:
+        st.markdown("---")
+        st.markdown("## 📊 Paso 4: Visualizar Horario Generado")
+        
+        df_horario = st.session_state.horario_generado
+        
+        # Tabs de visualización
+        tab1, tab2, tab3 = st.tabs(["📋 Tabla Completa", "👨‍🏫 Por Profesor", "🏛️ Por Salón"])
         
         with tab1:
-            st.markdown("## Editor de Preferencias de Profesores")
+            st.dataframe(df_horario, use_container_width=True)
             
-            profesor_seleccionado = st.selectbox(
-                "Seleccionar profesor:",
-                list(st.session_state.profesores_config.keys()),
-                key="selector_profesor_main"
+            csv = df_horario.to_csv(index=False)
+            st.download_button(
+                "📥 Descargar CSV",
+                csv,
+                f"horario_{st.session_state.zona_seleccionada}_{datetime.now().strftime('%Y%m%d')}.csv",
+                "text/csv",
+                type="primary"
             )
-            
-            if profesor_seleccionado:
-                st.markdown("---")
-                profesor_config = st.session_state.profesores_config[profesor_seleccionado]
-                
-                profesor_config_actualizado = mostrar_editor_preferencias_profesor(
-                    profesor_seleccionado,
-                    profesor_config,
-                    zona_seleccionada
-                )
-                
-                if st.button("💾 Guardar Preferencias", type="primary", key="btn_guardar_pref"):
-                    st.session_state.profesores_config[profesor_seleccionado] = profesor_config_actualizado
-                    st.success(f"✅ Preferencias guardadas para {profesor_seleccionado}")
         
         with tab2:
-            st.markdown("## Generador de Horarios")
-            
-            st.info(f"Zona seleccionada: **{zona_config['nombre']}**")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                intentos = st.slider("Iteraciones de optimización", 50, 500, 250, 50)
-            with col2:
-                st.metric("Salones disponibles", len(MATEMATICAS_SALONES_FIJOS))
-            
-            if st.button("🚀 Generar Horario Optimizado", type="primary", key="btn_generar_horario"):
-                with st.spinner("Generando horario optimizado..."):
-                    asignaciones, score = generar_horario_optimizado(
-                        st.session_state.profesores_config,
-                        zona_config,
-                        MATEMATICAS_SALONES_FIJOS,
-                        intentos
-                    )
-                    
-                    if asignaciones:
-                        st.session_state.horario_generado = exportar_horario(asignaciones)
-                        st.session_state.asignaciones = asignaciones
-                        st.success(f"✅ Horario generado exitosamente. Puntuación: {score}")
-                        st.balloons()
-                    else:
-                        st.error("❌ No se pudo generar un horario válido")
+            profesor_filtro = st.selectbox(
+                "Seleccionar profesor:",
+                sorted(df_horario['Profesor'].unique())
+            )
+            df_filtrado = df_horario[df_horario['Profesor'] == profesor_filtro]
+            st.dataframe(df_filtrado, use_container_width=True)
         
         with tab3:
-            st.markdown("## Visualización del Horario")
-            
-            if st.session_state.horario_generado is not None:
-                df_horario = st.session_state.horario_generado
-                
-                vista = st.radio(
-                    "Tipo de vista:",
-                    ["Tabla Visual", "Tabla Completa", "Por Profesor", "Por Salón"],
-                    horizontal=True
-                )
-                
-                if vista == "Tabla Visual":
-                    crear_tabla_horario_visual(df_horario)
-                
-                elif vista == "Tabla Completa":
-                    st.dataframe(df_horario, use_container_width=True)
-                    
-                    csv = df_horario.to_csv(index=False)
-                    st.download_button(
-                        "📥 Descargar CSV",
-                        csv,
-                        "horario_matematicas.csv",
-                        "text/csv"
-                    )
-                
-                elif vista == "Por Profesor":
-                    profesor_filtro = st.selectbox(
-                        "Seleccionar profesor:",
-                        sorted(df_horario['Profesor'].unique()),
-                        key="filtro_profesor"
-                    )
-                    df_filtrado = df_horario[df_horario['Profesor'] == profesor_filtro]
-                    st.dataframe(df_filtrado, use_container_width=True)
-                
-                elif vista == "Por Salón":
-                    salon_filtro = st.selectbox(
-                        "Seleccionar salón:",
-                        sorted(df_horario['Salón'].unique()),
-                        key="filtro_salon"
-                    )
-                    df_filtrado = df_horario[df_horario['Salón'] == salon_filtro]
-                    st.dataframe(df_filtrado, use_container_width=True)
-                
-                # Estadísticas
-                st.markdown("---")
-                st.markdown("### Estadísticas")
-                
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("Clases programadas", len(df_horario))
-                with col2:
-                    st.metric("Profesores activos", df_horario['Profesor'].nunique())
-                with col3:
-                    st.metric("Salones utilizados", df_horario['Salón'].nunique())
-                with col4:
-                    st.metric("Estudiantes totales", df_horario['Estudiantes'].sum())
-            
-            else:
-                st.info("👆 Genera un horario en la pestaña 'Generar Horario'")
-    
-    else:
-        st.info("👈 Sube el archivo en el sidebar para comenzar")
+            salon_filtro = st.selectbox(
+                "Seleccionar salón:",
+                sorted(df_horario['Salón'].unique())
+            )
+            df_filtrado = df_horario[df_horario['Salón'] == salon_filtro]
+            st.dataframe(df_filtrado, use_container_width=True)
         
-        with st.expander("ℹ️ Información del Sistema"):
-            st.markdown("""
-            ### Cómo usar:
-            
-            1. **Seleccionar Zona**: Central o Periférica
-            2. **Cargar Archivo**: Excel (.xlsx) o CSV (.csv)
-            3. **Editar Preferencias**: Configura cada profesor
-            4. **Generar Horario**: Optimización automática
-            5. **Visualizar**: Múltiples vistas
-            
-            ### Formatos soportados:
-            
-            - ✅ Excel (.xlsx, .xls)
-            - ✅ CSV separado por comas
-            - ✅ CSV con diferentes encodings (UTF-8, Latin-1, etc.)
-            
-            ### Zonas:
-            
-            **Central:** 7:30, 8:30, 9:30... | No clases Ma-Ju 10:30-12:30
-            
-            **Periférica:** 7:00, 8:00, 9:00... | No clases 10:00-12:00
-            """)
+        # Estadísticas
+        st.markdown("---")
+        st.markdown("### 📈 Estadísticas")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Clases programadas", len(df_horario))
+        with col2:
+            st.metric("Profesores activos", df_horario['Profesor'].nunique())
+        with col3:
+            st.metric("Salones utilizados", df_horario['Salón'].nunique())
+        with col4:
+            st.metric("Estudiantes totales", df_horario['Estudiantes'].sum())
 
 if __name__ == "__main__":
     main()
