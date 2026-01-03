@@ -1060,7 +1060,7 @@ def main():
                                         'Restricción': f"{r_ini} - {r_fin}"
                                     })
                     
-                    if conflictos:
+
                         st.error("❌ Se encontraron conflictos con las restricciones de zona:")
                         df_conflictos = pd.DataFrame(conflictos)
                         st.dataframe(df_conflictos, use_container_width=True)
