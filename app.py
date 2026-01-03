@@ -1083,6 +1083,3 @@ def main():
             
             else:
                 st.info("👆 Genera un horario en la pestaña 'Generar Horario' para visualizarlo aquí")
-
-if __name__ == "__main__":
-    main()
