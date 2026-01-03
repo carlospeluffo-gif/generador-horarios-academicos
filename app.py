@@ -44,6 +44,56 @@ class ZonaConfig:
     }
 
 # ========================================================
+# CONFIGURACIÓN DE COLEGIOS
+# ========================================================
+
+class ColegiosConfig:
+    """Configuración de colegios disponibles"""
+    
+    COLEGIOS = {
+        "artes_ciencias": {
+            "nombre": "Colegio de Artes y Ciencias",
+            "departamentos": [
+                "Departamento de Matemáticas",
+                "Departamento de Física",
+                "Departamento de Química",
+                "Departamento de Biología",
+                "Departamento de Humanidades"
+            ],
+            "color": "#1f77b4"
+        },
+        "administracion": {
+            "nombre": "Colegio de Administración de Empresas",
+            "departamentos": [
+                "Administración de Empresas",
+                "Contabilidad",
+                "Finanzas",
+                "Mercadeo"
+            ],
+            "color": "#2ca02c"
+        },
+        "ingenieria": {
+            "nombre": "Colegio de Ingeniería",
+            "departamentos": [
+                "Ingeniería Civil",
+                "Ingeniería Eléctrica",
+                "Ingeniería Mecánica",
+                "Ingeniería Química"
+            ],
+            "color": "#ff7f0e"
+        },
+        "agricultura": {
+            "nombre": "Colegio de Ciencias Agrícolas",
+            "departamentos": [
+                "Agronomía",
+                "Ciencias Animales",
+                "Ciencias del Suelo"
+            ],
+            "color": "#9467bd"
+        }
+    }
+
+# ========================================================
 # PROCESADOR DE EXCEL DEL FORMULARIO DE GOOGLE
 # ========================================================
 
@@ -711,22 +761,77 @@ def main():
     # Sidebar - Configuración
     st.sidebar.header("Configuración")
     
+    # Ventana plegable para seleccionar colegio
+    with st.sidebar.expander("🏫 **Seleccionar Colegio**", expanded=True):
+        colegio_seleccionado = st.selectbox(
+            "Colegio:",
+            ["Colegio de Artes y Ciencias", 
+             "Colegio de Administración de Empresas", 
+             "Colegio de Ingeniería", 
+             "Colegio de Ciencias Agrícolas"]
+        )
+        
+        # Mostrar departamentos del colegio seleccionado
+        if colegio_seleccionado == "Colegio de Artes y Ciencias":
+            departamento = st.selectbox(
+                "Departamento:",
+                ColegiosConfig.COLES["artes_ciencias"]["departamentos"]
+            )
+        elif colegio_seleccionado == "Colegio de Administración de Empresas":
+            departamento = st.selectbox(
+                "Departamento:",
+                ColegiosConfig.COLES["administracion"]["departamentos"]
+            )
+        elif colegio_seleccionado == "Colegio de Ingeniería":
+            departamento = st.selectbox(
+                "Departamento:",
+                ColegiosConfig.COLES["ingenieria"]["departamentos"]
+            )
+        elif colegio_seleccionado == "Colegio de Ciencias Agrícolas":
+            departamento = st.selectbox(
+                "Departamento:",
+                ColegiosConfig.COLES["agricultura"]["departamentos"]
+            )
+    
     # Selector de zona
-    st.sidebar.subheader("1. Seleccionar Zona")
+    st.sidebar.subheader("🌍 Seleccionar Zona del Campus")
     zona_seleccionada = st.sidebar.radio(
         "Zona del campus:",
         ["Central", "Periférica"],
-        help="Central: 7:30, 8:30... | Periférica: 7:00, 8:00..."
+        help="""
+        **Central:** 
+        • Horarios desde 7:30, luego 8:30, 9:30...
+        • No hay clases Martes y Jueves de 10:30-12:30
+        
+        **Periférica:**
+        • Horarios desde 7:00, luego 8:00, 9:00...
+        • No hay clases de 10:00-12:00 (todos los días)
+        """
     )
     
+    # Configurar zona según selección
     zona_config = ZonaConfig.CENTRAL if zona_seleccionada == "Central" else ZonaConfig.PERIFERICA
     
-    st.sidebar.info(f"**{zona_config['nombre']}**\n\n{zona_config['descripcion']}")
+    # Mostrar información de la zona seleccionada
+    with st.sidebar.expander("📋 Información de la Zona", expanded=False):
+        st.info(f"**{zona_config['nombre']}**")
+        st.write(zona_config['descripcion'])
+        
+        st.markdown("**Horarios disponibles:**")
+        horarios_text = ""
+        for i in range(0, len(zona_config['horarios_inicio']), 4):
+            horarios_text += ", ".join(zona_config['horarios_inicio'][i:i+4]) + "\n"
+        st.code(horarios_text)
+        
+        st.markdown("**Restricciones:**")
+        for dia, restricciones in zona_config['restricciones'].items():
+            for r_inicio, r_fin in restricciones:
+                st.write(f"• {dia}: {r_inicio} - {r_fin}")
     
     # Cargar archivo Excel
-    st.sidebar.subheader("2. Cargar Excel del Formulario")
+    st.sidebar.subheader("📤 Cargar Datos")
     uploaded_file = st.sidebar.file_uploader(
-        "Subir archivo Excel",
+        "Subir archivo Excel del formulario",
         type=['xlsx', 'xls'],
         help="Excel generado por el formulario de Google Forms"
     )
@@ -739,9 +844,12 @@ def main():
     if 'horario_generado' not in st.session_state:
         st.session_state.horario_generado = None
     
+    # Mostrar información del colegio seleccionado
+    st.info(f"**Colegio:** {colegio_seleccionado} | **Departamento:** {departamento} | **Zona:** {zona_config['nombre']}")
+    
     # Procesar archivo
     if uploaded_file is not None:
-        if st.sidebar.button("Procesar Excel", type="primary"):
+        if st.sidebar.button("Procesar Excel", type="primary", icon="📊"):
             with st.spinner("Procesando archivo..."):
                 procesador = ProcesadorExcelFormulario(uploaded_file)
                 if procesador.cargar_excel():
@@ -750,13 +858,38 @@ def main():
                         st.session_state.profesores_config = procesador.obtener_profesores_config()
                         st.success("✅ Archivo procesado correctamente")
                         st.rerun()
+    else:
+        st.markdown("---")
+        st.info("👈 **Para comenzar:** Sube el archivo Excel del formulario en el sidebar")
+        
+        with st.expander("📋 Información del Sistema", expanded=True):
+            st.markdown("""
+            ### Cómo usar este sistema:
+            
+            1. **Seleccionar Colegio y Departamento**: En el sidebar, elige tu colegio y departamento
+            2. **Seleccionar Zona**: Elige entre Zona Central o Periférica según la ubicación de tus salones
+            3. **Cargar Excel**: Sube el archivo Excel generado por el formulario de Google Forms
+            4. **Editar Preferencias**: Configura las preferencias de horario para cada profesor
+            5. **Generar Horario**: El sistema creará un horario optimizado respetando todas las restricciones
+            6. **Visualizar**: Revisa el horario generado en diferentes vistas
+            
+            ### Diferencias entre zonas:
+            
+            **Zona Central:**
+            - Horarios: 7:30, 8:30, 9:30, 10:30, 11:30, 12:30...
+            - Restricción: No hay clases Martes y Jueves de 10:30 a 12:30
+            
+            **Zona Periférica:**
+            - Horarios: 7:00, 8:00, 9:00, 10:00, 11:00, 12:00...
+            - Restricción: No hay clases de 10:00 a 12:00 (todos los días)
+            """)
     
     # Mostrar información si hay datos cargados
     if st.session_state.profesores_config:
         st.markdown("---")
         
         # Métricas
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("Profesores", len(st.session_state.profesores_config))
         with col2:
@@ -765,6 +898,8 @@ def main():
         with col3:
             total_creditos = sum(p['creditos_totales'] for p in st.session_state.profesores_config.values())
             st.metric("Créditos totales", total_creditos)
+        with col4:
+            st.metric("Zona", zona_seleccionada)
         
         # Tabs principales
         tab1, tab2, tab3 = st.tabs(["📝 Editar Preferencias", "🔄 Generar Horario", "📊 Ver Horario"])
@@ -790,23 +925,31 @@ def main():
                 )
                 
                 # Guardar cambios
-                if st.button("💾 Guardar Preferencias", type="primary"):
-                    st.session_state.profesores_config[profesor_seleccionado] = profesor_config_actualizado
-                    st.success(f"✅ Preferencias guardadas para {profesor_seleccionado}")
+                col_save1, col_save2 = st.columns([3, 1])
+                with col_save2:
+                    if st.button("💾 Guardar Preferencias", type="primary"):
+                        st.session_state.profesores_config[profesor_seleccionado] = profesor_config_actualizado
+                        st.success(f"✅ Preferencias guardadas para {profesor_seleccionado}")
         
         with tab2:
             st.markdown("## Generador de Horarios")
             
-            st.info(f"Zona seleccionada: **{zona_config['nombre']}**")
+            st.info(f"**Configuración actual:** Colegio: {colegio_seleccionado} | Departamento: {departamento} | Zona: {zona_config['nombre']}")
             
             col1, col2 = st.columns(2)
             with col1:
                 intentos = st.slider("Iteraciones de optimización", 50, 500, 250, 50)
+                st.markdown("""
+                **Nota:** 
+                - Más iteraciones = Mejor optimización pero más tiempo
+                - 250 iteraciones es un buen balance
+                """)
             with col2:
                 st.metric("Salones disponibles", len(MATEMATICAS_SALONES_FIJOS))
+                st.metric("Horarios por día", len(zona_config['horarios_inicio']))
             
-            if st.button("🚀 Generar Horario Optimizado", type="primary"):
-                with st.spinner("Generando horario optimizado..."):
+            if st.button("🚀 Generar Horario Optimizado", type="primary", icon="⚙️"):
+                with st.spinner(f"Generando horario optimizado para {zona_config['nombre']}..."):
                     asignaciones, score = generar_horario_optimizado(
                         st.session_state.profesores_config,
                         zona_config,
@@ -819,6 +962,18 @@ def main():
                         st.session_state.asignaciones = asignaciones
                         st.success(f"✅ Horario generado exitosamente. Puntuación: {score}")
                         st.balloons()
+                        
+                        # Mostrar resumen
+                        st.markdown("### Resumen de la Generación")
+                        col_res1, col_res2, col_res3 = st.columns(3)
+                        with col_res1:
+                            st.metric("Clases asignadas", len(asignaciones))
+                        with col_res2:
+                            st.metric("Salones utilizados", 
+                                     len(set([a.salon for a in asignaciones])))
+                        with col_res3:
+                            st.metric("Horarios utilizados", 
+                                     len(set([a.hora_inicio for a in asignaciones])))
                     else:
                         st.error("❌ No se pudo generar un horario válido. Intenta ajustar las preferencias.")
         
@@ -831,7 +986,7 @@ def main():
                 # Opciones de visualización
                 vista = st.radio(
                     "Tipo de vista:",
-                    ["Tabla Visual", "Tabla Completa", "Por Profesor", "Por Salón"],
+                    ["Tabla Visual", "Tabla Completa", "Por Profesor", "Por Salón", "Análisis por Zona"],
                     horizontal=True
                 )
                 
@@ -844,10 +999,11 @@ def main():
                     # Descargar
                     csv = df_horario.to_csv(index=False)
                     st.download_button(
-                        "📥 Descargar CSV",
+                        "📥 Descargar como CSV",
                         csv,
-                        "horario_matematicas.csv",
-                        "text/csv"
+                        f"horario_{departamento.replace(' ', '_')}_{zona_seleccionada}.csv",
+                        "text/csv",
+                        key="download_csv"
                     )
                 
                 elif vista == "Por Profesor":
@@ -866,9 +1022,54 @@ def main():
                     df_filtrado = df_horario[df_horario['Salón'] == salon_filtro]
                     st.dataframe(df_filtrado, use_container_width=True)
                 
+                elif vista == "Análisis por Zona":
+                    st.markdown(f"### Análisis para Zona {zona_seleccionada}")
+                    
+                    # Estadísticas por hora
+                    st.markdown("#### Distribución por Horas")
+                    horas_count = df_horario['Hora Inicio'].value_counts().sort_index()
+                    fig_horas = px.bar(
+                        x=horas_count.index,
+                        y=horas_count.values,
+                        title=f"Clases por Hora - {zona_config['nombre']}",
+                        labels={'x': 'Hora de Inicio', 'y': 'Número de Clases'}
+                    )
+                    st.plotly_chart(fig_horas, use_container_width=True)
+                    
+                    # Verificar restricciones de zona
+                    st.markdown("#### Verificación de Restricciones de Zona")
+                    conflictos = []
+                    
+                    for _, row in df_horario.iterrows():
+                        hora_ini = a_minutos(row['Hora Inicio'])
+                        hora_fin = a_minutos(row['Hora Fin'])
+                        dia = row['Día']
+                        
+                        # Verificar restricciones de la zona
+                        if dia in zona_config['restricciones']:
+                            for r_ini, r_fin in zona_config['restricciones'][dia]:
+                                r_ini_min = a_minutos(r_ini)
+                                r_fin_min = a_minutos(r_fin)
+                                
+                                if not (hora_fin <= r_ini_min or hora_ini >= r_fin_min):
+                                    conflictos.append({
+                                        'Curso': row['Curso'],
+                                        'Profesor': row['Profesor'],
+                                        'Día': dia,
+                                        'Horario': f"{row['Hora Inicio']} - {row['Hora Fin']}",
+                                        'Restricción': f"{r_ini} - {r_fin}"
+                                    })
+                    
+                    if conflictos:
+                        st.error("❌ Se encontraron conflictos con las restricciones de zona:")
+                        df_conflictos = pd.DataFrame(conflictos)
+                        st.dataframe(df_conflictos, use_container_width=True)
+                    else:
+                        st.success("✅ Todas las clases cumplen con las restricciones de la zona")
+                
                 # Estadísticas
                 st.markdown("---")
-                st.markdown("### Estadísticas")
+                st.markdown("### Estadísticas Generales")
                 
                 col1, col2, col3, col4 = st.columns(4)
                 with col1:
@@ -882,30 +1083,6 @@ def main():
             
             else:
                 st.info("👆 Genera un horario en la pestaña 'Generar Horario' para visualizarlo aquí")
-    
-    else:
-        st.info("👈 Sube el archivo Excel del formulario en el sidebar para comenzar")
-        
-        with st.expander("ℹ️ Información del Sistema"):
-            st.markdown("""
-            ### Cómo usar este sistema:
-            
-            1. **Seleccionar Zona**: Elige entre Zona Central o Periférica según la ubicación de tus salones
-            2. **Cargar Excel**: Sube el archivo Excel generado por el formulario de Google Forms
-            3. **Editar Preferencias**: Configura las preferencias de horario para cada profesor
-            4. **Generar Horario**: El sistema creará un horario optimizado respetando todas las restricciones
-            5. **Visualizar**: Revisa el horario generado en diferentes vistas
-            
-            ### Diferencias entre zonas:
-            
-            **Zona Central:**
-            - Horarios: 7:30, 8:30, 9:30, 10:30, 11:30, 12:30...
-            - Restricción: No hay clases Martes y Jueves de 10:30 a 12:30
-            
-            **Zona Periférica:**
-            - Horarios: 7:00, 8:00, 9:00, 10:00, 11:00, 12:00...
-            - Restricción: No hay clases de 10:00 a 12:00 (todos los días)
-            """)
 
 if __name__ == "__main__":
     main()
