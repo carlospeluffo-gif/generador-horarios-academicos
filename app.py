@@ -3,8 +3,8 @@ import pandas as pd
 import random
 import copy
 import time
+import math
 import plotly.express as px
-import plotly.graph_objects as go
 from datetime import datetime
 
 # ========================================================
@@ -18,12 +18,9 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Estilos CSS personalizados para "look" profesional
 st.markdown("""
     <style>
-    .main {
-        background-color: #f8f9fa;
-    }
+    .main { background-color: #f8f9fa; }
     .stMetric {
         background-color: #ffffff;
         padding: 15px;
@@ -31,29 +28,16 @@ st.markdown("""
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         border: 1px solid #e9ecef;
     }
-    .stButton>button {
-        width: 100%;
-        border-radius: 5px;
-        height: 3em;
-        font-weight: bold;
-    }
-    h1, h2, h3 {
-        color: #2c3e50;
-    }
-    .block-container {
-        padding-top: 2rem;
-        padding-bottom: 2rem;
-    }
+    .stButton>button { width: 100%; border-radius: 5px; height: 3em; font-weight: bold; }
+    h1, h2, h3 { color: #2c3e50; }
     </style>
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 2. CONSTANTES Y LÓGICA DEL NEGOCIO (V3 FINAL)
+# 2. LÓGICA DEL NEGOCIO
 # ========================================================
 
-MATEMATICAS_SALONES_FIJOS = [
-    "M 102", "M 104", "M 203", "M 205", "M 316", "M 317", "M 402", "M 404"
-]
+MATEMATICAS_SALONES_FIJOS = ["M 102", "M 104", "M 203", "M 205", "M 316", "M 317", "M 402", "M 404"]
 
 class ZonaConfig:
     CENTRAL = {
@@ -105,11 +89,14 @@ def es_horario_valido_en_zona(dia, hora_inicio_str, duracion, zona_config):
 # ========================================================
 
 class ClaseGene:
-    def __init__(self, curso_data, bloque, hora_inicio, salon):
+    def __init__(self, curso_data, bloque, hora_inicio, salon, seccion_num):
         self.curso_data = curso_data
         self.bloque = bloque
         self.hora_inicio = hora_inicio
         self.salon = salon
+        self.seccion_num = seccion_num # Nuevo: Identificador de la sección (001, 002...)
+        
+        # Selección inicial de profesor
         candidatos = curso_data['candidatos']
         self.prof_asignado = random.choice(candidatos) if candidatos else "Staff"
 
@@ -120,7 +107,7 @@ class IndividuoHorario:
         self.hard_conflicts = 0
         self.prof_stats = {}
 
-    def calcular_fitness(self, profesores_db):
+    def calcular_fitness(self, profesores_db, preferencias_manuales):
         PENALTY_HARD = 10000
         PENALTY_LOAD = 5000
         SCORE = 0
@@ -131,33 +118,39 @@ class IndividuoHorario:
         
         for gen in self.genes:
             prof_nom = gen.prof_asignado
-            prof_info = profesores_db.get(prof_nom, {})
+            prof_info_static = profesores_db.get(prof_nom, {})
+            # Preferencias dinámicas (Desde la UI)
+            prof_prefs = preferencias_manuales.get(prof_nom, {
+                'dias_deseados': ['Lu','Ma','Mi','Ju','Vi'], 
+                'hora_entrada': '07:00', 
+                'hora_salida': '20:00'
+            })
             
             # Carga
             creditos_pago = calcular_creditos_pagables(gen.curso_data['creditos'], gen.curso_data['cupo'])
             if prof_nom in carga_actual: carga_actual[prof_nom] += creditos_pago
             
-            # Restricciones
-            if gen.curso_data['cupo'] >= 85 and prof_info.get('acepta_grandes', 0) == 0:
+            # C1: Secciones Grandes
+            if gen.curso_data['cupo'] >= 85 and prof_info_static.get('acepta_grandes', 0) == 0:
                 SCORE -= PENALTY_HARD; CONFLICTS += 1
             
-            # Preferencia horaria (Suave)
+            # C3/C4: Preferencia horaria (Manual UI)
             h_min = a_minutos(gen.hora_inicio)
             h_fin = h_min + int(max(gen.bloque['horas']) * 60)
-            p_ini = a_minutos(prof_info.get('hora_entrada', '07:00'))
-            p_fin = a_minutos(prof_info.get('hora_salida', '20:00'))
+            p_ini = a_minutos(prof_prefs.get('hora_entrada', '07:00'))
+            p_fin = a_minutos(prof_prefs.get('hora_salida', '20:00'))
             if h_min < p_ini or h_fin > p_fin: SCORE -= 500
 
-            # Días Deseados (Suave)
-            dias_des = prof_info.get('dias_deseados', [])
+            # C2: Días Deseados (Manual UI)
+            dias_des = prof_prefs.get('dias_deseados', [])
             coincidencias = sum(1 for d in gen.bloque['dias'] if d in dias_des)
             SCORE += (coincidencias * 20)
 
-            # Prioridad 1
+            # Prioridad 1 Candidato
             if gen.curso_data['candidatos'] and prof_nom == gen.curso_data['candidatos'][0]:
                 SCORE += 100
 
-            # Conflictos Duros
+            # Conflictos Duros (Solapamientos)
             for dia, duracion in zip(gen.bloque['dias'], gen.bloque['horas']):
                 ini = a_minutos(gen.hora_inicio)
                 fin = ini + int(duracion * 60)
@@ -193,9 +186,10 @@ class IndividuoHorario:
         return self.fitness
 
 class AlgoritmoGenetico:
-    def __init__(self, cursos_demanda, profesores_db, zona_config, salones, pop_size, mutation_rate):
-        self.cursos_demanda = cursos_demanda
+    def __init__(self, cursos_expandidos, profesores_db, pref_manuales, zona_config, salones, pop_size, mutation_rate):
+        self.cursos_demanda = cursos_expandidos
         self.profesores_db = profesores_db
+        self.pref_manuales = pref_manuales
         self.zona_config = zona_config
         self.salones = salones
         self.pop_size = pop_size
@@ -203,7 +197,11 @@ class AlgoritmoGenetico:
         self.population = []
         self.bloques_ref = generar_bloques_horarios()
 
-    def _crear_gen_aleatorio(self, curso):
+    def _crear_gen_aleatorio(self, curso_dict):
+        # curso_dict tiene {'data': curso_original, 'seccion': 1}
+        curso = curso_dict['data']
+        seccion = curso_dict['seccion']
+        
         bloques_validos = [b for b in self.bloques_ref if b['creditos'] == curso['creditos']]
         if not bloques_validos: bloques_validos = self.bloques_ref[:1]
         
@@ -215,15 +213,15 @@ class AlgoritmoGenetico:
             for d, h in zip(bloque['dias'], bloque['horas']):
                 if not es_horario_valido_en_zona(d, hora, h, self.zona_config):
                     valido = False; break
-            if valido: return ClaseGene(curso, bloque, hora, salon)
-        return ClaseGene(curso, bloques_validos[0], self.zona_config['horarios_inicio'][0], self.salones[0])
+            if valido: return ClaseGene(curso, bloque, hora, salon, seccion)
+        return ClaseGene(curso, bloques_validos[0], self.zona_config['horarios_inicio'][0], self.salones[0], seccion)
 
     def inicializar(self):
         self.population = []
         for _ in range(self.pop_size):
             genes = [self._crear_gen_aleatorio(c) for c in self.cursos_demanda]
             ind = IndividuoHorario(genes)
-            ind.calcular_fitness(self.profesores_db)
+            ind.calcular_fitness(self.profesores_db, self.pref_manuales)
             self.population.append(ind)
 
     def evolucionar(self, generaciones, progress_bar, status_text):
@@ -256,45 +254,74 @@ class AlgoritmoGenetico:
                                 gen.hora_inicio = random.choice(self.zona_config['horarios_inicio'])
                                 gen.salon = random.choice(self.salones)
                 
-                hijo.calcular_fitness(self.profesores_db)
+                hijo.calcular_fitness(self.profesores_db, self.pref_manuales)
                 nueva_pop.append(hijo)
             self.population = nueva_pop
             progress_bar.progress((g+1)/generaciones)
-            if g % 10 == 0: status_text.text(f"Generación {g+1}/{generaciones} | Fitness: {mejor_historico.fitness:.0f} | Conflictos: {mejor_historico.hard_conflicts}")
+            if g % 10 == 0: status_text.text(f"Gen {g+1} | Fit: {mejor_historico.fitness:.0f} | Conf: {mejor_historico.hard_conflicts}")
             
         return mejor_historico
 
-def procesar_excel_completo(file):
+def procesar_excel_agrupado(file):
     try:
         xls = pd.ExcelFile(file)
+        # 1. Cursos
         df_cursos = pd.read_excel(xls, 'Cursos')
-        cursos_lista = []
+        cursos_expandidos = []
+        
+        # Mapeo de columnas para robustez
+        cols_map = {
+            'CODIGO': 'codigo', 'NOMBRE': 'nombre', 'CREDITOS': 'creditos',
+            'TOTAL_MATRICULA': 'total_estudiantes', 'CUPO_SECCION': 'cupo', 'CANDIDATOS': 'candidatos'
+        }
+        
+        # Iterar el excel
         for _, row in df_cursos.iterrows():
-            cands = str(row.get('Candidatos', 'Staff')).split(',')
-            cands = [c.strip() for c in cands if c.strip()]
-            cursos_lista.append({
-                'codigo': str(row.get('Codigo', 'UNK')),
-                'nombre': str(row.get('Nombre', 'Curso')),
-                'creditos': int(row.get('Creditos', 3)),
-                'cupo': int(row.get('Cupo', 30)),
-                'candidatos': cands
-            })
+            # Buscar columnas ignorando mayusculas
+            data_row = {}
+            for k, v in cols_map.items():
+                for c in df_cursos.columns:
+                    if k in str(c).upper(): data_row[v] = row[c]; break
             
+            # Limpiar datos
+            cands = str(data_row.get('candidatos', 'Staff')).split(',')
+            cands = [c.strip() for c in cands if c.strip()]
+            
+            total_est = int(data_row.get('total_estudiantes', 0))
+            cupo_max = int(data_row.get('cupo', 30))
+            if cupo_max <= 0: cupo_max = 30
+            
+            # CALCULO AUTOMATICO DE SECCIONES
+            num_secciones = math.ceil(total_est / cupo_max)
+            if num_secciones == 0 and total_est > 0: num_secciones = 1
+            if num_secciones == 0: continue # Curso sin estudiantes
+
+            obj_curso = {
+                'codigo': str(data_row.get('codigo', 'UNK')),
+                'nombre': str(data_row.get('nombre', 'Curso')),
+                'creditos': int(data_row.get('creditos', 3)),
+                'cupo': cupo_max, # Cupo por sección individual
+                'candidatos': cands
+            }
+            
+            # Expandir en la lista de demanda
+            for i in range(num_secciones):
+                cursos_expandidos.append({
+                    'data': obj_curso,
+                    'seccion': f"{i+1:03d}" # Genera 001, 002, 003
+                })
+
+        # 2. Profesores
         df_profes = pd.read_excel(xls, 'Profesores')
         profes_db = {}
         for _, row in df_profes.iterrows():
             nombre = str(row.get('Nombre', 'Unknown')).strip()
-            dias_raw = str(row.get('Dias_Deseados', '')).replace(';',',')
-            dias_list = [d.strip() for d in dias_raw.split(',') if d.strip()]
             profes_db[nombre] = {
                 'carga_min': float(row.get('Carga_Min', 0)),
                 'carga_max': float(row.get('Carga_Max', 12)),
-                'acepta_grandes': int(row.get('Acepta_Grandes', 0)),
-                'hora_entrada': str(row.get('Hora_Entrada', '07:00')),
-                'hora_salida': str(row.get('Hora_Salida', '20:00')),
-                'dias_deseados': dias_list
+                'acepta_grandes': int(row.get('Acepta_Grandes', 0))
             }
-        return cursos_lista, profes_db
+        return cursos_expandidos, profes_db
     except Exception as e: return None, str(e)
 
 # ========================================================
@@ -302,172 +329,159 @@ def procesar_excel_completo(file):
 # ========================================================
 
 def main():
-    # Sidebar: Panel de Control
+    # Inicializar Session State para Preferencias
+    if 'pref_manuales' not in st.session_state: st.session_state.pref_manuales = {}
+    if 'data_cursos' not in st.session_state: st.session_state.data_cursos = None
+    if 'data_profes' not in st.session_state: st.session_state.data_profes = None
+    if 'resultado' not in st.session_state: st.session_state.resultado = None
+
+    # Sidebar
     with st.sidebar:
         st.title("🎛️ Panel de Control")
         st.markdown("---")
         
         st.subheader("1. Carga de Datos")
         file = st.file_uploader("Archivo Excel (.xlsx)", type=['xlsx'])
-        if st.button("Descargar Plantilla Ejemplo"):
-            st.info("Función placeholder para descargar excel ejemplo.")
         
         st.subheader("2. Configuración")
         zona = st.selectbox("Zona del Campus", ["Central", "Periférica"])
         
-        with st.expander("⚙️ Parámetros Avanzados AG"):
+        with st.expander("⚙️ Parámetros Avanzados"):
             pop = st.slider("Población", 50, 500, 100)
-            gen = st.slider("Generaciones", 50, 1000, 150)
-            mut = st.slider("Tasa Mutación", 0.0, 0.5, 0.15)
+            gen = st.slider("Generaciones", 50, 1000, 100)
+            mut = st.slider("Mutación", 0.0, 0.5, 0.15)
         
         st.markdown("---")
-        st.caption("UPRM Timetabling System v3.0")
+        
+        # GESTOR DE PREFERENCIAS MANUALES EN SIDEBAR (ACCESO RÁPIDO)
+        if st.session_state.data_profes:
+            st.subheader("🕒 Preferencias Docentes")
+            prof_list = list(st.session_state.data_profes.keys())
+            prof_sel = st.selectbox("Editar Profesor:", prof_list)
+            
+            # Cargar valores actuales o default
+            curr_pref = st.session_state.pref_manuales.get(prof_sel, {})
+            
+            dias = st.multiselect("Días deseados", ["Lu","Ma","Mi","Ju","Vi"], 
+                                default=curr_pref.get('dias_deseados', ["Lu","Ma","Mi","Ju","Vi"]))
+            
+            c1, c2 = st.columns(2)
+            h_ini = c1.time_input("Hora Entrada", 
+                                value=datetime.strptime(curr_pref.get('hora_entrada', "07:00"), "%H:%M").time())
+            h_fin = c2.time_input("Hora Salida", 
+                                value=datetime.strptime(curr_pref.get('hora_salida', "20:00"), "%H:%M").time())
+            
+            # Guardar en tiempo real
+            st.session_state.pref_manuales[prof_sel] = {
+                'dias_deseados': dias,
+                'hora_entrada': h_ini.strftime("%H:%M"),
+                'hora_salida': h_fin.strftime("%H:%M")
+            }
+            st.success(f"Config: {prof_sel}")
 
     # Área Principal
-    st.title("🎓 Sistema de Programación Académica UPRM")
-    st.markdown("Optimización inteligente de horarios basada en **Carga Docente** y **Preferencias**.")
+    st.title("🎓 Sistema de Programación Académica")
+    st.markdown("Generación automática de secciones y optimización de horarios.")
     st.markdown("---")
-
-    # Inicializar Session State
-    if 'data_cursos' not in st.session_state: st.session_state.data_cursos = None
-    if 'data_profes' not in st.session_state: st.session_state.data_profes = None
-    if 'resultado' not in st.session_state: st.session_state.resultado = None
 
     # Lógica de Carga
     if file:
-        if st.session_state.data_cursos is None:
-            cursos, profes = procesar_excel_completo(file)
+        if st.button("Procesar Archivo Excel", key="load_btn"):
+            cursos, profes = procesar_excel_agrupado(file)
             if cursos:
                 st.session_state.data_cursos = cursos
                 st.session_state.data_profes = profes
-                st.toast("✅ Archivo cargado y procesado correctamente", icon="📂")
+                # Inicializar preferencias por defecto
+                for p in profes:
+                    if p not in st.session_state.pref_manuales:
+                        st.session_state.pref_manuales[p] = {
+                            'dias_deseados': ["Lu","Ma","Mi","Ju","Vi"],
+                            'hora_entrada': "07:00", 'hora_salida': "20:00"
+                        }
+                st.rerun()
             else:
-                st.error(f"Error en archivo: {profes}")
+                st.error(f"Error: {profes}")
 
-    # Si no hay datos, mostrar bienvenida
     if st.session_state.data_cursos is None:
-        st.info("👈 Por favor, sube el archivo Excel de planificación en el menú lateral para comenzar.")
-        st.markdown("""
-            #### ¿Cómo funciona?
-            1. Sube tu Excel con pestañas `Cursos` y `Profesores`.
-            2. Ajusta la Zona (Central/Periférica).
-            3. Ejecuta el Algoritmo Genético.
-            4. Visualiza horarios y análisis de carga docente en tiempo real.
-        """)
+        st.info("👈 Sube el archivo Excel para comenzar.")
         return
 
-    # Si hay datos, mostrar Dashboard
+    # Dashboard Inicial
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Cursos a Programar", len(st.session_state.data_cursos))
-    col2.metric("Profesores Disponibles", len(st.session_state.data_profes))
-    col3.metric("Zona Seleccionada", zona)
-    col4.metric("Estado", "Listo para Ejecutar" if not st.session_state.resultado else "Completado", 
-                delta="Esperando..." if not st.session_state.resultado else "Finalizado", delta_color="normal")
+    total_est = sum([c['data']['cupo'] for c in st.session_state.data_cursos]) # Aprox, o sumar de excel si se guardara
+    col1.metric("Secciones a Crear", len(st.session_state.data_cursos))
+    col2.metric("Profesores Activos", len(st.session_state.data_profes))
+    col3.metric("Zona", zona)
+    col4.metric("Estado", "Listo" if not st.session_state.resultado else "Completado")
 
-    # Botón de Ejecución
-    if st.button("🚀 Iniciar Optimización de Horarios", type="primary"):
-        with st.status("Ejecutando Algoritmo Genético...", expanded=True) as status:
-            st.write("🧬 Inicializando población...")
-            prog_bar = st.progress(0)
-            status_text = st.empty()
+    # Botón Ejecutar
+    if st.button("🚀 Iniciar Optimización", type="primary"):
+        with st.status("Optimizando Horarios...", expanded=True) as status:
+            prog = st.progress(0)
+            text = st.empty()
             
             ga = AlgoritmoGenetico(
                 st.session_state.data_cursos,
                 st.session_state.data_profes,
+                st.session_state.pref_manuales, # Pasamos las preferencias de la UI
                 ZonaConfig.CENTRAL if zona == "Central" else ZonaConfig.PERIFERICA,
                 MATEMATICAS_SALONES_FIJOS,
                 pop, mut
             )
             
-            start_t = time.time()
-            mejor = ga.evolucionar(gen, prog_bar, status_text)
+            start = time.time()
+            mejor = ga.evolucionar(gen, prog, text)
             st.session_state.resultado = mejor
-            
-            status.update(label="✅ Optimización Finalizada", state="complete", expanded=False)
+            status.update(label="✅ Finalizado", state="complete", expanded=False)
         st.balloons()
-        st.rerun()
 
-    # Visualización de Resultados
+    # Resultados
     if st.session_state.resultado:
         res = st.session_state.resultado
         st.divider()
         
-        # Métricas de Resultado
-        kpi1, kpi2, kpi3 = st.columns(3)
-        kpi1.metric("Fitness Score", f"{res.fitness:.0f}")
-        kpi2.metric("Conflictos Duros", res.hard_conflicts, delta="-0 es ideal", delta_color="inverse")
+        k1, k2 = st.columns(2)
+        k1.metric("Score Calidad", int(res.fitness))
+        k2.metric("Conflictos", res.hard_conflicts, delta_color="inverse")
         
-        # Crear DataFrame de Resultados
+        # DataFrame Resultante
         rows = []
         for g in res.genes:
-            cred_reales = calcular_creditos_pagables(g.curso_data['creditos'], g.curso_data['cupo'])
+            cred_pago = calcular_creditos_pagables(g.curso_data['creditos'], g.curso_data['cupo'])
             rows.append({
                 "Curso": g.curso_data['codigo'],
+                "Sección": g.seccion_num,
                 "Nombre": g.curso_data['nombre'],
                 "Profesor": g.prof_asignado,
                 "Cupo": g.curso_data['cupo'],
-                "Créditos Pago": cred_reales,
+                "Créditos Pago": cred_pago,
                 "Días": "".join(g.bloque['dias']),
-                "Horario": f"{g.hora_inicio} - {a_minutos(g.hora_inicio) + int(max(g.bloque['horas'])*60)//60}:{int(max(g.bloque['horas'])*60)%60:02d}",
+                "Horario": f"{g.hora_inicio} - {a_minutos(g.hora_inicio)+int(max(g.bloque['horas'])*60)//60}:{int(max(g.bloque['horas'])*60)%60:02d}",
                 "Salón": g.salon
             })
         df_res = pd.DataFrame(rows)
-
-        # Tabs de visualización profesional
-        tab_h, tab_c, tab_m, tab_d = st.tabs(["📅 Horario Detallado", "⚖️ Carga Docente", "🧩 Matriz Visual", "📥 Exportar"])
-
-        with tab_h:
-            st.subheader("Horario General")
-            filtro_prof = st.multiselect("Filtrar por Profesor", options=df_res["Profesor"].unique())
-            df_show = df_res if not filtro_prof else df_res[df_res["Profesor"].isin(filtro_prof)]
-            st.dataframe(df_show, use_container_width=True, hide_index=True)
-
-        with tab_c:
-            st.subheader("Análisis de Carga Académica")
+        
+        t1, t2, t3 = st.tabs(["📅 Horario", "⚖️ Cargas", "📥 Exportar"])
+        
+        with t1:
+            st.dataframe(df_res, use_container_width=True)
+            
+        with t2:
             load_data = []
-            for prof, data in st.session_state.data_profes.items():
-                carga_real = res.prof_stats.get(prof, 0)
-                status = "Optimo"
-                if carga_real < data['carga_min']: status = "Subcarga"
-                if carga_real > data['carga_max']: status = "Sobrecarga"
-                
-                load_data.append({
-                    "Profesor": prof,
-                    "Carga Real": carga_real,
-                    "Mínimo": data['carga_min'],
-                    "Máximo": data['carga_max'],
-                    "Estado": status
-                })
-            df_load = pd.DataFrame(load_data)
+            for p, d in st.session_state.data_profes.items():
+                real = res.prof_stats.get(p, 0)
+                estado = "OK"
+                if real < d['carga_min']: estado = "Subcarga"
+                if real > d['carga_max']: estado = "Sobrecarga"
+                load_data.append({"Profesor": p, "Carga Real": real, "Min": d['carga_min'], "Max": d['carga_max'], "Estado": estado})
             
-            # Gráfico de Barras con Plotly
-            fig = px.bar(df_load, x="Profesor", y="Carga Real", color="Estado",
-                         color_discrete_map={"Optimo": "#2ecc71", "Subcarga": "#f1c40f", "Sobrecarga": "#e74c3c"},
-                         title="Carga Real vs Límites")
-            
-            # Añadir líneas de referencia visual (ejemplo con promedio, o markers)
-            fig.update_layout(xaxis_tickangle=-45)
+            df_l = pd.DataFrame(load_data)
+            fig = px.bar(df_l, x="Profesor", y="Carga Real", color="Estado", 
+                         color_discrete_map={"OK":"#2ecc71", "Subcarga":"#f1c40f", "Sobrecarga":"#e74c3c"})
             st.plotly_chart(fig, use_container_width=True)
             
-            with st.expander("Ver tabla de datos de carga"):
-                st.dataframe(df_load, use_container_width=True)
-
-        with tab_m:
-            st.subheader("Matriz de Ocupación")
-            try:
-                pivot = df_res.pivot_table(index="Horario", columns="Días", values="Curso", aggfunc=lambda x: ' '.join(x))
-                st.dataframe(pivot, use_container_width=True)
-            except:
-                st.warning("Datos insuficientes para generar matriz.")
-
-        with tab_d:
-            st.subheader("Descargar Resultados")
-            col_d1, col_d2 = st.columns(2)
-            csv = df_res.to_csv(index=False).encode('utf-8')
-            col_d1.download_button("📄 Descargar Horario (CSV)", csv, "horario_final.csv", "text/csv", type="primary")
-            
-            csv_load = df_load.to_csv(index=False).encode('utf-8')
-            col_d2.download_button("📊 Descargar Reporte de Cargas (CSV)", csv_load, "reporte_cargas.csv", "text/csv")
+        with t3:
+            st.download_button("Descargar CSV", df_res.to_csv(index=False).encode('utf-8'), "horario.csv")
 
 if __name__ == "__main__":
     main()
