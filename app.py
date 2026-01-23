@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
 # ==============================================================================
-# 1. ESTÉTICA PLATINUM (CONTRASTE MEJORADO & PERSISTENCIA)
+# 1. ESTÉTICA PLATINUM (SIN CAMBIOS VISUALES)
 # ==============================================================================
 
 st.set_page_config(page_title="UPRM Scheduler Platinum", page_icon="🏛️", layout="wide")
@@ -84,15 +84,13 @@ st.markdown("""
 def generar_bloques_por_zona(zona):
     bloques = {}
     if zona == "CENTRAL":
-        # Empiezan XX:30
         horas_inicio = [h*60 + 30 for h in range(7, 20)] 
     else: # PERIFERICA
-        # Empiezan XX:00
         horas_inicio = [h*60 for h in range(7, 20)]
 
     def add_b(id_base, dias, dur, lbl):
         for h in horas_inicio:
-            if h + dur > 1320: continue # Max 10 PM
+            if h + dur > 1320: continue 
             key = f"{id_base}_{h}"
             bloques[key] = {
                 'id_base': id_base,
@@ -102,7 +100,6 @@ def generar_bloques_por_zona(zona):
                 'label': lbl 
             }
 
-    # BLOQUES ESTÁNDAR (Garantizan MISMA HORA Y SALÓN para todos los días del bloque)
     # 3 CRÉDITOS
     add_b(1, ['Lu', 'Mi', 'Vi'], 50, "LMV")
     add_b(2, ['Ma', 'Ju'], 80, "MJ")
@@ -168,14 +165,11 @@ class HorarioGen:
     def __init__(self, seccion, profesor_nombre, bloque_key, salon_obj):
         self.seccion = seccion
         self.profesor_nombre = profesor_nombre
-        # NOTA: Al guardar UN SOLO bloque_key y UN SOLO salon_obj,
-        # garantizamos matemáticamente que todos los días de ese bloque
-        # tendrán la misma hora y el mismo salón.
         self.bloque_key = bloque_key
         self.salon_obj = salon_obj
 
 # ==============================================================================
-# 4. MOTOR INTELIGENTE
+# 4. MOTOR INTELIGENTE (CON BALANCEO DE CARGA OBLIGATORIO)
 # ==============================================================================
 
 class PlatinumEngine:
@@ -240,11 +234,39 @@ class PlatinumEngine:
         genes = []
         oc_prof = {}
         oc_salon = {}
+        
+        # RASTREO DE CARGA EN TIEMPO REAL
+        cargas_actuales = {p: 0 for p in self.profesores_dict}
+
+        # Ordenar: Grandes primero
         secciones_ordenadas = sorted(self.secciones, key=lambda x: (not x.es_grande, random.random()))
         
         for sec in secciones_ordenadas:
-            prof = random.choice(sec.candidatos) if sec.candidatos else "TBA"
+            # SELECCIÓN DE PROFESOR CON PRIORIDAD DE CARGA MINIMA
+            prof = "TBA"
+            if sec.candidatos:
+                # Filtrar candidatos que no excedan su máximo (considerando los créditos de este curso)
+                validos = []
+                for cand in sec.candidatos:
+                    if cand in self.profesores_dict:
+                        info = self.profesores_dict[cand]
+                        if cargas_actuales[cand] + sec.creditos <= info.carga_max:
+                            validos.append(cand)
+                
+                if validos:
+                    # ORDENAR CANDIDATOS: 
+                    # 1. Prioridad: Quienes NO han cumplido el mínimo.
+                    # 2. Prioridad: Quienes tienen menos carga en general.
+                    validos.sort(key=lambda c: (cargas_actuales[c] >= self.profesores_dict[c].carga_min, cargas_actuales[c]))
+                    
+                    # Escoger el más necesitado
+                    prof = validos[0]
+                    cargas_actuales[prof] += sec.creditos
+                else:
+                    # Si todos están llenos, asignar TBA (esto generará conflicto soft luego) o random
+                    prof = "TBA"
             
+            # SELECCIÓN DE HORARIO
             if sec.creditos == 3: pool_b = self.keys_3cr
             elif sec.creditos == 4: pool_b = self.keys_4cr
             else: pool_b = self.keys_5cr
@@ -284,44 +306,73 @@ class PlatinumEngine:
         oc_prof = {}
         oc_salon = {}
         
+        # Calcular cargas finales para validación
+        cargas_finales = {p: 0 for p in self.profesores_dict}
+
         for idx, gen in enumerate(genes):
+            # Sumar carga
+            if gen.profesor_nombre != "TBA" and gen.profesor_nombre in cargas_finales:
+                cargas_finales[gen.profesor_nombre] += gen.seccion.creditos
+
             bloque = self.bloques_tiempo[gen.bloque_key]
             ini, end = bloque['inicio'], bloque['inicio'] + bloque['duracion']
             
+            # Universal
             if 'Ma' in bloque['dias'] or 'Ju' in bloque['dias']:
                 u_ini, u_fin = self.hora_univ_range
                 if max(ini, u_ini) < min(end, u_fin):
-                    conflictos.append(idx)
+                    conflictos.append(f"UNIV_IDX_{idx}")
 
+            # Preferencias
             if gen.profesor_nombre != "TBA" and gen.profesor_nombre in self.preferencias:
                 restricciones = self.preferencias[gen.profesor_nombre]
                 for r in restricciones:
                     if r['dia'] in bloque['dias']:
                         if max(ini, r['ini']) < min(end, r['fin']):
-                            conflictos.append(idx)
+                            conflictos.append(f"PREF_IDX_{idx}")
                             break
 
             for dia in bloque['dias']:
+                # Salon
                 ks = (gen.salon_obj.codigo, dia)
                 if ks not in oc_salon: oc_salon[ks] = []
                 for (t1, t2, o_idx) in oc_salon[ks]:
                     if max(ini, t1) < min(end, t2):
-                        conflictos.append(idx)
-                        conflictos.append(o_idx)
+                        conflictos.append(f"SALON_{idx}_{o_idx}")
                 oc_salon[ks].append((ini, end, idx))
                 
+                # Profesor
                 if gen.profesor_nombre != "TBA":
                     kp = (gen.profesor_nombre, dia)
                     if kp not in oc_prof: oc_prof[kp] = []
                     for (t1, t2, o_idx) in oc_prof[kp]:
                         if max(ini, t1) < min(end, t2):
-                            conflictos.append(idx)
-                            conflictos.append(o_idx)
+                            conflictos.append(f"PROF_{idx}_{o_idx}")
                     oc_prof[kp].append((ini, end, idx))
+        
+        # VALIDACIÓN DE CARGA MÍNIMA (NUEVO)
+        # Si un profesor queda por debajo del mínimo, es un conflicto grave.
+        for p_nombre, p_obj in self.profesores_dict.items():
+            load = cargas_finales[p_nombre]
+            if load < p_obj.carga_min and load > 0: 
+                # Solo penalizamos si tiene algo asignado pero no llega al minimo. 
+                # Si tiene 0 puede ser que no era candidato para nada (aunque raro).
+                # Para forzar asignacion, penalizamos si load < min.
+                conflictos.append(f"MINLOAD_{p_nombre}")
+
         return list(set(conflictos))
 
     def reparar(self, genes):
-        rotos = self.detectar_conflictos(genes)
+        rotos_ids = self.detectar_conflictos(genes)
+        # Extraer indices numéricos de los strings de error
+        rotos = []
+        for r in rotos_ids:
+            parts = r.split('_')
+            # Intentar extraer números
+            for p in parts:
+                if p.isdigit(): rotos.append(int(p))
+        
+        rotos = list(set(rotos))
         if not rotos: return genes
         
         oc_prof = {}
@@ -406,7 +457,7 @@ class PlatinumEngine:
         return best_ind, abs(best_fit)
 
 # ==============================================================================
-# 5. INTERFAZ GRÁFICA PLATINUM (CON PERSISTENCIA)
+# 5. INTERFAZ GRÁFICA PLATINUM (PERSISTENTE)
 # ==============================================================================
 
 def main():
@@ -417,7 +468,7 @@ def main():
         st.markdown("<div style='font-size: 3rem;'>🏛️</div>", unsafe_allow_html=True)
     with c2:
         st.title("UPRM ACADEMIC SCHEDULER")
-        st.caption("PLATINUM EDITION | ESTABLE & PERSISTENTE")
+        st.caption("PLATINUM EDITION | BALANCED LOAD")
 
     st.markdown("---")
 
@@ -440,8 +491,8 @@ def main():
 
     # --- ESTADO DE SESIÓN (PERSISTENCIA) ---
     if 'prefs' not in st.session_state: st.session_state.prefs = {} 
-    if 'horario_final' not in st.session_state: st.session_state.horario_final = None # DataFrame Resultante
-    if 'engine_data' not in st.session_state: st.session_state.engine_data = None # Para graficas extra
+    if 'horario_final' not in st.session_state: st.session_state.horario_final = None 
+    if 'engine_data' not in st.session_state: st.session_state.engine_data = None 
 
     if uploaded_file:
         try:
@@ -478,10 +529,9 @@ def main():
                     for r in st.session_state.prefs[prof_sel]:
                         st.code(f"{r['dia']}: {mins_to_str(r['ini'])} - {mins_to_str(r['fin'])}")
 
-            # --- BOTON GENERAR (SOLO AQUÍ SE CORRE LA IA) ---
+            # --- BOTON GENERAR ---
             st.markdown("###")
             if st.button("🚀 GENERAR HORARIO MAESTRO", type="primary", use_container_width=True):
-                # PROCESAR INPUT
                 secciones = []
                 for _, row in df_cur.iterrows():
                     qty = int(row.get('CANTIDAD_SECCIONES', 1))
@@ -508,9 +558,8 @@ def main():
                     st.success("✨ ¡HORARIO PERFECTO GENERADO! (0 Conflictos)")
                     st.balloons()
                 else:
-                    st.warning(f"⚠️ El horario tiene {conflicts} conflictos menores.")
+                    st.warning(f"⚠️ El horario tiene {conflicts} conflictos (incluyendo carga baja).")
 
-                # CONSTRUIR DF Y GUARDAR EN SESIÓN
                 rows = []
                 for g in best_ind:
                     bd = engine.bloques_tiempo[g.bloque_key]
@@ -526,9 +575,9 @@ def main():
                     })
                 
                 st.session_state.horario_final = pd.DataFrame(rows).sort_values('Curso')
-                st.session_state.engine_data = {'profesores': profesores_objs} # Guardar info extra para dashboard
+                st.session_state.engine_data = {'profesores': profesores_objs}
 
-            # --- MOSTRAR RESULTADOS (SI EXISTEN EN SESIÓN) ---
+            # --- MOSTRAR RESULTADOS ---
             if st.session_state.horario_final is not None:
                 df_res = st.session_state.horario_final
                 
@@ -541,14 +590,12 @@ def main():
                     st.download_button("📥 Descargar Excel", buffer.getvalue(), f"Horario_{zona}.xlsx")
                 
                 with tab_prof:
-                    # AQUI YA NO SE REINICIA LA PÁGINA AL CAMBIAR SELECTBOX PORQUE EL DF ESTÁ EN SESSION_STATE
                     col_sel, col_stats = st.columns([1, 3])
                     with col_sel:
                         p_view = st.selectbox("Ver Profesor:", lista_profes)
                         
                         df_p = df_res[df_res['Profesor'] == p_view]
                         
-                        # Buscar info de carga
                         prof_objs = st.session_state.engine_data['profesores']
                         prof_obj = next((p for p in prof_objs if p.nombre == p_view), None)
                         if prof_obj:
@@ -561,7 +608,6 @@ def main():
                         else:
                             st.markdown(f"**Horario Semanal: {p_view}**")
                             
-                            # GRÁFICO GANTT
                             plot_data = []
                             dia_map = {'Lu': '2023-01-02', 'Ma': '2023-01-03', 'Mi': '2023-01-04', 'Ju': '2023-01-05', 'Vi': '2023-01-06'}
                             
@@ -592,8 +638,7 @@ def main():
                                 fig.update_layout(xaxis=dict(tickformat="%I:%M %p"), plot_bgcolor='#111', paper_bgcolor='#111', font_color='white')
                                 st.plotly_chart(fig, use_container_width=True)
                             
-                            # GRÁFICO DE CARGA
-                            carga_est = len(df_p) * 3 # Estimado
+                            carga_est = len(df_p) * 3 
                             fig_bar = go.Figure(go.Indicator(
                                 mode = "gauge+number", value = carga_est,
                                 title = {'text': "Carga Est. (Créditos)"},
