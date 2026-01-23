@@ -1,446 +1,418 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import random
 import copy
-import time
-import math
-import re
-from datetime import datetime
+import plotly.express as px
+from datetime import datetime, timedelta
 
 # ========================================================
-# 1. CONFIGURACIÓN
+# 1. CONFIGURACIÓN Y CONSTANTES (MODELO MATEMÁTICO)
 # ========================================================
+st.set_page_config(page_title="UPRM Auto-Scheduler Thesis Ed.", page_icon="🧬", layout="wide")
 
-st.set_page_config(page_title="UPRM Auto-Scheduler V10", page_icon="⚡", layout="wide")
-
-st.markdown("""
-    <style>
-    .main { background-color: #f4f6f9; }
-    .stMetric { background-color: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 10px; }
-    h1 { color: #1565C0; } 
-    </style>
-""", unsafe_allow_html=True)
-
-# ========================================================
-# 2. LÓGICA DE TIEMPO Y ZONAS
-# ========================================================
-
-def a_minutos(hhmm):
-    try:
-        if isinstance(hhmm, str):
-            hhmm = hhmm.lower().replace('am','').replace('pm','').strip()
-            h, m = map(int, hhmm.split(":"))
-            return h * 60 + m
-        return 0
-    except: return 0
-
-class ZonaConfig:
-    CENTRAL = {
-        "nombre": "Zona Central",
-        "horarios_inicio": ["07:30", "08:30", "09:30", "10:30", "11:30", "12:30", "13:30", "14:30", "15:30", "16:30"],
-        "bloqueo_hlu": {"dias": ["Ma", "Ju"], "inicio": a_minutos("10:30"), "fin": a_minutos("12:30")}
-    }
-    PERIFERICA = {
-        "nombre": "Zona Periférica",
-        "horarios_inicio": ["07:00", "08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00"],
-        "bloqueo_hlu": {"dias": ["Ma", "Ju"], "inicio": a_minutos("10:00"), "fin": a_minutos("12:00")}
-    }
-
-def get_nivel_curso(codigo):
-    match = re.search(r'(\d{4})', codigo)
-    if match:
-        num = int(match.group(1))
-        return "GRAD" if num >= 5000 else "SUBGRAD"
-    return "SUBGRAD"
-
-def generar_patrones_validos(creditos, nivel_curso):
-    patrones = []
-    if nivel_curso == "GRAD":
-        for dia in ["Lu", "Ma", "Mi", "Ju", "Vi"]:
-            patrones.append({"dias": [dia], "horas": [3.0], "desc": f"Graduado {dia}"})
-        return patrones
-
-    if creditos == 3:
-        patrones.append({"dias": ["Lu","Mi","Vi"], "horas": [0.83, 0.83, 0.83], "desc": "LWV"})
-        patrones.append({"dias": ["Ma","Ju"], "horas": [1.25, 1.25], "desc": "MJ"})
-    elif creditos == 4:
-        patrones.append({"dias": ["Lu","Ma","Mi","Ju"], "horas": [0.83]*4, "desc": "LMWJ"})
-        patrones.append({"dias": ["Lu","Mi"], "horas": [1.83, 1.83], "desc": "LW"})
-        patrones.append({"dias": ["Ma","Ju"], "horas": [1.83, 1.83], "desc": "MJ"})
-    elif creditos == 5:
-        patrones.append({"dias": ["Lu","Ma","Mi","Ju","Vi"], "horas": [0.83]*5, "desc": "Diaria"})
-    else:
-        patrones.append({"dias": ["Ma"], "horas": [creditos], "desc": "Generico"})
-    return patrones
-
-def calcular_creditos_pagables(creditos, cupo):
-    if cupo >= 85: return creditos + 3
-    elif cupo >= 60: return creditos + 1.5
-    return creditos
-
-def es_horario_valido(dia, hora_inicio_str, duracion, zona_config):
-    ini = a_minutos(hora_inicio_str)
-    fin = ini + int(duracion * 60)
-    hlu = zona_config['bloqueo_hlu']
+# Definición de Bloques de Tiempo Estándar (Patrones UPRM)
+# Esto reduce el espacio de búsqueda y garantiza horarios realistas.
+BLOQUES_TIEMPO = {
+    # Patrón Lunes-Miércoles-Viernes (3 Créditos - 50 min)
+    'LWV_0730': {'id': 0, 'dias': ['Lu', 'Mi', 'Vi'], 'inicio': '07:30', 'fin': '08:20', 'label': 'LWV 7:30-8:20'},
+    'LWV_0830': {'id': 1, 'dias': ['Lu', 'Mi', 'Vi'], 'inicio': '08:30', 'fin': '09:20', 'label': 'LWV 8:30-9:20'},
+    'LWV_0930': {'id': 2, 'dias': ['Lu', 'Mi', 'Vi'], 'inicio': '09:30', 'fin': '10:20', 'label': 'LWV 9:30-10:20'},
+    'LWV_1030': {'id': 3, 'dias': ['Lu', 'Mi', 'Vi'], 'inicio': '10:30', 'fin': '11:20', 'label': 'LWV 10:30-11:20'},
+    'LWV_1130': {'id': 4, 'dias': ['Lu', 'Mi', 'Vi'], 'inicio': '11:30', 'fin': '12:20', 'label': 'LWV 11:30-12:20'},
+    'LWV_1230': {'id': 5, 'dias': ['Lu', 'Mi', 'Vi'], 'inicio': '12:30', 'fin': '13:20', 'label': 'LWV 12:30-1:20'},
+    'LWV_1330': {'id': 6, 'dias': ['Lu', 'Mi', 'Vi'], 'inicio': '13:30', 'fin': '14:20', 'label': 'LWV 1:30-2:20'},
+    'LWV_1430': {'id': 7, 'dias': ['Lu', 'Mi', 'Vi'], 'inicio': '14:30', 'fin': '15:20', 'label': 'LWV 2:30-3:20'},
     
-    # Validar HLU
-    if dia in hlu['dias']:
-        if not (fin <= hlu['inicio'] or ini >= hlu['fin']): return False
+    # Patrón Martes-Jueves (3 Créditos - 1h 20min)
+    'MJ_0730': {'id': 8, 'dias': ['Ma', 'Ju'], 'inicio': '07:30', 'fin': '08:50', 'label': 'MJ 7:30-8:50'},
+    'MJ_0900': {'id': 9, 'dias': ['Ma', 'Ju'], 'inicio': '09:00', 'fin': '10:20', 'label': 'MJ 9:00-10:20'},
+    # Hora Universal (10:30 - 12:00) generalmente se evita, pero la ponemos disponible con penalización alta si se desea
+    'MJ_1230': {'id': 10, 'dias': ['Ma', 'Ju'], 'inicio': '12:30', 'fin': '13:50', 'label': 'MJ 12:30-1:50'},
+    'MJ_1400': {'id': 11, 'dias': ['Ma', 'Ju'], 'inicio': '14:00', 'fin': '15:20', 'label': 'MJ 2:00-3:20'},
+    'MJ_1530': {'id': 12, 'dias': ['Ma', 'Ju'], 'inicio': '15:30', 'fin': '16:50', 'label': 'MJ 3:30-4:50'}
+}
+
+# Clases de 4 créditos suelen tener laboratorios o combinaciones, 
+# para este demo asumiremos que se ajustan a bloques de 3 créditos + 1 hora extra o bloques especiales.
+# Para simplificar el MVP, usaremos los bloques estándar.
+
+def str_to_minutes(time_str):
+    h, m = map(int, time_str.split(':'))
+    return h * 60 + m
+
+# ========================================================
+# 2. ESTRUCTURAS DE DATOS (GENOTIPO)
+# ========================================================
+
+class Seccion:
+    """Representa una instancia única de una clase (e.g. MATE3031 Sección 001)"""
+    def __init__(self, id_seccion, curso_info, numero_seccion):
+        self.id = id_seccion
+        self.codigo = curso_info['CODIGO']
+        self.nombre = curso_info['NOMBRE']
+        self.creditos = curso_info['CREDITOS']
+        self.cupo = curso_info['CUPO']
+        self.tipo_salon = curso_info['TIPO_SALON']
+        # Limpiar lista de candidatos
+        raw_cands = str(curso_info['CANDIDATOS']).split(',')
+        self.candidatos = [c.strip() for c in raw_cands if len(c.strip()) > 1]
+        self.num_seccion = f"{numero_seccion:03d}"
+
+class Gen:
+    """
+    Un Gen representa la asignación de RECURSOS a una SECCIÓN específica.
+    Gen = [Sección, Profesor, BloqueTiempo, Salón]
+    """
+    def __init__(self, seccion, profesor, bloque_key, salon):
+        self.seccion = seccion
+        self.profesor = profesor        # String (Nombre)
+        self.bloque_key = bloque_key    # Key del dict BLOQUES_TIEMPO
+        self.salon = salon              # Objeto (Diccionario del salón)
+
+class Cromosoma:
+    """Un individuo completo (Un Horario Completo)"""
+    def __init__(self, genes):
+        self.genes = genes
+        self.fitness = 0.0
+        self.conflictos_hard = []
+        self.conflictos_soft = []
+
+    def calcular_fitness(self, profesores_db):
+        """
+        Función Objetivo f(H) = w_f * Violaciones_Hard + w_s * Violaciones_Soft
+        Objetivo: Maximizar Fitness (o minimizar costo). Aquí usaremos un score que empieza en 0 y resta.
+        """
+        score = 0
+        self.conflictos_hard = []
+        self.conflictos_soft = []
+        
+        PENALTY_HARD = 1000
+        PENALTY_SOFT = 10
+
+        # Estructuras auxiliares para detectar choques rápidamente
+        # Mapa: (Dia, Minuto) -> Lista de ocupación
+        # Para hacerlo eficiente, usaremos buckets por bloque de tiempo.
+        
+        profesor_ocupacion = {} # {NombreProf: [(BloqueID, Curso)]}
+        salon_ocupacion = {}    # {CodigoSalon: [(BloqueID, Curso)]}
+
+        for gen in self.genes:
+            bloque = BLOQUES_TIEMPO[gen.bloque_key]
+            
+            # 1. RESTRICCIÓN FUERTE: Capacidad del Salón
+            if gen.salon['CAPACIDAD'] < gen.seccion.cupo:
+                score -= PENALTY_HARD
+                self.conflictos_hard.append(f"Capacidad: {gen.seccion.codigo}-{gen.seccion.num_seccion} ({gen.seccion.cupo}) excede salón {gen.salon['CODIGO']} ({gen.salon['CAPACIDAD']})")
+
+            # 2. RESTRICCIÓN FUERTE: Tipo de Salón
+            # Normalización simple para comparar
+            req_tipo = str(gen.seccion.tipo_salon).lower().strip()
+            sal_tipo = str(gen.salon['TIPO']).lower().strip()
+            if req_tipo != "general" and req_tipo != sal_tipo:
+                 score -= PENALTY_HARD
+                 self.conflictos_hard.append(f"Tipo Salón: {gen.seccion.codigo} requiere {req_tipo}, asignado a {gen.salon['CODIGO']} ({sal_tipo})")
+
+            # 3. RESTRICCIÓN FUERTE: Choque de Horario (Profesor)
+            if gen.profesor != "TBA":
+                if gen.profesor not in profesor_ocupacion: profesor_ocupacion[gen.profesor] = []
+                
+                # Verificar choques con clases ya procesadas
+                for b_id_ocupado, curso_ocupado in profesor_ocupacion[gen.profesor]:
+                    # Si los bloques se solapan en días y horas
+                    if bloques_solapan(bloque, BLOQUES_TIEMPO[b_id_ocupado]):
+                        score -= PENALTY_HARD
+                        self.conflictos_hard.append(f"Choque Prof: {gen.profesor} tiene {gen.seccion.codigo} y {curso_ocupado} al mismo tiempo.")
+                        break # Solo penalizar una vez por par
+                
+                profesor_ocupacion[gen.profesor].append((gen.bloque_key, gen.seccion.codigo))
+
+            # 4. RESTRICCIÓN FUERTE: Choque de Horario (Salón)
+            sid = gen.salon['CODIGO']
+            if sid not in salon_ocupacion: salon_ocupacion[sid] = []
+            for b_id_ocupado, curso_ocupado in salon_ocupacion[sid]:
+                if bloques_solapan(bloque, BLOQUES_TIEMPO[b_id_ocupado]):
+                    score -= PENALTY_HARD
+                    self.conflictos_hard.append(f"Choque Salón: {sid} ocupado por {gen.seccion.codigo} y {curso_ocupado}.")
+                    break
+            salon_ocupacion[sid].append((gen.bloque_key, gen.seccion.codigo))
+            
+            # 5. RESTRICCIÓN SUAVE: Preferencia de Candidatos
+            # Si el profesor asignado NO está en la lista de candidatos preferidos (pero es apto teóricamente)
+            # En este modelo, asumimos que solo asignamos candidatos válidos, pero si forzamos uno externo:
+            if gen.seccion.candidatos and gen.profesor not in gen.seccion.candidatos and gen.profesor != "TBA":
+                 score -= PENALTY_SOFT * 5 # Penalidad media
+                 self.conflictos_soft.append(f"Preferencia: {gen.profesor} no es candidato ideal para {gen.seccion.codigo}")
+
+        # 6. RESTRICCIONES SUAVES GLOBALES (Carga Académica)
+        for prof, ocupaciones in profesor_ocupacion.items():
+            # Calcular carga total (aprox 3 creditos por curso)
+            carga = len(ocupaciones) * 3 
+            info_prof = profesores_db.get(prof)
+            if info_prof:
+                if carga > info_prof['Carga_Max']:
+                    score -= PENALTY_SOFT * (carga - info_prof['Carga_Max'])
+                    self.conflictos_soft.append(f"Sobrecarga: {prof} tiene {carga} crds (Max: {info_prof['Carga_Max']})")
+                if carga < info_prof['Carga_Min']:
+                    score -= PENALTY_SOFT
+                    self.conflictos_soft.append(f"Subcarga: {prof} tiene {carga} crds (Min: {info_prof['Carga_Min']})")
+
+        self.fitness = score
+        return score
+
+def bloques_solapan(b1, b2):
+    """Retorna True si dos bloques de tiempo tienen conflicto"""
+    # 1. Verificar intersección de días
+    dias1 = set(b1['dias'])
+    dias2 = set(b2['dias'])
+    if not dias1.intersection(dias2):
+        return False # No coinciden días
     
-    # Validar fin del día
-    if fin > a_minutos("22:00"): return False
-    return True
+    # 2. Verificar intersección de horas
+    start1, end1 = str_to_minutes(b1['inicio']), str_to_minutes(b1['fin'])
+    start2, end2 = str_to_minutes(b2['inicio']), str_to_minutes(b2['fin'])
+    
+    # Lógica de solapamiento: (Start1 < End2) y (Start2 < End1)
+    if (start1 < end2) and (start2 < end1):
+        return True
+    
+    return False
 
 # ========================================================
 # 3. ALGORITMO GENÉTICO
 # ========================================================
 
-class ClaseGene:
-    def __init__(self, curso_data, bloque, hora_inicio, salon_obj):
-        self.curso_data = curso_data
-        self.bloque = bloque
-        self.hora_inicio = hora_inicio
-        self.salon_obj = salon_obj
+def generar_poblacion_inicial(secciones, salones, size=50):
+    poblacion = []
+    keys_bloques = list(BLOQUES_TIEMPO.keys())
+    
+    for _ in range(size):
+        genes = []
+        for sec in secciones:
+            # Asignación Aleatoria Inteligente
+            # 1. Elegir profesor de candidatos (o TBA si vacio)
+            prof = random.choice(sec.candidatos) if sec.candidatos else "TBA"
+            
+            # 2. Elegir un bloque de tiempo
+            bloque = random.choice(keys_bloques)
+            
+            # 3. Elegir un salón que cumpla capacidad (Heurística inicial)
+            salones_posibles = [s for s in salones if s['CAPACIDAD'] >= sec.cupo]
+            if not salones_posibles: salones_posibles = salones # Fallback
+            salon = random.choice(salones_posibles)
+            
+            genes.append(Gen(sec, prof, bloque, salon))
         
-        candidatos = curso_data['candidatos']
-        self.prof_asignado = random.choice(candidatos) if candidatos else "TBA"
+        poblacion.append(Cromosoma(genes))
+    return poblacion
 
-class IndividuoHorario:
-    def __init__(self, genes=None):
-        self.genes = genes if genes else []
-        self.fitness = 0.0
-        self.hard_conflicts = 0
-        self.prof_stats = {}
-        self.conflict_details = []
+def torneo_seleccion(poblacion, k=3):
+    seleccionados = random.sample(poblacion, k)
+    return max(seleccionados, key=lambda x: x.fitness)
 
-    def calcular_fitness(self, profesores_db, preferencias_manuales):
-        SCORE = 0; CONFLICTS = 0; self.conflict_details = []
-        PENALTY_HARD = 10000; PENALTY_PREF = 2000; PENALTY_LOAD = 5000
+def cruce(padre1, padre2):
+    """Cruce Uniforme: cada gen (sección) se hereda de P1 o P2"""
+    genes_hijo = []
+    for g1, g2 in zip(padre1.genes, padre2.genes):
+        # 50% probabilidad de heredar de cada uno
+        gen_nuevo = copy.deepcopy(g1) if random.random() > 0.5 else copy.deepcopy(g2)
+        genes_hijo.append(gen_nuevo)
+    return Cromosoma(genes_hijo)
+
+def mutacion(individuo, salones, tasa_mutacion=0.1):
+    keys_bloques = list(BLOQUES_TIEMPO.keys())
+    for gen in individuo.genes:
+        if random.random() < tasa_mutacion:
+            tipo_mutacion = random.choice(['tiempo', 'salon', 'profesor'])
+            
+            if tipo_mutacion == 'tiempo':
+                gen.bloque_key = random.choice(keys_bloques)
+            elif tipo_mutacion == 'salon':
+                # Intentar buscar salón válido
+                salones_ok = [s for s in salones if s['CAPACIDAD'] >= gen.seccion.cupo]
+                gen.salon = random.choice(salones_ok) if salones_ok else random.choice(salones)
+            elif tipo_mutacion == 'profesor':
+                if gen.seccion.candidatos:
+                    gen.profesor = random.choice(gen.seccion.candidatos)
+
+def ejecutar_ga(secciones, salones, profesores_db, pop_size, generaciones, mutacion_rate, progress_bar, status_txt):
+    poblacion = generar_poblacion_inicial(secciones, salones, pop_size)
+    
+    # Evaluar inicial
+    best_overall = None
+    
+    for gen_idx in range(generaciones):
+        for ind in poblacion:
+            ind.calcular_fitness(profesores_db)
         
-        carga_actual = {k: 0 for k in profesores_db.keys()}
-        ocupacion_profesor = {}; ocupacion_salon = {}
+        # Ordenar
+        poblacion.sort(key=lambda x: x.fitness, reverse=True)
+        mejor_actual = poblacion[0]
         
-        for gen in self.genes:
-            prof_nom = gen.prof_asignado
-            prof_info = profesores_db.get(prof_nom, {})
-            prof_prefs = preferencias_manuales.get(prof_nom, {})
-            
-            # --- HARD CONSTRAINTS ---
-            if gen.curso_data['cupo'] > gen.salon_obj['capacidad']:
-                SCORE -= PENALTY_HARD; CONFLICTS += 1
-            
-            tipo_req = gen.curso_data.get('tipo_salon', 'General')
-            if tipo_req != gen.salon_obj['tipo']:
-                SCORE -= PENALTY_HARD; CONFLICTS += 1
-            
-            # Restricciones Fijas (Hard)
-            if gen.curso_data.get('bloque_fijo') and gen.hora_inicio != gen.curso_data['bloque_fijo']:
-                SCORE -= PENALTY_HARD; CONFLICTS += 1
-            
-            if gen.curso_data.get('dias_fijos'):
-                req = gen.curso_data['dias_fijos']
-                # Validación simple: si pide 'MJ' y el bloque no es Ma+Ju -> penalizar
-                pass 
-                
-            # --- PROFESOR Y CARGA ---
-            creditos_pago = calcular_creditos_pagables(gen.curso_data['creditos'], gen.curso_data['cupo'])
-            if prof_nom != "TBA":
-                if prof_nom in carga_actual: carga_actual[prof_nom] += creditos_pago
-                
-                # Preferencias (Soft)
-                p_ini = a_minutos(prof_prefs.get('hora_entrada', '07:00'))
-                clase_ini = a_minutos(gen.hora_inicio)
-                if clase_ini < p_ini: SCORE -= PENALTY_PREF
-                
-                # Choques Temporales (Hard)
-                for dia, duracion in zip(gen.bloque['dias'], gen.bloque['horas']):
-                    ini = a_minutos(gen.hora_inicio); fin = ini + int(duracion * 60)
-                    k_p = (prof_nom, dia)
-                    if k_p not in ocupacion_profesor: ocupacion_profesor[k_p] = []
-                    for (oi, of) in ocupacion_profesor[k_p]:
-                        if not (fin <= oi or ini >= of):
-                            SCORE -= PENALTY_HARD; CONFLICTS += 1; break
-                    ocupacion_profesor[k_p].append((ini, fin))
-
-            # Choque Salón
-            for dia, duracion in zip(gen.bloque['dias'], gen.bloque['horas']):
-                ini = a_minutos(gen.hora_inicio); fin = ini + int(duracion * 60)
-                k_s = (gen.salon_obj['codigo'], dia)
-                if k_s not in ocupacion_salon: ocupacion_salon[k_s] = []
-                for (oi, of) in ocupacion_salon[k_s]:
-                    if not (fin <= oi or ini >= of):
-                        SCORE -= PENALTY_HARD; CONFLICTS += 1; break
-                ocupacion_salon[k_s].append((ini, fin))
-
-        # Cargas
-        for prof_nom, carga in carga_actual.items():
-            if prof_nom == "TBA": continue
-            info = profesores_db.get(prof_nom, {})
-            if carga > info.get('carga_max', 12):
-                SCORE -= PENALTY_LOAD * (carga - info.get('carga_max', 12))
-                CONFLICTS += 1
-
-        self.fitness = SCORE
-        self.hard_conflicts = CONFLICTS
-        self.prof_stats = carga_actual
-        return self.fitness
-
-class AlgoritmoGenetico:
-    def __init__(self, lista_secciones, profesores_db, salones_db, pref_manuales, zona_config, pop_size, mutation_rate):
-        self.lista_secciones = lista_secciones
-        self.profesores_db = profesores_db
-        self.salones_db = salones_db
-        self.pref_manuales = pref_manuales
-        self.zona_config = zona_config
-        self.pop_size = pop_size
-        self.mutation_rate = mutation_rate
-        self.population = []
-        # Eliminada la línea self.bloques_ref = generar_bloques_horarios() que causaba el error
-
-    def _get_salones_validos(self, curso):
-        tipo = curso.get('tipo_salon', 'General')
-        cupo = curso['cupo']
-        return [s for s in self.salones_db if s['tipo'] == tipo and s['capacidad'] >= cupo] or self.salones_db
-
-    def _crear_gen_flexible(self, curso_data):
-        nivel = get_nivel_curso(curso_data['codigo'])
-        patrones = generar_patrones_validos(curso_data['creditos'], nivel)
+        if best_overall is None or mejor_actual.fitness > best_overall.fitness:
+            best_overall = copy.deepcopy(mejor_actual)
         
-        salones_validos = self._get_salones_validos(curso_data)
+        # Visualización progreso
+        progress_bar.progress((gen_idx + 1) / generaciones)
+        status_txt.markdown(f"**Generación {gen_idx+1}:** Fitness: {mejor_actual.fitness:.2f} | Conflictos Hard: {len(mejor_actual.conflictos_hard)}")
         
-        for _ in range(50):
-            patron = random.choice(patrones)
-            hora = curso_data.get('bloque_fijo')
-            if not hora: hora = random.choice(self.zona_config['horarios_inicio'])
-            salon = random.choice(salones_validos)
-            
-            valido = True
-            if not curso_data.get('bloque_fijo'):
-                for d, dur in zip(patron['dias'], patron['horas']):
-                    if not es_horario_valido(d, hora, dur, self.zona_config):
-                        valido = False; break
-            
-            if valido: return ClaseGene(curso_data, patron, hora, salon)
-            
-        return ClaseGene(curso_data, patrones[0], "07:30", salones_validos[0])
-
-    def inicializar(self):
-        self.population = []
-        for _ in range(self.pop_size):
-            genes = [self._crear_gen_flexible(c) for c in self.lista_secciones]
-            ind = IndividuoHorario(genes)
-            ind.calcular_fitness(self.profesores_db, self.pref_manuales)
-            self.population.append(ind)
-
-    def evolucionar(self, generaciones, progress_bar, status_text):
-        self.inicializar()
-        mejor = max(self.population, key=lambda x: x.fitness)
+        # Elitismo (pasar el mejor directo)
+        nueva_poblacion = [best_overall]
         
-        for g in range(generaciones):
-            nueva_pop = []
-            if max(self.population, key=lambda x: x.fitness).fitness > mejor.fitness:
-                mejor = copy.deepcopy(max(self.population, key=lambda x: x.fitness))
-            nueva_pop.append(mejor)
+        # Crear descendencia
+        while len(nueva_poblacion) < pop_size:
+            p1 = torneo_seleccion(poblacion)
+            p2 = torneo_seleccion(poblacion)
+            hijo = cruce(p1, p2)
+            mutacion(hijo, salones, mutacion_rate)
+            nueva_poblacion.append(hijo)
             
-            while len(nueva_pop) < self.pop_size:
-                p1 = max(random.sample(self.population, 3), key=lambda x: x.fitness)
-                p2 = max(random.sample(self.population, 3), key=lambda x: x.fitness)
-                genes_hijo = []
-                for g1, g2 in zip(p1.genes, p2.genes):
-                    genes_hijo.append(copy.deepcopy(g1) if random.random() > 0.5 else copy.deepcopy(g2))
-                hijo = IndividuoHorario(genes_hijo)
-                
-                for i in range(len(hijo.genes)):
-                    if random.random() < self.mutation_rate:
-                        hijo.genes[i] = self._crear_gen_flexible(hijo.genes[i].curso_data)
-                
-                hijo.calcular_fitness(self.profesores_db, self.pref_manuales)
-                nueva_pop.append(hijo)
-            
-            self.population = nueva_pop
-            progress_bar.progress((g+1)/generaciones)
-            if g % 5 == 0: status_text.text(f"Gen {g} | Conflictos: {mejor.hard_conflicts}")
-            
-        return mejor
+        poblacion = nueva_poblacion
 
-def procesar_excel_expansion(file):
+    return best_overall
+
+# ========================================================
+# 4. INTERFAZ Y PROCESAMIENTO
+# ========================================================
+
+def cargar_datos(uploaded_file):
     try:
-        xls = pd.ExcelFile(file)
+        # Leer todas las hojas
+        xls = pd.ExcelFile(uploaded_file)
         df_cursos = pd.read_excel(xls, 'Cursos')
-        lista_secciones = []
+        df_profes = pd.read_excel(xls, 'Profesores')
+        df_salones = pd.read_excel(xls, 'Salones')
         
-        cols_map = {
-            'CODIGO': 'codigo', 'NOMBRE': 'nombre', 'CREDITOS': 'creditos', 
-            'CUPO': 'cupo', 'CANDIDATOS': 'candidatos', 'CANTIDAD_SECCIONES': 'cantidad',
-            'TIPO_SALON': 'tipo_salon', 'BLOQUE_FIJO': 'bloque_fijo', 'DIAS_FIJOS': 'dias_fijos'
-        }
-        
-        idx_global = 0
-        for _, row in df_cursos.iterrows():
-            d = {}
-            for k, v in cols_map.items():
-                for c in df_cursos.columns:
-                    if k in str(c).upper(): d[v] = row[c]; break
-            
-            cands = [c.strip() for c in str(d.get('candidatos', '')).split(',') if c.strip()]
-            h_fijo = str(d.get('bloque_fijo', ''))
-            if h_fijo.lower() in ['nan', 'none', '']: h_fijo = None
-            d_fijos = str(d.get('dias_fijos', ''))
-            if d_fijos.lower() in ['nan', 'none', '']: d_fijos = None
-            
-            # EXPANSIÓN
-            cantidad = int(d.get('cantidad', 1))
-            if cantidad < 1: cantidad = 1
-            
-            for i in range(cantidad):
-                lista_secciones.append({
-                    'id_temp': idx_global,
-                    'codigo': str(d.get('codigo', 'UNK')),
-                    'nombre': str(d.get('nombre', 'Curso')),
-                    'creditos': int(d.get('creditos', 3)),
-                    'cupo': int(d.get('cupo', 30)),
-                    'candidatos': cands,
-                    'tipo_salon': str(d.get('tipo_salon', 'General')).strip(),
-                    'bloque_fijo': h_fijo,
-                    'dias_fijos': d_fijos
-                })
-                idx_global += 1
+        # Normalizar columnas (quitar espacios, mayusculas)
+        df_cursos.columns = [c.strip().upper() for c in df_cursos.columns]
+        df_profes.columns = [c.strip() for c in df_profes.columns] # Case sensitive titles often in pandas
+        df_profes.columns = [c.title() for c in df_profes.columns] # Standarize to Title Case
+        df_salones.columns = [c.strip().upper() for c in df_salones.columns]
 
-        df_prof = pd.read_excel(xls, 'Profesores')
+        # 1. Procesar Profesores a Diccionario
+        # Esperamos columnas: Nombre, Carga_Min, Carga_Max
         profes_db = {}
-        for _, row in df_prof.iterrows():
-            profes_db[str(row.get('Nombre', 'Unknown')).strip()] = {
-                'carga_min': float(row.get('Carga_Min', 0)),
-                'carga_max': float(row.get('Carga_Max', 12)),
-                'acepta_grandes': int(row.get('Acepta_Grandes', 0))
+        for _, row in df_profes.iterrows():
+            nombre = row.get('Nombre', 'Unknown').strip()
+            profes_db[nombre] = {
+                'Carga_Min': row.get('Carga_Min', 0),
+                'Carga_Max': row.get('Carga_Max', 12),
             }
-
-        df_sal = pd.read_excel(xls, 'Salones')
-        salones_db = []
-        for _, row in df_sal.iterrows():
-            salones_db.append({
-                'codigo': str(row.get('CODIGO', 'G00')),
-                'capacidad': int(row.get('CAPACIDAD', 30)),
-                'tipo': str(row.get('TIPO', 'General')).strip()
-            })
             
-        return lista_secciones, profes_db, salones_db
-    except Exception as e: return None, None, None, str(e)
-
-def asignar_numeros_seccion(df_resultados):
-    # Ordenar por Código Curso -> Día -> Hora
-    df_resultados = df_resultados.sort_values(by=['Código', 'Inicio_Sort'])
-    df_resultados['Sección'] = df_resultados.groupby('Código').cumcount() + 1
-    df_resultados['Sección'] = df_resultados['Sección'].apply(lambda x: f"{x:03d}")
-    return df_resultados
-
-# ========================================================
-# 4. INTERFAZ
-# ========================================================
+        # 2. Procesar Salones a Lista de Dicts
+        # Esperamos CODIGO, CAPACIDAD, TIPO
+        salones_list = df_salones.to_dict('records')
+        
+        # 3. Procesar Cursos y EXPANDIR secciones
+        secciones_list = []
+        id_counter = 0
+        for _, row in df_cursos.iterrows():
+            qty = int(row.get('CANTIDAD_SECCIONES', 1))
+            for i in range(qty):
+                # Crear objeto sección
+                s = Seccion(id_counter, row, i+1)
+                secciones_list.append(s)
+                id_counter += 1
+                
+        return secciones_list, profes_db, salones_list, None
+        
+    except Exception as e:
+        return None, None, None, str(e)
 
 def main():
-    if 'pref_manuales' not in st.session_state: st.session_state.pref_manuales = {}
-    if 'data_secciones' not in st.session_state: st.session_state.data_secciones = None
-    if 'resultado' not in st.session_state: st.session_state.resultado = None
-
+    st.title("🎓 UPRM Course Scheduler - Thesis Edition")
+    st.markdown("""
+    Esta aplicación implementa un **Algoritmo Genético** para resolver el problema de *Timetabling* universitario.
+    Se basa en la minimización de una función de costo sujeta a restricciones fuertes ($R_f$) y suaves ($R_s$).
+    """)
+    
     with st.sidebar:
-        st.header("🎛️ Control Panel")
-        file = st.file_uploader("Cargar Excel (3 Hojas)", type=['xlsx'])
-        zona = st.selectbox("Zona Campus", ["Central", "Periférica"])
+        st.header("1. Carga de Datos")
+        file = st.file_uploader("Subir Excel (Cursos, Profesores, Salones)", type=['xlsx'])
         
-        with st.expander("Configuración GA"):
-            pop = st.slider("Población", 50, 500, 150)
-            gen = st.slider("Generaciones", 50, 1000, 200)
-            mut = st.slider("Mutación", 0.0, 0.8, 0.3)
+        st.header("2. Parámetros GA")
+        pop_size = st.slider("Tamaño Población", 20, 200, 50)
+        generaciones = st.slider("Generaciones", 10, 500, 100)
+        mutacion_rate = st.slider("Tasa Mutación", 0.0, 0.5, 0.1)
         
-        if st.session_state.get('data_profes'):
-            st.markdown("---")
-            st.subheader("🕒 Preferencias Docentes")
-            p_sel = st.selectbox("Editar:", list(st.session_state.data_profes.keys()))
-            curr = st.session_state.pref_manuales.get(p_sel, {})
-            
-            dias = st.multiselect("Días Preferidos", ["Lu","Ma","Mi","Ju","Vi"], default=curr.get('dias_deseados', ["Lu","Ma","Mi","Ju","Vi"]))
-            c1, c2 = st.columns(2)
-            h_in = c1.time_input("Entrada", value=datetime.strptime(curr.get('hora_entrada', "07:00"), "%H:%M").time())
-            h_out = c2.time_input("Salida", value=datetime.strptime(curr.get('hora_salida', "20:00"), "%H:%M").time())
-            
-            if st.button("Guardar Preferencia"):
-                st.session_state.pref_manuales[p_sel] = {
-                    'dias_deseados': dias,
-                    'hora_entrada': h_in.strftime("%H:%M"),
-                    'hora_salida': h_out.strftime("%H:%M")
-                }
-                st.success(f"Guardado: {p_sel}")
-
-    st.title("⚡ Generador Automático de Horarios UPRM")
-    st.markdown("**Modo Planificación:** Define CANTIDAD de secciones y la IA asignará números al final.")
+        run_btn = st.button("🧬 Ejecutar Algoritmo", type="primary", disabled=not file)
 
     if file:
-        if st.button("Procesar Archivo"):
-            res = procesar_excel_expansion(file)
-            if res[0]:
-                st.session_state.data_secciones, st.session_state.data_profes, st.session_state.data_salones = res
-                # Init Prefs
-                for p in st.session_state.data_profes:
-                    if p not in st.session_state.pref_manuales:
-                        st.session_state.pref_manuales[p] = {'dias_deseados': ["Lu","Ma","Mi","Ju","Vi"], 'hora_entrada': "07:00", 'hora_salida': "20:00"}
-                st.success(f"¡Expansión Completa! Se generarán {len(st.session_state.data_secciones)} grupos.")
-            else: st.error(f"Error: {res[3]}")
-
-    if st.session_state.data_secciones:
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Grupos Totales", len(st.session_state.data_secciones))
-        col2.metric("Profesores", len(st.session_state.data_profes))
-        col3.metric("Salones", len(st.session_state.data_salones))
-
-        if st.button("🚀 Generar y Numerar Secciones", type="primary"):
-            with st.status("Ejecutando Inteligencia Artificial...", expanded=True) as status:
-                prog = st.progress(0); txt = st.empty()
-                ga = AlgoritmoGenetico(
-                    st.session_state.data_secciones, st.session_state.data_profes, st.session_state.data_salones,
-                    st.session_state.pref_manuales, ZonaConfig.CENTRAL if zona == "Central" else ZonaConfig.PERIFERICA,
-                    pop, mut
-                )
-                start = time.time()
-                mejor = ga.evolucionar(gen, prog, txt)
-                st.session_state.resultado = mejor
-                status.update(label="✅ Completado", state="complete", expanded=False)
-    
-    if st.session_state.resultado:
-        res = st.session_state.resultado
-        st.divider()
-        
-        k1, k2 = st.columns(2)
-        k1.metric("Fitness", int(res.fitness))
-        k2.metric("Conflictos", res.hard_conflicts, delta_color="inverse")
-        
-        rows = []
-        for g in res.genes:
-            cred = calcular_creditos_pagables(g.curso_data['creditos'], g.curso_data['cupo'])
-            rows.append({
-                "Código": g.curso_data['codigo'],
-                "Curso": g.curso_data['nombre'],
-                "Profesor": g.prof_asignado,
-                "Días": "".join(g.bloque['dias']),
-                "Inicio_Sort": g.hora_inicio, # Columna oculta para ordenar
-                "Horario": f"{g.hora_inicio} - {a_minutos(g.hora_inicio)+int(sum(g.bloque['horas'])*60/len(g.bloque['horas']))//60}:{int(sum(g.bloque['horas'])*60/len(g.bloque['horas']))%60:02d}",
-                "Salón": g.salon_obj['codigo'],
-                "Créditos": cred
-            })
-        df = pd.DataFrame(rows)
-        
-        df = asignar_numeros_seccion(df)
-        cols = ['Código', 'Sección', 'Curso', 'Profesor', 'Días', 'Horario', 'Salón', 'Créditos']
-        df = df[cols]
-        
-        t1, t2, t3 = st.tabs(["Horario Oficial", "Conflictos", "Descargar"])
-        t1.dataframe(df, use_container_width=True)
-        with t2:
-            if res.conflict_details:
-                for c in res.conflict_details: st.error(c)
-            else: st.success("¡Horario Libre de Conflictos!")
-        with t3:
-            st.download_button("Descargar Excel Oficial", df.to_csv(index=False).encode('utf-8'), "horario_final_numerado.csv")
+        secciones, profes_db, salones, err = cargar_datos(file)
+        if err:
+            st.error(f"Error leyendo archivo: {err}")
+        else:
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Secciones a Programar", len(secciones))
+            c2.metric("Profesores Disponibles", len(profes_db))
+            c3.metric("Salones Disponibles", len(salones))
+            
+            if run_btn:
+                st.divider()
+                st.subheader("Optimización en Progreso...")
+                bar = st.progress(0)
+                status = st.empty()
+                
+                # EJECUCIÓN DEL ALGORITMO
+                start_time = datetime.now()
+                mejor_horario = ejecutar_ga(secciones, salones, profes_db, pop_size, generaciones, mutacion_rate, bar, status)
+                end_time = datetime.now()
+                
+                st.success(f"Optimización finalizada en {(end_time-start_time).total_seconds():.2f} segundos.")
+                
+                # MOSTRAR RESULTADOS
+                st.divider()
+                
+                # Preparar DataFrame Final
+                data_rows = []
+                for g in mejor_horario.genes:
+                    b_info = BLOQUES_TIEMPO[g.bloque_key]
+                    data_rows.append({
+                        'Curso': g.seccion.codigo,
+                        'Sección': g.seccion.num_seccion,
+                        'Nombre': g.seccion.nombre,
+                        'Profesor': g.profesor,
+                        'Días': "".join(b_info['dias']),
+                        'Horario': f"{b_info['inicio']} - {b_info['fin']}",
+                        'Salón': g.salon['CODIGO'],
+                        'BloqueID': b_info['id'] # Para ordenar
+                    })
+                
+                df_res = pd.DataFrame(data_rows).sort_values(by=['Curso', 'Sección'])
+                
+                tab1, tab2, tab3 = st.tabs(["📅 Horario Tabla", "⚠️ Reporte de Conflictos", "📊 Análisis"])
+                
+                with tab1:
+                    st.dataframe(df_res[['Curso', 'Sección', 'Profesor', 'Días', 'Horario', 'Salón']], use_container_width=True)
+                    
+                    csv = df_res.to_csv(index=False).encode('utf-8')
+                    st.download_button("Descargar CSV", csv, "horario_uprm.csv", "text/csv")
+                
+                with tab2:
+                    c_hard = len(mejor_horario.conflictos_hard)
+                    c_soft = len(mejor_horario.conflictos_soft)
+                    
+                    col_h, col_s = st.columns(2)
+                    col_h.metric("Conflictos Fuertes (Deben ser 0)", c_hard, delta_color="inverse")
+                    col_s.metric("Conflictos Suaves (Avisos)", c_soft, delta_color="off")
+                    
+                    if c_hard > 0:
+                        st.error("Se encontraron violaciones críticas:")
+                        for c in mejor_horario.conflictos_hard:
+                            st.write(f"- {c}")
+                    else:
+                        st.success("✅ ¡El horario es FACTIBLE (cero choques críticos)!")
+                        
+                    with st.expander("Ver advertencias suaves"):
+                        for c in mejor_horario.conflictos_soft:
+                            st.write(f"- {c}")
+                            
+                with tab3:
+                    # Visualización Gráfica (Heatmap simple de ocupación de salones)
+                    st.write("Ocupación de Salones")
+                    df_chart = df_res.groupby('Salón').count().reset_index()
+                    fig = px.bar(df_chart, x='Salón', y='Curso', title="Cantidad de Clases por Salón")
+                    st.plotly_chart(fig)
 
 if __name__ == "__main__":
     main()
