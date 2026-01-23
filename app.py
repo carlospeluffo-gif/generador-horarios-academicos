@@ -94,7 +94,7 @@ class ClaseGene:
         self.bloque = bloque
         self.hora_inicio = hora_inicio
         self.salon = salon
-        self.seccion_num = seccion_num # Nuevo: Identificador de la sección (001, 002...)
+        self.seccion_num = seccion_num 
         
         # Selección inicial de profesor
         candidatos = curso_data['candidatos']
@@ -106,12 +106,18 @@ class IndividuoHorario:
         self.fitness = 0.0
         self.hard_conflicts = 0
         self.prof_stats = {}
+        self.conflict_details = []
 
     def calcular_fitness(self, profesores_db, preferencias_manuales):
-        PENALTY_HARD = 10000
-        PENALTY_LOAD = 5000
+        # PENALIZACIONES
+        PENALTY_HARD = 10000     # Choques físicos (salón, profesor, hora prohibida)
+        PENALTY_PREF = 10000     # AHORA ES HARD: Violar preferencia de profesor
+        PENALTY_LOAD = 5000      # Carga académica inválida
+        
         SCORE = 0
         CONFLICTS = 0
+        self.conflict_details = []
+        
         carga_actual = {k: 0 for k in profesores_db.keys()}
         ocupacion_profesor = {}
         ocupacion_salon = {}
@@ -126,57 +132,72 @@ class IndividuoHorario:
                 'hora_salida': '20:00'
             })
             
-            # Carga
+            # 1. Carga
             creditos_pago = calcular_creditos_pagables(gen.curso_data['creditos'], gen.curso_data['cupo'])
             if prof_nom in carga_actual: carga_actual[prof_nom] += creditos_pago
             
-            # C1: Secciones Grandes
+            # 2. Restricción C1: Secciones Grandes
             if gen.curso_data['cupo'] >= 85 and prof_info_static.get('acepta_grandes', 0) == 0:
                 SCORE -= PENALTY_HARD; CONFLICTS += 1
+                self.conflict_details.append(f"{prof_nom} no acepta grupos grandes ({gen.curso_data['codigo']})")
             
-            # C3/C4: Preferencia horaria (Manual UI)
+            # 3. PREFERENCIAS OBLIGATORIAS (AHORA SON HARD)
             h_min = a_minutos(gen.hora_inicio)
             h_fin = h_min + int(max(gen.bloque['horas']) * 60)
             p_ini = a_minutos(prof_prefs.get('hora_entrada', '07:00'))
             p_fin = a_minutos(prof_prefs.get('hora_salida', '20:00'))
-            if h_min < p_ini or h_fin > p_fin: SCORE -= 500
+            
+            # Horario Entrada/Salida
+            if h_min < p_ini or h_fin > p_fin: 
+                SCORE -= PENALTY_PREF
+                CONFLICTS += 1 # Cuenta como conflicto
+                self.conflict_details.append(f"{prof_nom} fuera de horario preferido ({gen.hora_inicio})")
 
-            # C2: Días Deseados (Manual UI)
+            # Días Deseados
             dias_des = prof_prefs.get('dias_deseados', [])
-            coincidencias = sum(1 for d in gen.bloque['dias'] if d in dias_des)
-            SCORE += (coincidencias * 20)
+            # Si ALGÚN día del bloque NO está en los deseados -> Conflicto
+            dias_invalidos = [d for d in gen.bloque['dias'] if d not in dias_des]
+            if dias_invalidos:
+                SCORE -= PENALTY_PREF
+                CONFLICTS += 1
+                self.conflict_details.append(f"{prof_nom} no quiere enseñar en {dias_invalidos}")
 
-            # Prioridad 1 Candidato
+            # 4. Prioridad 1 Candidato (Esto sigue siendo un bonus soft)
             if gen.curso_data['candidatos'] and prof_nom == gen.curso_data['candidatos'][0]:
                 SCORE += 100
 
-            # Conflictos Duros (Solapamientos)
+            # 5. Conflictos Duros (Solapamientos)
             for dia, duracion in zip(gen.bloque['dias'], gen.bloque['horas']):
                 ini = a_minutos(gen.hora_inicio)
                 fin = ini + int(duracion * 60)
                 
-                # Profe
+                # Profe Doble Reserva
                 k_p = (prof_nom, dia)
                 if k_p not in ocupacion_profesor: ocupacion_profesor[k_p] = []
                 for (oi, of) in ocupacion_profesor[k_p]:
                     if not (fin <= oi or ini >= of):
-                        SCORE -= PENALTY_HARD; CONFLICTS += 1; break
+                        SCORE -= PENALTY_HARD; CONFLICTS += 1
+                        self.conflict_details.append(f"Choque horario Profesor {prof_nom} en {dia}")
+                        break
                 ocupacion_profesor[k_p].append((ini, fin))
 
-                # Salon
+                # Salon Doble Reserva
                 k_s = (gen.salon, dia)
                 if k_s not in ocupacion_salon: ocupacion_salon[k_s] = []
                 for (oi, of) in ocupacion_salon[k_s]:
                     if not (fin <= oi or ini >= of):
-                        SCORE -= PENALTY_HARD; CONFLICTS += 1; break
+                        SCORE -= PENALTY_HARD; CONFLICTS += 1
+                        self.conflict_details.append(f"Choque Salón {gen.salon} en {dia} ({gen.curso_data['codigo']})")
+                        break
                 ocupacion_salon[k_s].append((ini, fin))
 
-        # Evaluar Cargas Globales
+        # 6. Evaluar Cargas Globales
         for prof_nom, carga in carga_actual.items():
             info = profesores_db.get(prof_nom, {})
             if carga > info.get('carga_max', 12):
                 SCORE -= PENALTY_LOAD * (carga - info.get('carga_max', 12))
                 CONFLICTS += 1
+                self.conflict_details.append(f"Sobrecarga {prof_nom}: {carga}/{info.get('carga_max', 12)}")
             elif carga < info.get('carga_min', 0):
                 SCORE -= 2000 * (info.get('carga_min', 0) - carga)
         
@@ -197,29 +218,42 @@ class AlgoritmoGenetico:
         self.population = []
         self.bloques_ref = generar_bloques_horarios()
 
-    def _crear_gen_aleatorio(self, curso_dict):
-        # curso_dict tiene {'data': curso_original, 'seccion': 1}
+    def _buscar_slot_valido(self, curso_dict):
+        """Intenta exhaustivamente encontrar un slot sin conflictos basicos de zona"""
         curso = curso_dict['data']
         seccion = curso_dict['seccion']
         
         bloques_validos = [b for b in self.bloques_ref if b['creditos'] == curso['creditos']]
         if not bloques_validos: bloques_validos = self.bloques_ref[:1]
         
-        for _ in range(20):
-            bloque = random.choice(bloques_validos)
-            hora = random.choice(self.zona_config['horarios_inicio'])
-            salon = random.choice(self.salones)
-            valido = True
-            for d, h in zip(bloque['dias'], bloque['horas']):
-                if not es_horario_valido_en_zona(d, hora, h, self.zona_config):
-                    valido = False; break
-            if valido: return ClaseGene(curso, bloque, hora, salon, seccion)
-        return ClaseGene(curso, bloques_validos[0], self.zona_config['horarios_inicio'][0], self.salones[0], seccion)
+        # Mezclar opciones para aleatoriedad
+        random.shuffle(bloques_validos)
+        horarios = list(self.zona_config['horarios_inicio'])
+        random.shuffle(horarios)
+        salones = list(self.salones)
+        random.shuffle(salones)
+        
+        # Búsqueda Greedy aleatorizada (Intenta hasta encontrar uno que no viole zona)
+        for bloque in bloques_validos:
+            for hora in horarios:
+                # Validar zona primero
+                valido_zona = True
+                for d, h in zip(bloque['dias'], bloque['horas']):
+                    if not es_horario_valido_en_zona(d, hora, h, self.zona_config):
+                        valido_zona = False; break
+                
+                if valido_zona:
+                    # Slot candidato encontrado, asignamos un salón al azar
+                    return ClaseGene(curso, bloque, hora, salones[0], seccion)
+        
+        # Fallback si todo falla
+        return ClaseGene(curso, bloques_validos[0], horarios[0], salones[0], seccion)
 
     def inicializar(self):
         self.population = []
         for _ in range(self.pop_size):
-            genes = [self._crear_gen_aleatorio(c) for c in self.cursos_demanda]
+            # Usar búsqueda inteligente en lugar de puro random
+            genes = [self._buscar_slot_valido(c) for c in self.cursos_demanda]
             ind = IndividuoHorario(genes)
             ind.calcular_fitness(self.profesores_db, self.pref_manuales)
             self.population.append(ind)
@@ -243,22 +277,28 @@ class AlgoritmoGenetico:
                     genes_hijo.append(copy.deepcopy(g1) if random.random() > 0.5 else copy.deepcopy(g2))
                 hijo = IndividuoHorario(genes_hijo)
                 
-                for gen in hijo.genes:
+                # Mutación más agresiva para salir de conflictos
+                for i in range(len(hijo.genes)):
                     if random.random() < self.mutation_rate:
-                        if random.random() < 0.5 and gen.curso_data['candidatos']:
-                            gen.prof_asignado = random.choice(gen.curso_data['candidatos'])
-                        else:
+                        gen = hijo.genes[i]
+                        # Estrategia: Re-generar slot completamente
+                        if random.random() < 0.6: # 60% prob de cambiar tiempo/lugar
                             bloques_validos = [b for b in self.bloques_ref if b['creditos'] == gen.curso_data['creditos']]
                             if bloques_validos:
                                 gen.bloque = random.choice(bloques_validos)
                                 gen.hora_inicio = random.choice(self.zona_config['horarios_inicio'])
                                 gen.salon = random.choice(self.salones)
+                        else: # 40% prob de cambiar profe
+                            if gen.curso_data['candidatos']:
+                                gen.prof_asignado = random.choice(gen.curso_data['candidatos'])
                 
                 hijo.calcular_fitness(self.profesores_db, self.pref_manuales)
                 nueva_pop.append(hijo)
+            
             self.population = nueva_pop
             progress_bar.progress((g+1)/generaciones)
-            if g % 10 == 0: status_text.text(f"Gen {g+1} | Fit: {mejor_historico.fitness:.0f} | Conf: {mejor_historico.hard_conflicts}")
+            if g % 5 == 0: 
+                status_text.text(f"Gen {g+1} | Conflictos Actuales: {mejor_historico.hard_conflicts}")
             
         return mejor_historico
 
@@ -269,21 +309,14 @@ def procesar_excel_agrupado(file):
         df_cursos = pd.read_excel(xls, 'Cursos')
         cursos_expandidos = []
         
-        # Mapeo de columnas para robustez
-        cols_map = {
-            'CODIGO': 'codigo', 'NOMBRE': 'nombre', 'CREDITOS': 'creditos',
-            'TOTAL_MATRICULA': 'total_estudiantes', 'CUPO_SECCION': 'cupo', 'CANDIDATOS': 'candidatos'
-        }
+        cols_map = {'CODIGO': 'codigo', 'NOMBRE': 'nombre', 'CREDITOS': 'creditos', 'TOTAL_MATRICULA': 'total_estudiantes', 'CUPO_SECCION': 'cupo', 'CANDIDATOS': 'candidatos'}
         
-        # Iterar el excel
         for _, row in df_cursos.iterrows():
-            # Buscar columnas ignorando mayusculas
             data_row = {}
             for k, v in cols_map.items():
                 for c in df_cursos.columns:
                     if k in str(c).upper(): data_row[v] = row[c]; break
             
-            # Limpiar datos
             cands = str(data_row.get('candidatos', 'Staff')).split(',')
             cands = [c.strip() for c in cands if c.strip()]
             
@@ -291,25 +324,20 @@ def procesar_excel_agrupado(file):
             cupo_max = int(data_row.get('cupo', 30))
             if cupo_max <= 0: cupo_max = 30
             
-            # CALCULO AUTOMATICO DE SECCIONES
             num_secciones = math.ceil(total_est / cupo_max)
             if num_secciones == 0 and total_est > 0: num_secciones = 1
-            if num_secciones == 0: continue # Curso sin estudiantes
+            if num_secciones == 0: continue 
 
             obj_curso = {
                 'codigo': str(data_row.get('codigo', 'UNK')),
                 'nombre': str(data_row.get('nombre', 'Curso')),
                 'creditos': int(data_row.get('creditos', 3)),
-                'cupo': cupo_max, # Cupo por sección individual
+                'cupo': cupo_max,
                 'candidatos': cands
             }
             
-            # Expandir en la lista de demanda
             for i in range(num_secciones):
-                cursos_expandidos.append({
-                    'data': obj_curso,
-                    'seccion': f"{i+1:03d}" # Genera 001, 002, 003
-                })
+                cursos_expandidos.append({'data': obj_curso, 'seccion': f"{i+1:03d}"})
 
         # 2. Profesores
         df_profes = pd.read_excel(xls, 'Profesores')
@@ -329,7 +357,6 @@ def procesar_excel_agrupado(file):
 # ========================================================
 
 def main():
-    # Inicializar Session State para Preferencias
     if 'pref_manuales' not in st.session_state: st.session_state.pref_manuales = {}
     if 'data_cursos' not in st.session_state: st.session_state.data_cursos = None
     if 'data_profes' not in st.session_state: st.session_state.data_profes = None
@@ -348,21 +375,19 @@ def main():
         
         with st.expander("⚙️ Parámetros Avanzados"):
             pop = st.slider("Población", 50, 500, 100)
-            gen = st.slider("Generaciones", 50, 1000, 100)
-            mut = st.slider("Mutación", 0.0, 0.5, 0.15)
+            gen = st.slider("Generaciones", 50, 1000, 150)
+            mut = st.slider("Mutación", 0.0, 0.5, 0.2)
         
         st.markdown("---")
         
-        # GESTOR DE PREFERENCIAS MANUALES EN SIDEBAR (ACCESO RÁPIDO)
         if st.session_state.data_profes:
-            st.subheader("🕒 Preferencias Docentes")
+            st.subheader("🕒 Preferencias (Obligatorias)")
             prof_list = list(st.session_state.data_profes.keys())
             prof_sel = st.selectbox("Editar Profesor:", prof_list)
             
-            # Cargar valores actuales o default
             curr_pref = st.session_state.pref_manuales.get(prof_sel, {})
             
-            dias = st.multiselect("Días deseados", ["Lu","Ma","Mi","Ju","Vi"], 
+            dias = st.multiselect("Días Permitidos", ["Lu","Ma","Mi","Ju","Vi"], 
                                 default=curr_pref.get('dias_deseados', ["Lu","Ma","Mi","Ju","Vi"]))
             
             c1, c2 = st.columns(2)
@@ -371,27 +396,25 @@ def main():
             h_fin = c2.time_input("Hora Salida", 
                                 value=datetime.strptime(curr_pref.get('hora_salida', "20:00"), "%H:%M").time())
             
-            # Guardar en tiempo real
             st.session_state.pref_manuales[prof_sel] = {
                 'dias_deseados': dias,
                 'hora_entrada': h_ini.strftime("%H:%M"),
                 'hora_salida': h_fin.strftime("%H:%M")
             }
-            st.success(f"Config: {prof_sel}")
+            st.info(f"Configurado: {prof_sel}")
 
-    # Área Principal
+    # Main Area
     st.title("🎓 Sistema de Programación Académica")
     st.markdown("Generación automática de secciones y optimización de horarios.")
     st.markdown("---")
 
-    # Lógica de Carga
     if file:
         if st.button("Procesar Archivo Excel", key="load_btn"):
             cursos, profes = procesar_excel_agrupado(file)
             if cursos:
                 st.session_state.data_cursos = cursos
                 st.session_state.data_profes = profes
-                # Inicializar preferencias por defecto
+                # Init defaults
                 for p in profes:
                     if p not in st.session_state.pref_manuales:
                         st.session_state.pref_manuales[p] = {
@@ -406,24 +429,22 @@ def main():
         st.info("👈 Sube el archivo Excel para comenzar.")
         return
 
-    # Dashboard Inicial
+    # Dashboard
     col1, col2, col3, col4 = st.columns(4)
-    total_est = sum([c['data']['cupo'] for c in st.session_state.data_cursos]) # Aprox, o sumar de excel si se guardara
     col1.metric("Secciones a Crear", len(st.session_state.data_cursos))
     col2.metric("Profesores Activos", len(st.session_state.data_profes))
     col3.metric("Zona", zona)
     col4.metric("Estado", "Listo" if not st.session_state.resultado else "Completado")
 
-    # Botón Ejecutar
     if st.button("🚀 Iniciar Optimización", type="primary"):
-        with st.status("Optimizando Horarios...", expanded=True) as status:
+        with st.status("Optimizando Horarios (Modo Estricto)...", expanded=True) as status:
             prog = st.progress(0)
             text = st.empty()
             
             ga = AlgoritmoGenetico(
                 st.session_state.data_cursos,
                 st.session_state.data_profes,
-                st.session_state.pref_manuales, # Pasamos las preferencias de la UI
+                st.session_state.pref_manuales,
                 ZonaConfig.CENTRAL if zona == "Central" else ZonaConfig.PERIFERICA,
                 MATEMATICAS_SALONES_FIJOS,
                 pop, mut
@@ -435,16 +456,19 @@ def main():
             status.update(label="✅ Finalizado", state="complete", expanded=False)
         st.balloons()
 
-    # Resultados
     if st.session_state.resultado:
         res = st.session_state.resultado
         st.divider()
         
         k1, k2 = st.columns(2)
         k1.metric("Score Calidad", int(res.fitness))
-        k2.metric("Conflictos", res.hard_conflicts, delta_color="inverse")
+        k2.metric("Conflictos Totales", res.hard_conflicts, delta="-0 es ideal", delta_color="inverse")
         
-        # DataFrame Resultante
+        if res.hard_conflicts > 0:
+            st.error(f"⚠️ Se encontraron {res.hard_conflicts} conflictos. Revisa la pestaña 'Reporte Conflictos'.")
+        else:
+            st.success("✅ ¡Horario Perfecto! Cero conflictos detectados.")
+        
         rows = []
         for g in res.genes:
             cred_pago = calcular_creditos_pagables(g.curso_data['creditos'], g.curso_data['cupo'])
@@ -461,7 +485,7 @@ def main():
             })
         df_res = pd.DataFrame(rows)
         
-        t1, t2, t3 = st.tabs(["📅 Horario", "⚖️ Cargas", "📥 Exportar"])
+        t1, t2, t3, t4 = st.tabs(["📅 Horario", "⚖️ Cargas", "🚨 Reporte Conflictos", "📥 Exportar"])
         
         with t1:
             st.dataframe(df_res, use_container_width=True)
@@ -479,8 +503,16 @@ def main():
             fig = px.bar(df_l, x="Profesor", y="Carga Real", color="Estado", 
                          color_discrete_map={"OK":"#2ecc71", "Subcarga":"#f1c40f", "Sobrecarga":"#e74c3c"})
             st.plotly_chart(fig, use_container_width=True)
-            
+        
         with t3:
+            if res.conflict_details:
+                st.write("Detalle de problemas encontrados:")
+                for c in res.conflict_details:
+                    st.warning(c)
+            else:
+                st.info("No hay conflictos que reportar.")
+            
+        with t4:
             st.download_button("Descargar CSV", df_res.to_csv(index=False).encode('utf-8'), "horario.csv")
 
 if __name__ == "__main__":
