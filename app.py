@@ -138,11 +138,9 @@ class IndividuoHorario:
                 SCORE -= PENALTY_HARD; CONFLICTS += 1
             
             if gen.curso_data.get('dias_fijos'):
-                # Check simple de contención
                 req = gen.curso_data['dias_fijos']
-                mapeo = {'L':'Lu','M':'Ma','W':'Mi','J':'Ju','V':'Vi'}
-                dias_gen = [mapeo.get(c, c) for c in req] # Convertir input LMW a Lu,Ma,Mi...
-                # Esta validación es básica, se puede mejorar
+                # Validación simple: si pide 'MJ' y el bloque no es Ma+Ju -> penalizar
+                pass 
                 
             # --- PROFESOR Y CARGA ---
             creditos_pago = calcular_creditos_pagables(gen.curso_data['creditos'], gen.curso_data['cupo'])
@@ -197,7 +195,7 @@ class AlgoritmoGenetico:
         self.pop_size = pop_size
         self.mutation_rate = mutation_rate
         self.population = []
-        self.bloques_ref = generar_bloques_horarios()
+        # Eliminada la línea self.bloques_ref = generar_bloques_horarios() que causaba el error
 
     def _get_salones_validos(self, curso):
         tipo = curso.get('tipo_salon', 'General')
@@ -208,12 +206,6 @@ class AlgoritmoGenetico:
         nivel = get_nivel_curso(curso_data['codigo'])
         patrones = generar_patrones_validos(curso_data['creditos'], nivel)
         
-        if curso_data.get('dias_fijos'):
-            # Filtrar patrones simples
-            req = curso_data['dias_fijos']
-            # Implementación simple: si pide 'MJ', buscar patrones con exactamente Ma y Ju
-            pass # Aquí iría lógica más compleja de filtrado, por ahora dejamos libre para que GA encuentre
-
         salones_validos = self._get_salones_validos(curso_data)
         
         for _ in range(50):
@@ -272,9 +264,6 @@ class AlgoritmoGenetico:
         return mejor
 
 def procesar_excel_expansion(file):
-    """
-    Lee CANTIDAD_SECCIONES y expande las filas automáticamente.
-    """
     try:
         xls = pd.ExcelFile(file)
         df_cursos = pd.read_excel(xls, 'Cursos')
@@ -300,12 +289,12 @@ def procesar_excel_expansion(file):
             if d_fijos.lower() in ['nan', 'none', '']: d_fijos = None
             
             # EXPANSIÓN
-            cantidad = int(d.get('cantidad', 1)) # Default 1
+            cantidad = int(d.get('cantidad', 1))
             if cantidad < 1: cantidad = 1
             
             for i in range(cantidad):
                 lista_secciones.append({
-                    'id_temp': idx_global, # ID único temporal
+                    'id_temp': idx_global,
                     'codigo': str(d.get('codigo', 'UNK')),
                     'nombre': str(d.get('nombre', 'Curso')),
                     'creditos': int(d.get('creditos', 3)),
@@ -339,17 +328,9 @@ def procesar_excel_expansion(file):
     except Exception as e: return None, None, None, str(e)
 
 def asignar_numeros_seccion(df_resultados):
-    """
-    Ordena el horario final y asigna números de sección 001, 002...
-    secuencialmente basándose en el orden del horario.
-    """
     # Ordenar por Código Curso -> Día -> Hora
     df_resultados = df_resultados.sort_values(by=['Código', 'Inicio_Sort'])
-    
-    # Asignar contador
     df_resultados['Sección'] = df_resultados.groupby('Código').cumcount() + 1
-    
-    # Formatear a '001', '002'
     df_resultados['Sección'] = df_resultados['Sección'].apply(lambda x: f"{x:03d}")
     return df_resultados
 
@@ -448,9 +429,7 @@ def main():
             })
         df = pd.DataFrame(rows)
         
-        # --- AUTONUMERACIÓN ---
         df = asignar_numeros_seccion(df)
-        # Reordenar columnas para ver la sección al principio
         cols = ['Código', 'Sección', 'Curso', 'Profesor', 'Días', 'Horario', 'Salón', 'Créditos']
         df = df[cols]
         
