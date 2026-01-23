@@ -21,7 +21,7 @@ st.markdown("""
     .stApp {
         background-color: #000000;
         background-image: 
-            linear-gradient(rgba(15, 15, 15, 0.95), rgba(15, 15, 15, 0.95)),
+            linear-gradient(rgba(15, 15, 15, 0.85), rgba(15, 15, 15, 0.85)),
             url("https://www.transparenttextures.com/patterns/cubes.png");
         color: #ffffff;
     }
