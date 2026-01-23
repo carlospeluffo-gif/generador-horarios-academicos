@@ -6,162 +6,141 @@ import copy
 import time
 import io
 import plotly.express as px
-import base64
+import plotly.graph_objects as go
+from datetime import datetime, timedelta
 
 # ==============================================================================
-# 1. ESTÉTICA PREMIUM (BLACK & GOLD - UPRM STYLE)
+# 1. ESTÉTICA PLATINUM (MEJOR CONTRASTE)
 # ==============================================================================
 
-st.set_page_config(page_title="UPRM Scheduler Gold", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="UPRM Scheduler Platinum", page_icon="🏛️", layout="wide")
 
-# CSS Profesional con Fondo Geométrico y Tema Dorado/Negro
 st.markdown("""
 <style>
-    /* FONDO Y TEMA PRINCIPAL */
+    /* FONDO GENERAL */
     .stApp {
-        background-color: #0e0e0e;
-        background-image: radial-gradient(#1c1c1c 1px, transparent 1px), radial-gradient(#1c1c1c 1px, transparent 1px);
-        background-size: 40px 40px;
-        background-position: 0 0, 20px 20px;
-        color: #e0e0e0;
+        background-color: #000000;
+        background-image: 
+            linear-gradient(rgba(20, 20, 20, 0.9), rgba(20, 20, 20, 0.9)),
+            url("https://www.transparenttextures.com/patterns/cubes.png");
+        color: #ffffff;
     }
     
-    /* TÍTULOS */
-    h1, h2, h3 {
-        color: #FFD700 !important; /* DORADO */
-        font-family: 'Helvetica Neue', sans-serif;
-        text-shadow: 0px 0px 10px rgba(255, 215, 0, 0.3);
+    /* TEXTOS Y ETIQUETAS (BLANCO PURO PARA LEERSE BIEN) */
+    p, label, .stMarkdown, .stDataFrame, div[data-testid="stMarkdownContainer"] p {
+        color: #ffffff !important;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    
+    /* TITULOS DORADOS */
+    h1, h2, h3, h4 {
+        color: #FFD700 !important;
+        text-shadow: 0px 0px 15px rgba(255, 215, 0, 0.4);
     }
     
     /* SIDEBAR */
     [data-testid="stSidebar"] {
-        background-color: #050505;
+        background-color: #0a0a0a;
         border-right: 1px solid #333;
     }
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] label {
+        color: #e0e0e0 !important;
+    }
     
-    /* BOTONES PRIMARIOS (DORADOS) */
+    /* BOTONES */
     .stButton>button {
-        background: linear-gradient(145deg, #FFD700, #DAA520);
-        color: #000000;
+        background: linear-gradient(90deg, #B8860B, #FFD700);
+        color: #000 !important;
         font-weight: bold;
         border: none;
-        border-radius: 8px;
-        padding: 0.6rem 1.2rem;
-        transition: all 0.3s ease;
-        box-shadow: 0 4px 15px rgba(255, 215, 0, 0.2);
+        padding: 0.5rem 1rem;
+        border-radius: 5px;
     }
     .stButton>button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(255, 215, 0, 0.4);
-        color: #000;
+        transform: scale(1.02);
+        box-shadow: 0 0 15px rgba(255, 215, 0, 0.6);
     }
-
-    /* TARJETAS MÉTRICAS */
-    div[data-testid="stMetricValue"] {
-        color: #FFD700;
-        font-size: 2rem !important;
+    
+    /* INPUTS */
+    .stSelectbox div[data-baseweb="select"] {
+        background-color: #222 !important;
+        color: white !important;
+        border-color: #444 !important;
     }
-    div[data-testid="metric-container"] {
-        background-color: #1a1a1a;
-        border: 1px solid #333;
-        padding: 15px;
-        border-radius: 10px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    .stMultiSelect div[data-baseweb="select"] {
+        background-color: #222 !important;
     }
-
-    /* TABLAS */
+    
+    /* DATA FRAME */
     [data-testid="stDataFrame"] {
-        border: 1px solid #333;
-        border-radius: 10px;
+        background-color: #111;
+        border: 1px solid #444;
     }
     
-    /* ALERTA DE ÉXITO */
-    .stSuccess {
-        background-color: rgba(0, 255, 127, 0.1);
-        border-left: 5px solid #00FF7F;
-        color: #00FF7F;
+    /* ALERTA */
+    .stAlert {
+        background-color: #222;
+        color: #fff;
+        border: 1px solid #FFD700;
     }
-    
-    /* ALERTA DE ERROR */
-    .stError {
-        background-color: rgba(255, 69, 0, 0.1);
-        border-left: 5px solid #FF4500;
-        color: #FF4500;
-    }
-
 </style>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. LOGICA DINÁMICA DE TIEMPO (ZONAS)
+# 2. LOGICA DE TIEMPO Y ZONAS
 # ==============================================================================
 
 def generar_bloques_por_zona(zona):
-    """
-    Genera el diccionario BLOQUES_TIEMPO dinámicamente según la zona.
-    Zona Central: Inicio XX:30. Universal 10:30-12:30.
-    Zona Periférica: Inicio XX:00. Universal 10:00-12:00.
-    """
     bloques = {}
-    
-    # Configuración base
     if zona == "CENTRAL":
-        offset_min = 30 # Empiezan y media
-        # Horas inicio posibles (7:30, 8:30... hasta 19:30)
-        # 7*60+30 = 450
+        # Empiezan XX:30. Rango aprox 7:30 (450) a 19:30.
         horas_inicio = [h*60 + 30 for h in range(7, 20)] 
     else: # PERIFERICA
-        offset_min = 0  # Empiezan en punto
-        # Horas inicio posibles (7:00, 8:00... hasta 19:00)
+        # Empiezan XX:00. Rango aprox 7:00 (420) a 19:00.
         horas_inicio = [h*60 for h in range(7, 20)]
 
     def add_b(id_base, dias, dur, lbl):
         for h in horas_inicio:
-            # Filtro fin del día (Max 10 PM)
-            if h + dur > 1320: continue
-            
+            if h + dur > 1320: continue # Max 10 PM
             key = f"{id_base}_{h}"
-            h_str = mins_to_str(h)
             bloques[key] = {
-                'id_base': id_base, # 1-7 (3cr), 8-16 (4cr), 17+ (5cr)
+                'id_base': id_base,
                 'dias': dias,
                 'inicio': h,
                 'duracion': dur,
-                'label': f"{lbl} ({h_str})"
+                'label': lbl # Etiqueta base sin hora
             }
 
-    # --- DEFINICIÓN DE PATRONES ---
     # 3 CRÉDITOS
     add_b(1, ['Lu', 'Mi', 'Vi'], 50, "LMV")
-    add_b(2, ['Ma', 'Ju'], 80, "MJ") # 1h 20m
-    
+    add_b(2, ['Ma', 'Ju'], 80, "MJ")
     # 4 CRÉDITOS
     add_b(8, ['Lu','Ma','Mi','Ju'], 50, "LMWJ")
     add_b(9, ['Lu','Ma','Mi','Vi'], 50, "LMWV")
     add_b(10,['Lu','Ma','Ju','Vi'], 50, "LMJV")
     add_b(11,['Lu','Mi','Ju','Vi'], 50, "LWJV")
     add_b(12,['Ma','Mi','Ju','Vi'], 50, "MJWV")
-    add_b(13, ['Lu', 'Mi'], 110, "LW (Largo)") # Casi 2h
+    add_b(13, ['Lu', 'Mi'], 110, "LW (Largo)")
     add_b(15, ['Ma', 'Ju'], 110, "MJ (Largo)")
-
     # 5 CRÉDITOS
     add_b(17, ['Lu','Ma','Mi','Ju','Vi'], 50, "Diario")
 
     return bloques
 
 def get_hora_universal(zona):
-    """Retorna intervalo prohibido (inicio, fin) en minutos"""
-    if zona == "CENTRAL":
-        return (630, 750) # 10:30 - 12:30
-    else:
-        return (600, 720) # 10:00 - 12:00
+    if zona == "CENTRAL": return (630, 750) # 10:30 - 12:30
+    else: return (600, 720) # 10:00 - 12:00
 
 def mins_to_str(minutes):
-    h, m = minutes // 60, minutes % 60
+    h = int(minutes // 60)
+    m = int(minutes % 60)
     am_pm = "AM" if h < 12 else "PM"
     h_disp = h if h <= 12 else h - 12
     if h_disp == 0: h_disp = 12
     return f"{h_disp:02d}:{m:02d} {am_pm}"
+
+def time_input_to_mins(t_obj):
+    return t_obj.hour * 60 + t_obj.minute
 
 # ==============================================================================
 # 3. ESTRUCTURAS DE DATOS
@@ -201,27 +180,25 @@ class HorarioGen:
         self.salon_obj = salon_obj
 
 # ==============================================================================
-# 4. MOTOR INTELIGENTE V5 (CON ZONAS Y PREFERENCIAS)
+# 4. MOTOR INTELIGENTE (MODIFICADO PARA PREFERENCIAS GRANULARES)
 # ==============================================================================
 
-class GoldenSchedulerEngine:
+class PlatinumEngine:
     def __init__(self, secciones, profesores, salones, zona, preferencias_profe):
         self.secciones = secciones
         self.profesores_dict = {p.nombre: p for p in profesores}
         self.salones = salones
         self.zona = zona
-        self.preferencias = preferencias_profe # Dict {Prof: [DiasProhibidos]}
+        # preferencias_profe estructura: { 'JUAN': [ {'dia':'Ma', 'ini':450, 'fin':720}, ... ] }
+        self.preferencias = preferencias_profe 
         
-        # 1. GENERAR BLOQUES SEGÚN ZONA
         self.bloques_tiempo = generar_bloques_por_zona(zona)
         self.hora_univ_range = get_hora_universal(zona)
         
-        # Clasificar keys
         self.keys_3cr = [k for k, v in self.bloques_tiempo.items() if v['id_base'] <= 7]
         self.keys_4cr = [k for k, v in self.bloques_tiempo.items() if 8 <= v['id_base'] <= 16]
         self.keys_5cr = [k for k, v in self.bloques_tiempo.items() if v['id_base'] >= 17]
         
-        # Dominios Salones
         self.dominios_salones = {}
         for sec in secciones:
             validos = [s for s in salones if s.capacidad >= sec.cupo]
@@ -234,20 +211,21 @@ class GoldenSchedulerEngine:
         inicio = bloque['inicio']
         fin = inicio + bloque['duracion']
         
-        # 1. HORA UNIVERSAL (Solo Martes y Jueves)
+        # 1. HORA UNIVERSAL
         if 'Ma' in bloque['dias'] or 'Ju' in bloque['dias']:
             u_ini, u_fin = self.hora_univ_range
-            # Si el bloque se superpone aunque sea un minuto con la hora universal
             if max(inicio, u_ini) < min(fin, u_fin):
                 return False
 
-        # 2. PREFERENCIAS DEL PROFESOR (Restricción añadida)
+        # 2. PREFERENCIAS GRANULARES DEL PROFESOR (NUEVO)
         if profesor != "TBA" and profesor in self.preferencias:
-            dias_prohibidos = self.preferencias[profesor]
-            # Si el bloque tiene ALGÚN día prohibido, no es compatible
-            for dia_bloque in bloque['dias']:
-                if dia_bloque in dias_prohibidos:
-                    return False
+            restricciones = self.preferencias[profesor]
+            for r in restricciones:
+                # Si el día de la restricción está en los días del bloque
+                if r['dia'] in bloque['dias']:
+                    # Verificar solapamiento de horas
+                    if max(inicio, r['ini']) < min(fin, r['fin']):
+                        return False # Choca con preferencia horaria
 
         # 3. CHOQUE SALÓN
         for dia in bloque['dias']:
@@ -271,31 +249,25 @@ class GoldenSchedulerEngine:
         oc_prof = {}
         oc_salon = {}
         
-        # Ordenar: Grandes primero para asegurar salón
         secciones_ordenadas = sorted(self.secciones, key=lambda x: (not x.es_grande, random.random()))
         
         for sec in secciones_ordenadas:
-            # Seleccionar Profesor
             prof = random.choice(sec.candidatos) if sec.candidatos else "TBA"
             
-            # Pool de Bloques
             if sec.creditos == 3: pool_b = self.keys_3cr
             elif sec.creditos == 4: pool_b = self.keys_4cr
             else: pool_b = self.keys_5cr
             if not pool_b: pool_b = list(self.bloques_tiempo.keys())
             
-            # Pool Salones
             pool_s = self.dominios_salones[sec.uid]
             
             random.shuffle(pool_b)
             random.shuffle(pool_s)
             
             asignado = False
-            # Greedy
             for s in pool_s:
                 for b in pool_b:
                     if self.es_compatible(b, prof, s, oc_prof, oc_salon):
-                        # Asignar
                         bd = self.bloques_tiempo[b]
                         i, f = bd['inicio'], bd['inicio']+bd['duracion']
                         for d in bd['dias']:
@@ -325,19 +297,20 @@ class GoldenSchedulerEngine:
             bloque = self.bloques_tiempo[gen.bloque_key]
             ini, end = bloque['inicio'], bloque['inicio'] + bloque['duracion']
             
-            # Check Hora Universal
+            # Check Universal
             if 'Ma' in bloque['dias'] or 'Ju' in bloque['dias']:
                 u_ini, u_fin = self.hora_univ_range
                 if max(ini, u_ini) < min(end, u_fin):
                     conflictos.append(idx)
 
-            # Check Preferencias
+            # Check Preferencias Granulares
             if gen.profesor_nombre != "TBA" and gen.profesor_nombre in self.preferencias:
-                bad_days = self.preferencias[gen.profesor_nombre]
-                for d in bloque['dias']:
-                    if d in bad_days:
-                        conflictos.append(idx) # Penalizar
-                        break
+                restricciones = self.preferencias[gen.profesor_nombre]
+                for r in restricciones:
+                    if r['dia'] in bloque['dias']:
+                        if max(ini, r['ini']) < min(end, r['fin']):
+                            conflictos.append(idx)
+                            break
 
             for dia in bloque['dias']:
                 # Salón
@@ -364,7 +337,6 @@ class GoldenSchedulerEngine:
         rotos = self.detectar_conflictos(genes)
         if not rotos: return genes
         
-        # Mapa Sanos
         oc_prof = {}
         oc_salon = {}
         for i, gen in enumerate(genes):
@@ -447,46 +419,43 @@ class GoldenSchedulerEngine:
         return best_ind, abs(best_fit)
 
 # ==============================================================================
-# 5. INTERFAZ GRÁFICA (GUI PREMIUM)
+# 5. INTERFAZ GRÁFICA PLATINUM
 # ==============================================================================
 
 def main():
-    # HEADER
-    c1, c2 = st.columns([1, 4])
+    # HEADER PREMIUM
+    c1, c2 = st.columns([1, 6])
     with c1:
-        st.markdown("# 🏛️")
+        st.write("") # Spacer
+        st.markdown("<div style='font-size: 3rem;'>🏛️</div>", unsafe_allow_html=True)
     with c2:
         st.title("UPRM ACADEMIC SCHEDULER")
-        st.markdown("**GOLD EDITION V5.0** | Powered by Genetic Algorithms")
+        st.caption("PLATINUM EDITION | OPTIMIZACIÓN GENÉTICA")
 
     st.markdown("---")
 
     # SIDEBAR
     with st.sidebar:
-        st.header("⚙️ Configuración Global")
+        st.header("⚙️ Configuración")
         
-        # SELECTOR DE ZONA CRÍTICO
-        zona = st.selectbox("📍 Selección de Zona", ["CENTRAL", "PERIFERICA"], 
-                            help="Define hora de inicio (7:30 vs 7:00) y Hora Universal.")
-        
+        zona = st.selectbox("📍 Zona de Horarios", ["CENTRAL", "PERIFERICA"])
         if zona == "CENTRAL":
-            st.info("ℹ️ **Central:** Inicia :30. Univ: 10:30-12:30.")
+            st.info("Inicio: XX:30. Univ: 10:30-12:30.")
         else:
-            st.info("ℹ️ **Periférica:** Inicia :00. Univ: 10:00-12:00.")
+            st.info("Inicio: XX:00. Univ: 10:00-12:00.")
             
         st.markdown("---")
+        uploaded_file = st.file_uploader("📂 Excel de Entrada", type=['xlsx'])
         
-        uploaded_file = st.file_uploader("📂 Cargar Datos (Excel)", type=['xlsx'])
-        
-        st.markdown("### 🧬 Parámetros IA")
+        st.markdown("### 🧬 IA Control")
         pop_size = st.slider("Población", 20, 200, 50)
         gen_count = st.slider("Generaciones", 10, 500, 80)
 
-    # ESTADO DE LA SESIÓN (Para guardar preferencias)
+    # ESTADO (PREFERENCIAS)
     if 'prefs' not in st.session_state:
-        st.session_state.prefs = {} # {NombreProf: [Dias]}
+        # Estructura: {'PROF': [{'dia':'Lu', 'ini':450, 'fin':600}, ...]}
+        st.session_state.prefs = {} 
 
-    # LOGICA PRINCIPAL
     if uploaded_file:
         try:
             xls = pd.ExcelFile(uploaded_file)
@@ -494,132 +463,195 @@ def main():
             df_cur = pd.read_excel(xls, 'Cursos')
             df_sal = pd.read_excel(xls, 'Salones')
             
-            # PREPARAR LISTA PROFESORES
             lista_profes = sorted([str(n).strip().upper() for n in df_pro['Nombre'].unique()])
             
-            # --- PANEL DE PREFERENCIAS DOCENTES ---
-            with st.expander("👨‍🏫 Gestión de Preferencias Docentes (Opcional)", expanded=True):
-                col_p1, col_p2 = st.columns([1, 2])
-                with col_p1:
-                    prof_sel = st.selectbox("Seleccionar Profesor", lista_profes)
-                with col_p2:
-                    # Mostrar días prohibidos actuales
-                    current_blocks = st.session_state.prefs.get(prof_sel, [])
-                    days = st.multiselect(f"Días NO Disponibles para {prof_sel}", 
-                                          ["Lu", "Ma", "Mi", "Ju", "Vi"], 
-                                          default=current_blocks)
+            # --- GESTOR DE PREFERENCIAS GRANULARES (CAMBIO 5) ---
+            with st.expander("🚫 Restricciones Horarias Docentes", expanded=True):
+                c_p1, c_p2, c_p3, c_p4, c_p5 = st.columns([2, 1, 1, 1, 1])
+                with c_p1:
+                    prof_sel = st.selectbox("Profesor", lista_profes)
+                with c_p2:
+                    dia_sel = st.selectbox("Día", ["Lu", "Ma", "Mi", "Ju", "Vi"])
+                with c_p3:
+                    h_ini = st.time_input("Desde", value=datetime.strptime("07:30", "%H:%M"))
+                with c_p4:
+                    h_fin = st.time_input("Hasta", value=datetime.strptime("12:00", "%H:%M"))
+                with c_p5:
+                    st.write("") # Spacer
+                    add_btn = st.button("➕ Añadir")
+                
+                if add_btn:
+                    if prof_sel not in st.session_state.prefs: st.session_state.prefs[prof_sel] = []
                     
-                    if st.button("💾 Guardar Preferencia"):
-                        st.session_state.prefs[prof_sel] = days
-                        st.success(f"Preferencias guardadas para {prof_sel}: {days}")
-            
-            # Mostrar resumen de preferencias guardadas
-            if st.session_state.prefs:
-                st.caption(f"Profesores con restricciones manuales: {len(st.session_state.prefs)}")
+                    mini = time_input_to_mins(h_ini)
+                    mfin = time_input_to_mins(h_fin)
+                    
+                    if mini >= mfin:
+                        st.error("Error: Hora fin debe ser mayor a inicio.")
+                    else:
+                        st.session_state.prefs[prof_sel].append({'dia': dia_sel, 'ini': mini, 'fin': mfin})
+                        st.success(f"Bloqueado: {prof_sel} | {dia_sel} {mins_to_str(mini)}-{mins_to_str(mfin)}")
 
-            # --- BOTÓN DE ACCIÓN ---
+                # Visualizar restricciones actuales
+                if prof_sel in st.session_state.prefs:
+                    st.markdown(f"**Restricciones de {prof_sel}:**")
+                    for r in st.session_state.prefs[prof_sel]:
+                        st.code(f"{r['dia']}: {mins_to_str(r['ini'])} - {mins_to_str(r['fin'])}")
+                    if st.button("Limpiar Restricciones de este Prof"):
+                        del st.session_state.prefs[prof_sel]
+                        st.rerun()
+
+            # --- BOTON EJECUCION ---
             st.markdown("###")
-            col_act1, col_act2, col_act3 = st.columns([1, 2, 1])
-            with col_act2:
-                run_btn = st.button("🚀 GENERAR HORARIO PROFESIONAL", use_container_width=True)
-
-            if run_btn:
+            if st.button("🚀 GENERAR HORARIO MAESTRO", type="primary", use_container_width=True):
                 # PROCESAR DATOS
                 secciones = []
                 for _, row in df_cur.iterrows():
                     qty = int(row.get('CANTIDAD_SECCIONES', 1))
                     for i in range(qty):
-                        secciones.append(Seccion(f"{row['CODIGO']}-{i+1}", row['CODIGO'], row.get('NOMBRE',''), row['CREDITOS'], row['CUPO'], row.get('CANDIDATOS'), row.get('TIPO_SALON','GENERAL')))
+                        # COMBINAR CODIGO CON SECCION AQUI (CAMBIO 2)
+                        full_code = f"{row['CODIGO']}-{i+1:03d}"
+                        secciones.append(Seccion(full_code, full_code, row.get('NOMBRE',''), row['CREDITOS'], row['CUPO'], row.get('CANDIDATOS'), row.get('TIPO_SALON','GENERAL')))
                 
                 profesores = [Profesor(row['Nombre'], row['Carga_Min'], row['Carga_Max']) for _, row in df_pro.iterrows()]
                 salones = [Salon(row['CODIGO'], row['CAPACIDAD'], row['TIPO']) for _, row in df_sal.iterrows()]
 
-                # INICIAR ENGINE
-                engine = GoldenSchedulerEngine(secciones, profesores, salones, zona, st.session_state.prefs)
+                engine = PlatinumEngine(secciones, profesores, salones, zona, st.session_state.prefs)
                 
-                # BARRA PROGRESO PERSONALIZADA
-                progress_text = "Optimizando red neuronal de horarios..."
-                my_bar = st.progress(0, text=progress_text)
+                bar = st.progress(0, text="Iniciando motor genético...")
+                metric_ph = st.empty()
                 
-                col_m1, col_m2, col_m3 = st.columns(3)
-                m1 = col_m1.empty()
+                def cb(g, tot, fit):
+                    bar.progress((g+1)/tot, text=f"Evolución: {g+1}/{tot}")
+                    metric_ph.metric("Conflictos Detectados", fit)
                 
-                def ui_callback(g, tot, fit):
-                    pct = (g+1)/tot
-                    my_bar.progress(pct, text=f"Evolucionando Generación {g+1}/{tot}")
-                    m1.metric("Conflictos Actuales", fit, delta_color="inverse")
-
-                start_t = time.time()
-                best_ind, conflicts = engine.evolucionar(pop_size, gen_count, ui_callback)
-                duration = time.time() - start_t
+                best_ind, conflicts = engine.evolucionar(pop_size, gen_count, cb)
+                bar.empty()
+                metric_ph.empty()
                 
-                my_bar.empty()
-                
-                # --- RESULTADOS ---
-                st.markdown("---")
                 if conflicts == 0:
+                    st.success("✨ ¡HORARIO PERFECTO GENERADO! (0 Conflictos)")
                     st.balloons()
-                    st.markdown("""
-                    <div style="background-color: #006400; padding: 20px; border-radius: 10px; text-align: center; border: 2px solid #00FF00;">
-                        <h2 style="color: white !important; margin:0;">✨ HORARIO PERFECTO GENERADO ✨</h2>
-                        <p style="color: #ddd; margin:0;">Se han cumplido todas las restricciones de zona, hora universal y preferencias.</p>
-                    </div>
-                    """, unsafe_allow_html=True)
                 else:
-                    st.warning(f"⚠️ Se encontraron {conflicts} conflictos menores. Intenta aumentar las generaciones.")
+                    st.warning(f"⚠️ El horario tiene {conflicts} conflictos menores.")
 
-                # DATA FRAME
+                # CONSTRUIR DF RESULTADO
                 rows = []
                 for g in best_ind:
                     bd = engine.bloques_tiempo[g.bloque_key]
                     rows.append({
-                        'Curso': g.seccion.codigo,
-                        'Sección': g.seccion.uid.split('-')[1],
+                        'Curso': g.seccion.codigo, # Ya incluye el -001
+                        'Asignatura': g.seccion.nombre,
                         'Profesor': g.profesor_nombre,
                         'Días': "".join(bd['dias']),
-                        'Horario': bd['label'],
+                        'Hora Inicio': mins_to_str(bd['inicio']), # CAMBIO 3
+                        'Hora Fin': mins_to_str(bd['inicio'] + bd['duracion']), # CAMBIO 3
                         'Salón': g.salon_obj.codigo,
                         'Cupo': g.seccion.cupo
                     })
                 
                 df_res = pd.DataFrame(rows).sort_values('Curso')
                 
-                t1, t2 = st.tabs(["📅 VISTA TABULAR", "📊 ESTADÍSTICAS"])
+                # --- PESTAÑAS DE VISUALIZACIÓN ---
+                tab_table, tab_prof = st.tabs(["📅 HORARIO GENERAL", "👨‍🏫 DASHBOARD PROFESOR"])
                 
-                with t1:
-                    st.dataframe(df_res, use_container_width=True)
+                with tab_table:
+                    st.dataframe(df_res, use_container_width=True, hide_index=True)
+                    
+                    # DESCARGA
+                    buffer = io.BytesIO()
+                    with pd.ExcelWriter(buffer) as writer: df_res.to_excel(writer, index=False)
+                    st.download_button("📥 Descargar Excel", buffer.getvalue(), f"Horario_{zona}.xlsx")
                 
-                with t2:
-                    c_chart1, c_chart2 = st.columns(2)
-                    with c_chart1:
-                        st.markdown("**Ocupación de Salones**")
-                        pivot = df_res.groupby('Salón')['Curso'].count().reset_index()
-                        fig = px.bar(pivot, x='Salón', y='Curso', color_discrete_sequence=['#FFD700'])
-                        fig.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
-                        st.plotly_chart(fig, use_container_width=True)
-                
-                # DESCARGA
-                buffer = io.BytesIO()
-                with pd.ExcelWriter(buffer) as writer:
-                    df_res.to_excel(writer, index=False)
-                
-                st.download_button(
-                    label="📥 DESCARGAR EXCEL OFICIAL",
-                    data=buffer.getvalue(),
-                    file_name=f"Horario_UPRM_{zona}.xlsx",
-                    mime="application/vnd.ms-excel"
-                )
+                with tab_prof: # CAMBIO 4
+                    col_sel, col_stats = st.columns([1, 3])
+                    with col_sel:
+                        p_view = st.selectbox("Ver Profesor:", lista_profes)
+                        
+                        # Filtrar datos
+                        df_p = df_res[df_res['Profesor'] == p_view]
+                        
+                        # Calcular carga
+                        # Nota: Esto es aproximado basado en el resultado, la engine tiene el dato exacto con compensaciones
+                        # Para visualización rapida usamos conteo de cursos * creditos promedio (estimado)
+                        # O mejor, buscamos el objeto profesor original
+                        prof_obj = next((p for p in profesores if p.nombre == p_view), None)
+                        if prof_obj:
+                            st.metric("Carga Máxima", prof_obj.carga_max)
+                            st.metric("Carga Mínima", prof_obj.carga_min)
+                    
+                    with col_stats:
+                        if df_p.empty:
+                            st.info("Este profesor no tiene cursos asignados.")
+                        else:
+                            st.markdown(f"**Horario Gráfico: {p_view}**")
+                            
+                            # GRÁFICO TIPO GANTT CON PLOTLY
+                            # Transformar datos para gráfica
+                            plot_data = []
+                            dia_map = {'Lu': '2023-01-02', 'Ma': '2023-01-03', 'Mi': '2023-01-04', 'Ju': '2023-01-05', 'Vi': '2023-01-06'}
+                            
+                            for _, row in df_p.iterrows():
+                                dias_str = row['Días']
+                                # Separar dias (Lu, Ma, etc)
+                                # Simple parser: chunks of 2
+                                dias_list = [dias_str[i:i+2] for i in range(0, len(dias_str), 2)]
+                                
+                                # Convertir hora str a datetime dummy
+                                h_i = datetime.strptime(row['Hora Inicio'], "%I:%M %p")
+                                h_f = datetime.strptime(row['Hora Fin'], "%I:%M %p")
+                                
+                                for d in dias_list:
+                                    if d in dia_map:
+                                        base_date = dia_map[d]
+                                        start_dt = f"{base_date} {h_i.strftime('%H:%M:%S')}"
+                                        end_dt = f"{base_date} {h_f.strftime('%H:%M:%S')}"
+                                        
+                                        plot_data.append({
+                                            'Curso': row['Curso'],
+                                            'Salón': row['Salón'],
+                                            'Start': start_dt,
+                                            'Finish': end_dt,
+                                            'Día': d
+                                        })
+                            
+                            df_plot = pd.DataFrame(plot_data)
+                            
+                            if not df_plot.empty:
+                                fig = px.timeline(df_plot, x_start="Start", x_end="Finish", y="Día", color="Curso", 
+                                                  hover_data=['Salón'], title="Agenda Semanal", height=400)
+                                fig.update_yaxes(categoryorder="array", categoryarray=['Vi', 'Ju', 'Mi', 'Ma', 'Lu']) # Orden inverso para que Lunes quede arriba
+                                fig.update_layout(
+                                    xaxis=dict(tickformat="%I:%M %p"),
+                                    plot_bgcolor='#111',
+                                    paper_bgcolor='#111',
+                                    font_color='white'
+                                )
+                                st.plotly_chart(fig, use_container_width=True)
+                            
+                            # GRÁFICO CARGA
+                            # Estimación simple de carga
+                            carga_est = len(df_p) * 3 # Asumiendo 3 promedio
+                            fig_bar = go.Figure(go.Indicator(
+                                mode = "gauge+number",
+                                value = carga_est,
+                                title = {'text': "Carga Est. (Créditos)"},
+                                gauge = {
+                                    'axis': {'range': [0, 21]},
+                                    'bar': {'color': "#FFD700"},
+                                    'steps': [
+                                        {'range': [0, prof_obj.carga_min], 'color': "red"},
+                                        {'range': [prof_obj.carga_min, prof_obj.carga_max], 'color': "green"},
+                                        {'range': [prof_obj.carga_max, 21], 'color': "red"}
+                                    ]
+                                }
+                            ))
+                            fig_bar.update_layout(height=250, margin=dict(l=20,r=20,t=50,b=20), paper_bgcolor='#000', font_color='white')
+                            st.plotly_chart(fig_bar, use_container_width=True)
 
         except Exception as e:
-            st.error(f"Error Crítico: {e}")
-    else:
-        # PANTALLA DE BIENVENIDA
-        st.markdown("""
-        <div style="text-align: center; padding: 50px; opacity: 0.7;">
-            <h3>Esperando archivo de datos...</h3>
-            <p>Por favor carga el archivo Excel en el menú lateral para comenzar.</p>
-        </div>
-        """, unsafe_allow_html=True)
+            st.error(f"Error cargando datos: {e}")
+            st.info("Asegúrate de que el Excel tenga las hojas: Cursos, Profesores, Salones.")
 
 if __name__ == "__main__":
     main()
