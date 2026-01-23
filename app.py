@@ -485,7 +485,7 @@ def main():
         st.markdown("---")
         uploaded_file = st.file_uploader("📂 Excel de Entrada", type=['xlsx'])
         
-        st.markdown("### ⚙️ Parámetros del Algoritmo")
+        st.markdown("### 🧬 Parámetros del Algoritmo")
         pop_size = st.slider("Población", 20, 200, 50)
         gen_count = st.slider("Generaciones", 10, 500, 80)
 
