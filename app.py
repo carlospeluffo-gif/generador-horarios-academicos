@@ -467,8 +467,8 @@ def main():
         st.write("") 
         st.markdown("<div style='font-size: 3rem;'>🏛️</div>", unsafe_allow_html=True)
     with c2:
-        st.title("UPRM ACADEMIC SCHEDULER")
-        st.caption("PLATINUM EDITION | BALANCED LOAD")
+        st.title("Sistema de Planificación Académica UPRM")
+        st.caption("Optimización Genética & Balance de Carga Docente")
 
     st.markdown("---")
 
@@ -485,7 +485,7 @@ def main():
         st.markdown("---")
         uploaded_file = st.file_uploader("📂 Excel de Entrada", type=['xlsx'])
         
-        st.markdown("### 🧬 IA Control")
+        st.markdown("### ⚙️ Parámetros del Algoritmo")
         pop_size = st.slider("Población", 20, 200, 50)
         gen_count = st.slider("Generaciones", 10, 500, 80)
 
