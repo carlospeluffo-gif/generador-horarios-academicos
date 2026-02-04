@@ -5,116 +5,50 @@ import random
 import copy
 import io
 import plotly.express as px
-import plotly.graph_objects as go
 from datetime import datetime
 
 # ==============================================================================
-# 1. UTILIDADES DE TIEMPO Y PARSEO
+# 1. CONFIGURACIÓN Y ESTÉTICA
 # ==============================================================================
+st.set_page_config(page_title="UPRM Scheduler Thesis Pro", layout="wide")
 
-def mins_to_str(minutes):
-    h, m = divmod(int(minutes), 60)
-    am_pm = "AM" if h < 12 else "PM"
-    h_disp = h if h <= 12 else h - 12
-    if h_disp == 0: h_disp = 12
-    return f"{h_disp:02d}:{m:02d} {am_pm}"
-
-def time_str_to_mins(t_str):
-    """Convierte '08:30' a minutos (510)"""
-    t_obj = datetime.strptime(t_str.strip(), "%H:%M")
-    return t_obj.hour * 60 + t_obj.minute
-
-def parsear_bloqueo_graduado(horario_raw):
-    """
-    Parsea: 'LuMiVi 08:30-09:20; MaJu 10:30-11:50'
-    Retorna lista de dicts de restricciones.
-    """
-    if pd.isna(horario_raw) or str(horario_raw).strip() == "":
-        return []
-    
-    restricciones = []
-    bloques = str(horario_raw).split(';')
-    for bloque in bloques:
-        try:
-            partes = bloque.strip().split(' ')
-            dias_raw = partes[0] # LuMiVi
-            horas_raw = partes[1].split('-') # ['08:30', '09:20']
-            
-            ini = time_str_to_mins(horas_raw[0])
-            fin = time_str_to_mins(horas_raw[1])
-            
-            # Separar días (Lu, Mi, Vi...)
-            dias = [dias_raw[i:i+2] for i in range(0, len(dias_raw), 2)]
-            for d in dias:
-                restricciones.append({'dia': d, 'ini': ini, 'fin': fin, 'tipo': 'CLASE_RECIBIDA'})
-        except:
-            continue
-    return restricciones
+st.markdown("""
+<style>
+    .stApp { background-color: #0e1117; color: white; }
+    h1, h2, h3 { color: #FFD700 !important; }
+    .stButton>button { background: linear-gradient(90deg, #B8860B, #FFD700); color: black; font-weight: bold; }
+</style>
+""", unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. GENERADOR DINÁMICO DE SECCIONES (LA CORRECCIÓN DEL ASESOR)
-# ==============================================================================
-
-def explotar_demandas(df_cursos):
-    """
-    Toma la demanda total y crea N objetos Seccion basados en la REGLA.
-    Regla ej: '4x45,1x90,R30' -> 4 de 45, 1 de 90 y el resto de 30.
-    """
-    secciones_generadas = []
-    for _, row in df_cursos.iterrows():
-        codigo = str(row['CODIGO']).strip().upper()
-        demanda = int(row['DEMANDA_TOTAL'])
-        reglas = str(row['REGLAS']).split(',')
-        candidatos = str(row.get('CANDIDATOS', '')).split(',')
-        tipo_s = str(row.get('TIPO_SALON', 'GENERAL'))
-        creditos = int(row['CREDITOS'])
-        
-        atendido = 0
-        sec_idx = 1
-        
-        for r in reglas:
-            r = r.strip().upper()
-            if 'X' in r: # Cantidad específica: 4X45
-                cant, cap = map(int, r.split('X'))
-                for _ in range(cant):
-                    if atendido < demanda:
-                        secciones_generadas.append(
-                            Seccion(f"{codigo}-{sec_idx:03d}", codigo, row['NOMBRE'], creditos, cap, candidatos, tipo_s)
-                        )
-                        atendido += cap
-                        sec_idx += 1
-            elif r.startswith('R'): # Resto: R30
-                cap = int(r[1:])
-                while atendido < demanda:
-                    secciones_generadas.append(
-                        Seccion(f"{codigo}-{sec_idx:03d}", codigo, row['NOMBRE'], creditos, cap, candidatos, tipo_s)
-                    )
-                    atendido += cap
-                    sec_idx += 1
-    return secciones_generadas
-
-# ==============================================================================
-# 3. CLASES CORE
+# 2. MODELOS DE DATOS
 # ==============================================================================
 
 class Seccion:
-    def __init__(self, uid, codigo_base, nombre, creditos, cupo, candidatos, tipo_salon_req):
+    def __init__(self, uid, codigo_base, nombre, creditos, cupo, candidatos, tipo_salon, matriculados=None):
         self.uid = uid
         self.codigo_base = codigo_base
         self.nombre = nombre
         self.creditos = creditos
         self.cupo = cupo
-        self.tipo_salon_req = tipo_salon_req.upper()
-        self.candidatos = [c.strip().upper() for c in candidatos if c.strip()]
-        self.es_grande = (cupo >= 80)
+        self.tipo_salon_req = str(tipo_salon).upper()
+        self.candidatos = [c.strip().upper() for c in str(candidatos).split(',') if c.strip()]
+        # IDs de graduados que TOMAN esta sección
+        self.matriculados = [m.strip().upper() for m in str(matriculados).split(',') if m.strip()] if matriculados else []
 
 class Profesor:
-    def __init__(self, nombre, c_min, c_max, es_graduado=False, horario_recibe=""):
-        self.nombre = nombre.strip().upper()
+    def __init__(self, nombre, c_min, c_max, es_graduado=False, estudiante_id=None):
+        self.nombre = str(nombre).strip().upper()
         self.carga_min = float(c_min)
         self.carga_max = float(c_max)
-        self.es_graduado = es_graduado
-        self.bloqueos_estudiante = parsear_bloqueo_graduado(horario_recibe)
+        self.es_graduado = str(es_graduado).upper() == "SI"
+        self.estudiante_id = str(estudiante_id).strip().upper() if estudiante_id else None
+
+class Salon:
+    def __init__(self, codigo, capacidad, tipo):
+        self.codigo = str(codigo).upper()
+        self.capacidad = int(capacidad)
+        self.tipo = str(tipo).upper()
 
 class HorarioGen:
     def __init__(self, seccion, profesor_nombre, bloque_key, salon_obj):
@@ -124,214 +58,212 @@ class HorarioGen:
         self.salon_obj = salon_obj
 
 # ==============================================================================
-# 4. MOTOR GENÉTICO PLATINUM (V2.0)
+# 3. LÓGICA DE TIEMPO UPRM
 # ==============================================================================
 
-class PlatinumEngine:
-    def __init__(self, secciones, profesores, salones, zona, preferencias_manuales):
+def generar_bloques(zona):
+    bloques = {}
+    offset = 30 if zona == "CENTRAL" else 0
+    # LMV (50 min) y MJ (80 min)
+    for h in range(7, 20):
+        inicio = h * 60 + offset
+        # LMV
+        bloques[f"LMV_{inicio}"] = {'dias': ['Lu', 'Mi', 'Vi'], 'inicio': inicio, 'dur': 50, 'label': 'LMV'}
+        # MJ
+        bloques[f"MJ_{inicio}"] = {'dias': ['Ma', 'Ju'], 'inicio': inicio, 'dur': 80, 'label': 'MJ'}
+    return bloques
+
+def mins_to_str(m):
+    h, mins = divmod(int(m), 60)
+    ampm = "AM" if h < 12 else "PM"
+    h = h if h <= 12 else h - 12
+    if h == 0: h = 12
+    return f"{h:02d}:{mins:02d} {ampm}"
+
+# ==============================================================================
+# 4. MOTOR DE OPTIMIZACIÓN (ALGORITMO GENÉTICO)
+# ==============================================================================
+
+class EngineThesis:
+    def __init__(self, secciones, profesores, salones, zona):
         self.secciones = secciones
         self.profesores_dict = {p.nombre: p for p in profesores}
+        self.grad_to_prof = {p.estudiante_id: p.nombre for p in profesores if p.es_graduado}
         self.salones = salones
-        self.zona = zona
-        self.preferencias_manuales = preferencias_manuales
-        from __main__ import generar_bloques_por_zona, get_hora_universal # Import local para Streamlit
-        self.bloques_tiempo = generar_bloques_por_zona(zona)
-        self.hora_univ = get_hora_universal(zona)
-        
-        # Categorizar bloques por créditos
-        self.pool_3cr = [k for k,v in self.bloques_tiempo.items() if v['id_base'] <= 7]
-        self.pool_4cr = [k for k,v in self.bloques_tiempo.items() if 8 <= v['id_base'] <= 16]
+        self.bloques = generar_bloques(zona)
+        self.u_ini, self.u_fin = (630, 750) if zona == "CENTRAL" else (600, 720)
 
-    def es_compatible(self, b_key, prof_name, salon, oc_p, oc_s):
-        bloque = self.bloques_tiempo[b_key]
-        ini, fin = bloque['inicio'], bloque['inicio'] + bloque['duracion']
-        
-        # 1. Cruce con Hora Universal (MaJu)
-        if any(d in ['Ma', 'Ju'] for d in bloque['dias']):
-            if max(ini, self.hora_univ[0]) < min(fin, self.hora_univ[1]): return False
+    def hay_traslape(self, b1_key, b2_key):
+        b1, b2 = self.bloques[b1_key], self.bloques[b2_key]
+        if not set(b1['dias']).intersection(b2['dias']): return False
+        return max(b1['inicio'], b2['inicio']) < min(b1['inicio']+b1['dur'], b2['inicio']+b2['dur'])
 
-        # 2. Cruce con el Salón
-        for d in bloque['dias']:
-            if (salon.codigo, d) in oc_s:
-                for (t1, t2) in oc_s[(salon.codigo, d)]:
-                    if max(ini, t1) < min(fin, t2): return False
+    def calcular_fitness(self, genes):
+        conflictos = 0
+        oc_salon = {} # (salon, dia): [(ini, fin)]
+        oc_prof = {}  # (prof, dia): [(ini, fin)]
+        horario_estudiante = {} # (est_id, dia): [(ini, fin)]
+        cargas = {p: 0 for p in self.profesores_dict}
 
-        # 3. Cruce con el Profesor (Doble Rol y Preferencias)
-        if prof_name != "TBA":
-            p_obj = self.profesores_dict[prof_name]
-            # Combinar bloqueos de estudiante + preferencias manuales
-            todas_restricciones = p_obj.bloqueos_estudiante + self.preferencias_manuales.get(prof_name, [])
+        # Primera pasada: Registrar donde los graduados RECIBEN clase
+        for g in genes:
+            bloque = self.bloques[g.bloque_key]
+            for est_id in g.seccion.matriculados:
+                for d in bloque['dias']:
+                    key = (est_id, d)
+                    if key not in horario_estudiante: horario_estudiante[key] = []
+                    horario_estudiante[key].append((bloque['inicio'], bloque['inicio']+bloque['dur']))
+
+        # Segunda pasada: Validar choques
+        for g in genes:
+            b = self.bloques[g.bloque_key]
+            ini, fin = b['inicio'], b['inicio'] + b['dur']
             
-            for r in todas_restricciones:
-                if r['dia'] in bloque['dias']:
-                    if max(ini, r['ini']) < min(fin, r['fin']): return False
-            
-            # Cruce con otras clases asignadas
-            for d in bloque['dias']:
-                if (prof_name, d) in oc_p:
-                    for (t1, t2) in oc_p[(prof_name, d)]:
-                        if max(ini, t1) < min(fin, t2): return False
-        return True
+            # 1. Choque de Salon
+            for d in b['dias']:
+                ks = (g.salon_obj.codigo, d)
+                if ks in oc_salon:
+                    for (t1, t2) in oc_salon[ks]:
+                        if max(ini, t1) < min(fin, t2): conflictos += 1
+                if ks not in oc_salon: oc_salon[ks] = []
+                oc_salon[ks].append((ini, fin))
+
+            # 2. Choque de Profesor Y Doble Rol
+            if g.profesor_nombre != "TBA":
+                p_obj = self.profesores_dict[g.profesor_nombre]
+                cargas[g.profesor_nombre] += g.seccion.creditos
+                
+                for d in b['dias']:
+                    kp = (g.profesor_nombre, d)
+                    # Choque docente
+                    if kp in oc_prof:
+                        for (t1, t2) in oc_prof[kp]:
+                            if max(ini, t1) < min(fin, t2): conflictos += 1
+                    if kp not in oc_prof: oc_prof[kp] = []
+                    oc_prof[kp].append((ini, fin))
+                    
+                    # Choque Doble Rol (Graduado dando y recibiendo a la vez)
+                    if p_obj.es_graduado:
+                        ke = (p_obj.estudiante_id, d)
+                        if ke in horario_estudiante:
+                            for (t1, t2) in horario_estudiante[ke]:
+                                if max(ini, t1) < min(fin, t2): conflictos += 10 # Penalidad alta
+
+            # 3. Hora Universal
+            if any(d in ['Ma', 'Ju'] for d in b['dias']):
+                if max(ini, self.u_ini) < min(fin, self.u_fin): conflictos += 1
+
+        # 4. Carga Académica
+        for p_nombre, carga in cargas.items():
+            p = self.profesores_dict[p_nombre]
+            if carga < p.carga_min or carga > p.carga_max: conflictos += 1
+
+        return -conflictos
 
     def generar_individuo(self):
         genes = []
-        oc_p, oc_s = {}, {}
-        cargas = {p: 0 for p in self.profesores_dict}
-        
-        # Priorizar secciones grandes para asegurar salones
-        secciones_ordenadas = sorted(self.secciones, key=lambda x: (not x.es_grande, random.random()))
-        
-        for sec in secciones_ordenadas:
-            # Selección de Profesor (Balanceo de Carga)
-            candidatos_validos = []
-            for c in sec.candidatos:
-                if c in self.profesores_dict:
-                    p = self.profesores_dict[c]
-                    if cargas[c] + sec.creditos <= p.carga_max:
-                        candidatos_validos.append(c)
-            
-            candidatos_validos.sort(key=lambda c: (cargas[c] >= self.profesores_dict[c].carga_min, cargas[c]))
-            prof = candidatos_validos[0] if candidatos_validos else "TBA"
-            
-            # Búsqueda de Horario y Salón
-            pool_b = self.pool_4cr if sec.creditos == 4 else self.pool_3cr
-            random.shuffle(pool_b)
-            
-            pool_s = [s for s in self.salones if s.capacidad >= sec.cupo]
-            if sec.tipo_salon_req != 'GENERAL':
-                pool_s = [s for s in pool_s if s.tipo == sec.tipo_salon_req]
-            random.shuffle(pool_s)
-            
-            asignado = False
-            for s in pool_s:
-                for b in pool_b:
-                    if self.es_compatible(b, prof, s, oc_p, oc_s):
-                        genes.append(HorarioGen(sec, prof, b, s))
-                        if prof != "TBA":
-                            cargas[prof] += sec.creditos
-                            for d in self.bloques_tiempo[b]['dias']:
-                                kp, ks = (prof, d), (s.codigo, d)
-                                if kp not in oc_p: oc_p[kp] = []
-                                if ks not in oc_s: oc_s[ks] = []
-                                oc_p[kp].append((self.bloques_tiempo[b]['inicio'], self.bloques_tiempo[b]['inicio']+self.bloques_tiempo[b]['duracion']))
-                                oc_s[ks].append((self.bloques_tiempo[b]['inicio'], self.bloques_tiempo[b]['inicio']+self.bloques_tiempo[b]['duracion']))
-                        asignado = True
-                        break
-                if asignado: break
-            if not asignado:
-                genes.append(HorarioGen(sec, prof, random.choice(pool_b), random.choice(self.salones)))
-
+        for sec in self.secciones:
+            prof = random.choice(sec.candidatos) if sec.candidatos else "TBA"
+            bloque = random.choice(list(self.bloques.keys()))
+            salon = random.choice([s for s in self.salones if s.capacidad >= sec.cupo] or self.salones)
+            genes.append(HorarioGen(sec, prof, bloque, salon))
         return genes
 
-    def evolucionar(self, pop_size, generaciones, callback):
+    def evolucionar(self, pop_size, gens, callback):
         poblacion = [self.generar_individuo() for _ in range(pop_size)]
-        for g in range(generaciones):
-            # Fitness: -1 por cada choque, -5 por carga mínima no cumplida
-            scores = []
-            for ind in poblacion:
-                conflictos = self.contar_conflictos(ind)
-                scores.append((-len(conflictos), ind))
-            
+        
+        for g in range(gens):
+            scores = [(self.calcular_fitness(ind), ind) for ind in poblacion]
             scores.sort(key=lambda x: x[0], reverse=True)
-            callback(g, generaciones, abs(scores[0][0]))
             
-            if scores[0][0] == 0: return scores[0][1], 0
-            
-            # Evolución simple: Elitismo + Mutación (reparación)
+            callback(g, gens, abs(scores[0][0]))
+            if scores[0][0] == 0: break
+
+            # Elitismo + Cruce + Mutación simple
             nueva_gen = [scores[0][1], scores[1][1]]
             while len(nueva_gen) < pop_size:
-                hijo = copy.deepcopy(random.choice(scores[:5])[1])
-                # Mutar un gen aleatorio que tenga conflicto
+                padre = random.choice(scores[:pop_size//2])[1]
+                hijo = copy.deepcopy(padre)
+                # Mutación: cambiar un curso al azar
+                idx = random.randint(0, len(hijo)-1)
+                hijo[idx].bloque_key = random.choice(list(self.bloques.keys()))
                 nueva_gen.append(hijo)
             poblacion = nueva_gen
             
         return scores[0][1], abs(scores[0][0])
 
-    def contar_conflictos(self, genes):
-        err = []
-        oc_p, oc_s, carga_f = {}, {}, {p:0 for p in self.profesores_dict}
-        for i, g in enumerate(genes):
-            if g.profesor_nombre != "TBA": carga_f[g.profesor_nombre] += g.seccion.creditos
-            # Lógica de detección similar a es_compatible...
-            # (Omitido por brevedad, pero detecta cruces reales)
-        return err
-
 # ==============================================================================
-# 5. UI STREAMLIT
+# 5. EXPLOSIÓN DE DEMANDA (CORRECCIÓN ASESOR)
 # ==============================================================================
 
-def generar_bloques_por_zona(zona):
-    bloques = {}
-    h_inicio = [h*60 + (30 if zona=="CENTRAL" else 0) for h in range(7, 20)]
-    def add_b(id_b, dias, dur):
-        for h in h_inicio:
-            if h+dur > 1320: continue
-            bloques[f"{id_b}_{h}"] = {'id_base': id_b, 'dias': dias, 'inicio': h, 'duracion': dur}
-    
-    add_b(1, ['Lu','Mi','Vi'], 50)
-    add_b(2, ['Ma','Ju'], 80)
-    add_b(8, ['Lu','Ma','Mi','Ju'], 50)
-    return bloques
+def explotar_secciones(df_cursos):
+    secciones = []
+    for _, row in df_cursos.iterrows():
+        demanda = int(row['DEMANDA_TOTAL'])
+        reglas = str(row['REGLAS']).split(',')
+        atendido = 0
+        idx = 1
+        for r in reglas:
+            r = r.strip().upper()
+            if 'X' in r:
+                cant, cap = map(int, r.split('X'))
+                for _ in range(cant):
+                    if atendido < demanda:
+                        secciones.append(Seccion(f"{row['CODIGO']}-{idx:03d}", row['CODIGO'], row['NOMBRE'], row['CREDITOS'], cap, row['CANDIDATOS'], row['TIPO_SALON'], row.get('MATRICULADOS')))
+                        atendido += cap; idx += 1
+            elif r.startswith('R'):
+                cap = int(r[1:])
+                while atendido < demanda:
+                    secciones.append(Seccion(f"{row['CODIGO']}-{idx:03d}", row['CODIGO'], row['NOMBRE'], row['CREDITOS'], cap, row['CANDIDATOS'], row['TIPO_SALON'], row.get('MATRICULADOS')))
+                    atendido += cap; idx += 1
+    return secciones
 
-def get_hora_universal(zona):
-    return (630, 750) if zona == "CENTRAL" else (600, 720)
-
-st.set_page_config(page_title="UPRM Scheduler Pro", layout="wide")
+# ==============================================================================
+# 6. INTERFAZ PRINCIPAL
+# ==============================================================================
 
 def main():
-    st.title("🏛️ UPRM Scheduler Pro: Demand-Driven & Grad-Role")
+    st.title("🏛️ UPRM Academic Planner - Tesis Edition")
+    st.sidebar.header("Configuración")
     
-    with st.sidebar:
-        zona = st.selectbox("Zona", ["CENTRAL", "PERIFERICA"])
-        upload = st.file_uploader("Excel de Datos", type=['xlsx'])
-        pop = st.slider("Población", 10, 100, 30)
-        gens = st.slider("Generaciones", 5, 200, 50)
+    zona = st.sidebar.selectbox("Zona", ["CENTRAL", "PERIFERICA"])
+    file = st.sidebar.file_uploader("Cargar Excel", type=['xlsx'])
+    pop = st.sidebar.slider("Población", 20, 100, 50)
+    gens = st.sidebar.slider("Generaciones", 10, 500, 100)
 
-    if upload:
-        df_pro = pd.read_excel(upload, 'Profesores')
-        df_cur = pd.read_excel(upload, 'Cursos')
-        df_sal = pd.read_excel(upload, 'Salones')
-        
-        if st.button("🚀 GENERAR HORARIO"):
-            # 1. Crear Profesores con Doble Rol
-            profesores = []
-            for _, r in df_pro.iterrows():
-                profesores.append(Profesor(r['Nombre'], r['Carga_Min'], r['Carga_Max'], 
-                                           r.get('ES_GRADUADO')=='SI', r.get('HORARIO_RECIBE','')))
-            
-            # 2. Explosión de Demandas (Lo que pidió el asesor)
-            secciones = explotar_demandas(df_cur)
-            st.info(f"Se generaron {len(secciones)} secciones automáticamente basadas en la demanda.")
-            
+    if file:
+        xls = pd.ExcelFile(file)
+        df_cur = pd.read_excel(xls, 'Cursos')
+        df_pro = pd.read_excel(xls, 'Profesores')
+        df_sal = pd.read_excel(xls, 'Salones')
+
+        if st.button("🚀 INICIAR OPTIMIZACIÓN"):
+            secciones = explotar_secciones(df_cur)
+            profesores = [Profesor(r['Nombre'], r['Carga_Min'], r['Carga_Max'], r.get('ES_GRADUADO'), r.get('ESTUDIANTE_ID')) for _, r in df_pro.iterrows()]
             salones = [Salon(r['CODIGO'], r['CAPACIDAD'], r['TIPO']) for _, r in df_sal.iterrows()]
-            
-            engine = PlatinumEngine(secciones, profesores, salones, zona, {})
-            bar = st.progress(0)
-            
-            def cb(g, t, f):
-                bar.progress((g+1)/t, f"Gen {g} - Conflictos: {f}")
-            
-            mejor_ind, c_final = engine.evolucionar(pop, gens, cb)
-            
-            # Mostrar Resultados
-            res = []
-            for g in mejor_ind:
-                b = engine.bloques_tiempo[g.bloque_key]
-                res.append({
-                    "Curso": g.seccion.uid,
-                    "Profesor": g.profesor_nombre,
-                    "Días": "".join(b['dias']),
-                    "Inicio": mins_to_str(b['inicio']),
-                    "Salón": g.salon_obj.codigo,
-                    "Capacidad": g.seccion.cupo
-                })
-            st.dataframe(pd.DataFrame(res), use_container_width=True)
 
-class Salon:
-    def __init__(self, codigo, capacidad, tipo):
-        self.codigo = str(codigo).upper()
-        self.capacidad = int(capacidad)
-        self.tipo = str(tipo).upper()
+            engine = EngineThesis(secciones, profesores, salones, zona)
+            bar = st.progress(0)
+            status = st.empty()
+
+            def update(g, t, f):
+                bar.progress((g+1)/t)
+                status.write(f"🧬 Generación {g}/{t} | ⚠️ Conflictos: {f}")
+
+            mejor_ind, conflictos = engine.evolucionar(pop, gens, update)
+
+            # Resultados
+            st.success(f"Proceso completado con {conflictos} conflictos.")
+            data = []
+            for g in mejor_ind:
+                b = engine.bloques[g.bloque_key]
+                data.append({
+                    "Sección": g.seccion.uid, "Curso": g.seccion.nombre,
+                    "Profesor": g.profesor_nombre, "Días": "".join(b['dias']),
+                    "Horario": f"{mins_to_str(b['inicio'])} - {mins_to_str(b['inicio']+b['dur'])}",
+                    "Salón": g.salon_obj.codigo
+                })
+            st.dataframe(pd.DataFrame(data), use_container_width=True)
 
 if __name__ == "__main__":
     main()
