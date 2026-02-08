@@ -95,7 +95,7 @@ st.markdown("""
 </style>
 
 <div class="header-container">
-    <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/269/2021/03/RUM_Logo_Oficial.png" class="logo-img">
+    <img src="https://www.uprm.edu/math/applied-math/" class="logo-img">
     <div style="text-align: center;">
         <h1 style="margin:0;">PLATINUM SCHEDULER AI</h1>
         <p style="color: #888; letter-spacing: 2px; font-family: 'Source Code Pro';">UPRM MATHEMATICAL SCIENCES DIVISION</p>
