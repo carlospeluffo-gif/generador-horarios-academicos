@@ -7,37 +7,72 @@ import copy
 from datetime import datetime
 
 # ==============================================================================
-# 1. ESTÉTICA PLATINUM (RESTAURADA TOTALMENTE)
+# 1. ESTÉTICA PLATINUM ELITE (REDESIGN)
 # ==============================================================================
 st.set_page_config(page_title="UPRM Scheduler Platinum AI v3", page_icon="🏛️", layout="wide")
 
 st.markdown("""
 <style>
-    .stApp { 
-        background-color: #000000; 
-        background-image: linear-gradient(rgba(15, 15, 15, 0.6), rgba(15, 15, 15, 0.6)), url("https://www.transparenttextures.com/patterns/cubes.png"); 
-        color: #ffffff; 
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Source+Code+Pro:wght@300;500&display=swap');
+
+    .stApp {
+        background: radial-gradient(circle at top, #1a1a1a 0%, #000000 100%);
+        color: #e0e0e0;
     }
-    p, label, .stMarkdown, .stDataFrame, div[data-testid="stMarkdownContainer"] p { 
-        color: #e0e0e0 !important; font-family: 'Segoe UI', sans-serif; 
+    
+    /* Títulos con estilo caligráfico y matemático */
+    h1, h2, h3 {
+        font-family: 'Playfair Display', serif !important;
+        color: #D4AF37 !important; /* Gold Platinum */
+        text-align: center;
+        letter-spacing: 2px;
+        text-shadow: 2px 2px 10px rgba(212, 175, 55, 0.3);
     }
-    h1, h2, h3, h4 { 
-        color: #FFD700 !important; text-shadow: 0px 0px 15px rgba(255, 215, 0, 0.4); 
+
+    /* Paneles Glassmorphism */
+    .glass-card {
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 15px;
+        padding: 25px;
+        border: 1px solid rgba(212, 175, 55, 0.2);
+        backdrop-filter: blur(10px);
+        margin-bottom: 20px;
     }
-    [data-testid="stSidebar"] { background-color: #080808; border-right: 1px solid #333; }
-    .stButton>button { 
-        background: linear-gradient(90deg, #B8860B, #FFD700); 
-        color: #000 !important; font-weight: 800; border: none; padding: 0.6rem 1.2rem; border-radius: 6px;
+
+    /* Botones de Lujo */
+    .stButton>button {
+        background: linear-gradient(135deg, #8E6E13 0%, #D4AF37 50%, #8E6E13 100%) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 2px !important;
+        font-weight: bold !important;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        transition: all 0.3s ease;
+        width: 100%;
     }
-    .stTabs [data-baseweb="tab"] { color: #FFD700; font-weight: bold; }
-    .error-box { 
-        padding: 15px; background-color: rgba(255, 0, 0, 0.1); border-left: 5px solid #ff4b4b; margin: 10px 0;
+    
+    .stButton>button:hover {
+        transform: scale(1.02);
+        box-shadow: 0px 0px 20px rgba(212, 175, 55, 0.5);
+    }
+
+    /* Sidebar minimalista pero elegante */
+    [data-testid="stSidebar"] {
+        background-color: #050505;
+        border-right: 1px solid #D4AF37;
+    }
+
+    .math-text {
+        font-family: 'Source Code Pro', monospace;
+        color: #B8860B;
+        font-size: 0.9rem;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. UTILIDADES
+# 2. UTILIDADES TÉCNICAS
 # ==============================================================================
 def mins_to_str(minutes):
     h, m = divmod(int(minutes), 60)
@@ -62,7 +97,7 @@ def crear_excel_guia():
     return output.getvalue()
 
 # ==============================================================================
-# 3. MOTOR IA (SELECCIÓN POR TORNEO + BLOQUES)
+# 3. MOTOR IA (LÓGICA EXISTENTE)
 # ==============================================================================
 class Seccion:
     def __init__(self, uid, nombre, creditos, cupo, candidatos, tipo_salon, es_grad=False):
@@ -140,21 +175,13 @@ class PlatinumGeneticEngine:
             bar.progress((gen + 1) / self.generations)
         return pob[0]
 
-# ==============================================================================
-# 4. EXPORTACIÓN (CORREGIDA PARA EVITAR KEYERROR)
-# ==============================================================================
 def exportar_todo(df):
-    # Aseguramos que los nombres de las columnas no tengan espacios extras
     df.columns = [c.strip() for c in df.columns]
-    
     out = io.BytesIO()
     with pd.ExcelWriter(out, engine='xlsxwriter') as writer:
         df.to_excel(writer, sheet_name='Maestro', index=False)
-        
-        # Uso de .get() para evitar que el programa explote si no encuentra la columna
         col_prof = 'Profesor' if 'Profesor' in df.columns else df.columns[2]
         col_salon = 'Salón' if 'Salón' in df.columns else df.columns[5]
-
         for p in df[col_prof].unique():
             if str(p) != "TBA":
                 df[df[col_prof] == p].to_excel(writer, sheet_name=f"Prof_{str(p)[:20]}", index=False)
@@ -165,7 +192,6 @@ def exportar_todo(df):
 
 def analizar_horario(df, engine):
     errs = []
-    # Limpiar nombres de columnas
     df.columns = [c.strip() for c in df.columns]
     for _, r in df.iterrows():
         try:
@@ -177,58 +203,92 @@ def analizar_horario(df, engine):
     return list(set(errs))
 
 # ==============================================================================
-# 5. UI PRINCIPAL
+# 4. INTERFAZ PRINCIPAL
 # ==============================================================================
 def main():
-    st.title("🏛️ UPRM Scheduler Platinum AI v3")
+    st.markdown("<h1>🏛️ PLATINUM SCHEDULER AI</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center; color:#888;'>UPRM Computational Intelligence Unit | Version 3.0</p>", unsafe_allow_html=True)
+    st.markdown("---")
 
     with st.sidebar:
-        st.header("🧬 Configuración")
+        st.markdown("### $\Sigma$ Parámetros")
         zona = st.selectbox("Zona Campus", ["CENTRAL", "PERIFERICA"])
-        pop = st.slider("Población", 20, 100, 50)
-        gens = st.slider("Generaciones", 50, 300, 100)
-        file = st.file_uploader("Subir Excel", type=['xlsx'])
-        if not file:
-            st.download_button("📥 Plantilla Guía", crear_excel_guia(), "Plantilla_UPRM.xlsx")
+        pop = st.slider("Población (n)", 20, 100, 50)
+        gens = st.slider("Generaciones (g)", 50, 500, 100)
+        st.markdown("---")
+        file = st.file_uploader("Subir Protocolo Excel", type=['xlsx'])
 
-    if file:
+    # Panel de Condiciones Dinámicas
+    with st.container():
+        st.markdown(f"### $\Omega$ Condiciones de Zona: {zona}")
+        col1, col2, col3 = st.columns(3)
+        
+        if zona == "CENTRAL":
+            h_bloqueo = "10:30 AM - 12:30 PM"
+            limites = "07:30 AM - 06:30 PM"
+        else:
+            h_bloqueo = "10:00 AM - 12:00 PM"
+            limites = "07:00 AM - 06:00 PM"
+
+        col1.metric("Límite Operativo", limites)
+        col2.metric("Bloqueo Universitario", h_bloqueo)
+        col3.markdown(f"""
+            <div class='math-text'>
+            P(x) = Horas \in [{limites}] \\
+            H_u \cap [Ma, Ju] = \emptyset \\
+            \\text{{Constraint: No overlap in }} H_u
+            </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # Botón de Plantilla Centralizado
+    if not file:
+        st.markdown("""
+            <div class='glass-card' style='text-align: center;'>
+                <h3>📥 Inicializar Sistema</h3>
+                <p>Para comenzar el proceso de optimización, descargue la plantilla base, rellene los datos y súbala al panel lateral.</p>
+            </div>
+        """, unsafe_allow_html=True)
+        st.download_button("DESCARGAR PLANTILLA MAESTRA", crear_excel_guia(), "Plantilla_UPRM_Elite.xlsx", use_container_width=True)
+    else:
         xls = pd.ExcelFile(file)
-        if st.button("🚀 INICIAR OPTIMIZACIÓN"):
-            engine = PlatinumGeneticEngine(pd.read_excel(xls, 'Cursos'), pd.read_excel(xls, 'Profesores'), pd.read_excel(xls, 'Salones'), pd.read_excel(xls, 'Graduados'), zona, pop, gens)
-            mejor = engine.evolucionar()
-            st.session_state.engine = engine
-            st.session_state.master = pd.DataFrame([{
-                'ID': g['sec'].uid, 'Curso': g['sec'].nombre, 'Profesor': g['prof'], 
-                'Días': g['dias'], 'Horario': f"{mins_to_str(g['ini'])} - {mins_to_str(g['fin'])}",
-                'Salón': g['salon']
-            } for g in mejor])
+        if st.button("🚀 EJECUTAR ALGORITMO GENÉTICO"):
+            with st.spinner("Calculando convergencia óptima..."):
+                engine = PlatinumGeneticEngine(pd.read_excel(xls, 'Cursos'), pd.read_excel(xls, 'Profesores'), pd.read_excel(xls, 'Salones'), pd.read_excel(xls, 'Graduados'), zona, pop, gens)
+                mejor = engine.evolucionar()
+                st.session_state.engine = engine
+                st.session_state.master = pd.DataFrame([{
+                    'ID': g['sec'].uid, 'Curso': g['sec'].nombre, 'Profesor': g['prof'], 
+                    'Días': g['dias'], 'Horario': f"{mins_to_str(g['ini'])} - {mins_to_str(g['fin'])}",
+                    'Salón': g['salon']
+                } for g in mejor])
 
     if 'master' in st.session_state:
-        tab_edit, tab_view, tab_err = st.tabs(["✍️ EDICIÓN", "📋 VISTAS", "🚨 CONFLICTOS"])
+        st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
+        tab_edit, tab_view, tab_err = st.tabs(["💎 PANEL DE CONTROL", "🔍 VISTA ANALÍTICA", "⚠️ AUDITORÍA"])
         
         with tab_edit:
-            # Mostramos el editor
             edited_df = st.data_editor(st.session_state.master, use_container_width=True)
-            
-            # El botón de descarga ahora usa el dataframe editado
             st.download_button(
-                label="💾 Exportar Excel Final",
+                label="💾 EXPORTAR RESULTADO PLATINUM",
                 data=exportar_todo(edited_df),
-                file_name="Horario_Final_UPRM.xlsx",
+                file_name=f"Horario_{zona}_{datetime.now().strftime('%Y%m%d')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
         with tab_view:
-            col_p = st.selectbox("Filtrar Profesor", edited_df['Profesor'].unique())
-            st.table(edited_df[edited_df['Profesor'] == col_p])
+            profes = edited_df['Profesor'].unique()
+            col_p = st.selectbox("Seleccionar Académico", profes)
+            st.dataframe(edited_df[edited_df['Profesor'] == col_p], use_container_width=True)
 
         with tab_err:
             errores = analizar_horario(edited_df, st.session_state.engine)
-            if not errores: st.success("✅ Sin conflictos.")
+            if not errores: 
+                st.success("✅ Protocolo de horario validado sin conflictos matemáticos.")
             else: 
                 for e in errores: st.error(e)
-
-
+        st.markdown("</div>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
