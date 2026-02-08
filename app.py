@@ -9,64 +9,19 @@ from datetime import datetime
 # ==============================================================================
 # 1. ARQUITECTURA VISUAL: PLATINUM HYPER-ENGINE
 # ==============================================================================
-st.set_page_config(page_title="UPRM Enterprise Scheduler AI", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="UPRM Scheduler Platinum AI v3", page_icon="🏛️", layout="wide")
 
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;500&family=Playfair+Display:wght@900&display=swap');
-    
-    .stApp { background: #050505; color: #d0d0d0; }
-    
-    /* Header Estilo Luxury */
-    .main-header {
-        font-family: 'Playfair Display', serif;
-        background: linear-gradient(90deg, #1a1a1a, #D4AF37, #1a1a1a);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        font-size: 3.5rem;
-        text-align: center;
-        margin-bottom: 0px;
-    }
-    
-    /* Panel de Control */
-    .glass-panel {
-        background: rgba(20, 20, 20, 0.8);
-        border: 1px solid #333;
-        border-radius: 10px;
-        padding: 20px;
-        box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
-    }
-    
-    /* Sidebar */
-    [data-testid="stSidebar"] { background-color: #000; border-right: 1px solid #D4AF37; }
-    
-    /* Botones de Alto Impacto */
-    .stButton>button {
-        background: #D4AF37 !important;
-        color: black !important;
-        font-weight: 900 !important;
-        border-radius: 5px !important;
-        height: 3rem;
-        border: none !important;
-        box-shadow: 0 0 15px rgba(212, 175, 55, 0.2);
-    }
-    
-    .stButton>button:hover {
-        box-shadow: 0 0 25px rgba(212, 175, 55, 0.5);
-        transform: translateY(-2px);
-    }
-
-    .metric-card {
-        background: #111;
-        border-left: 4px solid #D4AF37;
-        padding: 15px;
-        border-radius: 5px;
-    }
-    
-    .math-font { font-family: 'JetBrains Mono', monospace; color: #888; font-size: 0.8rem; }
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Source+Code+Pro:wght@300;500&display=swap');
+    .stApp { background: radial-gradient(circle at top, #1a1a1a 0%, #000000 100%); color: #e0e0e0; }
+    h1, h2, h3 { font-family: 'Playfair Display', serif !important; color: #D4AF37 !important; text-align: center; text-shadow: 2px 2px 10px rgba(212, 175, 55, 0.3); }
+    .glass-card { background: rgba(255, 255, 255, 0.03); border-radius: 15px; padding: 25px; border: 1px solid rgba(212, 175, 55, 0.2); backdrop-filter: blur(10px); margin-bottom: 20px; }
+    .stButton>button { background: linear-gradient(135deg, #8E6E13 0%, #D4AF37 50%, #8E6E13 100%) !important; color: white !important; font-weight: bold !important; border-radius: 2px !important; width: 100%; }
+    [data-testid="stSidebar"] { background-color: #050505; border-right: 1px solid #D4AF37; }
+    .math-text { font-family: 'Source Code Pro', monospace; color: #B8860B; font-size: 0.9rem; }
 </style>
 """, unsafe_allow_html=True)
-
 # ==============================================================================
 # 2. CORE ENGINE: OPTIMIZACIÓN DE ALTO VOLUMEN
 # ==============================================================================
