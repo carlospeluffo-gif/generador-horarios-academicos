@@ -131,7 +131,7 @@ st.markdown("""
 <div class="math-header">
     <div class="abstract-icon">Δx</div>
     <div class="title-box">
-        <h1>PLATINUM SCHEDULER AI</h1>
+        <h1>UPRM TIMETABLE SYSTEM</h1>
         <p style="color: #888; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
             UPRM MATHEMATICAL OPTIMIZATION ENGINE
         </p>
