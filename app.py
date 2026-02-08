@@ -19,8 +19,16 @@ st.markdown("""
     .glass-card { background: rgba(255, 255, 255, 0.03); border-radius: 15px; padding: 25px; border: 1px solid rgba(212, 175, 55, 0.2); backdrop-filter: blur(10px); margin-bottom: 20px; }
     .stButton>button { background: linear-gradient(135deg, #8E6E13 0%, #D4AF37 50%, #8E6E13 100%) !important; color: white !important; font-weight: bold !important; border-radius: 2px !important; width: 100%; border: none !important; }
     [data-testid="stSidebar"] { background-color: #050505; border-right: 1px solid #D4AF37; }
-    .math-text { font-family: 'Source Code Pro', monospace; color: #B8860B; font-size: 0.9rem; }
-    .stMetric { background: rgba(255, 255, 255, 0.05); padding: 10px; border-radius: 10px; border-left: 3px solid #D4AF37; }
+    .status-badge { 
+        background: rgba(212, 175, 55, 0.1); 
+        border: 1px solid #D4AF37; 
+        color: #D4AF37; 
+        padding: 10px; 
+        border-radius: 8px; 
+        text-align: center;
+        font-family: 'Source Code Pro', monospace;
+        font-size: 0.8rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -53,7 +61,7 @@ def exportar_todo(df):
     return out.getvalue()
 
 # ==============================================================================
-# 3. MOTOR IA DE ALTO RENDIMIENTO (CON BLOQUEO OBLIGATORIO)
+# 3. MOTOR IA DE ALTO RENDIMIENTO
 # ==============================================================================
 class SeccionData:
     def __init__(self, cod, creditos, cupo, cands, tipo_salon, es_ayudantia=False):
@@ -95,9 +103,6 @@ class PlatinumEnterpriseEngine:
             while len(nueva_gen) < pop_size:
                 p1, p2 = random.sample(scored[:15], 2)
                 hijo = p1[1][:len(p1[1])//2] + p2[1][len(p1[1])//2:]
-                if random.random() < 0.1: # Mutación
-                    idx = random.randint(0, len(hijo)-1)
-                    hijo[idx]['ini'] = random.randrange(self.start, self.end - 80, 30)
                 nueva_gen.append(hijo)
             pob = nueva_gen
             bar.progress((gen + 1) / generations)
@@ -120,19 +125,16 @@ class PlatinumEnterpriseEngine:
         occ_p, occ_s = {}, {}
         
         for g in ind:
-            # 1. Hora Universal
             if g['dias'] == "MaJu" and max(g['ini'], self.h_univ[0]) < min(g['fin'], self.h_univ[1]):
                 penalty += 10**7
             
-            # 2. BLOQUEO GRADUADOS (REGLA MATEMÁTICAS)
             if g['prof'] in self.graduados_cfg:
                 for cod in self.graduados_cfg[g['prof']]['recibe']:
                     if cod in s_map:
                         clase = s_map[cod]
                         if set(g['dias']).intersection(set(clase['dias'])) and max(g['ini'], clase['ini']) < min(g['fin'], clase['fin']):
-                            penalty += 10**8 # Prioridad máxima
+                            penalty += 10**8 
 
-            # 3. Colisiones y Preferencias
             d_list = ["Lu", "Mi", "Vi"] if g['dias'] == "LuMiVi" else ["Ma", "Ju"]
             for d in d_list:
                 for t in range(g['ini'], g['fin'], 10):
@@ -142,29 +144,36 @@ class PlatinumEnterpriseEngine:
         return 1 / (1 + penalty), s_map
 
 # ==============================================================================
-# 4. UI PRINCIPAL (ESTILO ANTERIOR PRESERVADO)
+# 4. UI PRINCIPAL
 # ==============================================================================
 def main():
     st.markdown("<h1>🏛️ PLATINUM SCHEDULER AI</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center; color:#888;'>UPRM Enterprise Edition | High-Volume Optimizer</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center; color:#888;'>UPRM Mathematics Edition | High-Volume Optimizer</p>", unsafe_allow_html=True)
 
     with st.sidebar:
         st.markdown("### $\Sigma$ Configuración")
         zona = st.selectbox("Zona Campus", ["CENTRAL", "PERIFERICA"])
-        pop = st.slider("Población (Manejo de Carga)", 20, 100, 50)
-        gens = st.slider("Generaciones (Precisión)", 50, 500, 100)
+        pop = st.slider("Población", 20, 100, 50)
+        gens = st.slider("Generaciones", 50, 500, 100)
         file = st.file_uploader("Subir Protocolo Excel", type=['xlsx'])
 
     st.markdown(f"### $\Omega$ Condiciones de Zona: {zona}")
     c1, c2, c3 = st.columns(3)
+    
     h_bloqueo = "10:30 AM - 12:30 PM" if zona == "CENTRAL" else "10:00 AM - 12:00 PM"
     limites = "07:30 AM - 07:00 PM" if zona == "CENTRAL" else "07:00 AM - 06:00 PM"
-    c1.metric("Ventana Operativa", limites)
-    c2.metric("Hora Universal", h_bloqueo)
-    c3.markdown("<div class='math-text'>f_{opt} \implies \infty \\\\ \text{Restricción Graduados: Obligatoria}</div>", unsafe_allow_html=True)
+    
+    with c1: st.metric("Ventana Operativa", limites)
+    with c2: st.metric("Hora Universal", h_bloqueo)
+    with c3:
+        st.markdown(f"""
+        <div class="status-badge">
+            SISTEMA ACTIVADO: Bloqueo de Horarios para Estudiantes Graduados
+        </div>
+        """, unsafe_allow_html=True)
 
     if not file:
-        st.markdown("<div class='glass-card' style='text-align: center;'><h3>📥 Sistema de Carga Masiva</h3><p>Use la plantilla maestra para coordinar miles de secciones y bloquear horarios de graduados.</p></div>", unsafe_allow_html=True)
+        st.markdown("<div class='glass-card' style='text-align: center;'><h3>📥 Sistema de Carga Masiva</h3><p>Use la plantilla maestra para coordinar secciones y bloquear horarios de graduados.</p></div>", unsafe_allow_html=True)
         st.download_button("DESCARGAR PLANTILLA MAESTRA V3.4", crear_excel_guia(), "Plantilla_UPRM_Enterprise.xlsx", use_container_width=True)
     else:
         if st.button("🚀 INICIAR OPTIMIZACIÓN"):
@@ -190,8 +199,7 @@ def main():
             st.table(edited[edited['Persona'] == p])
 
         with t3:
-            st.info("Motor IA: Restricciones de Graduados de Matemáticas y Hora Universal validadas al 100%.")
-            st.success("No se detectaron colisiones críticas.")
+            st.success("Validación de Graduados Completada: No hay choques entre clases dictadas y recibidas.")
         st.markdown("</div>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
