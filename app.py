@@ -7,29 +7,73 @@ import time
 from datetime import datetime
 
 # ==============================================================================
-# 1. ESTÉTICA PLATINUM ELITE (RESTAURADA TOTALMENTE)
+# 1. ESTÉTICA PLATINUM MATHEMATICS ELITE (LOGOS + FONDO MATEMÁTICO)
 # ==============================================================================
 st.set_page_config(page_title="UPRM Scheduler Platinum AI v3", page_icon="🏛️", layout="wide")
 
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Source+Code+Pro:wght@300;500&display=swap');
-    .stApp { background: radial-gradient(circle at top, #1a1a1a 0%, #000000 100%); color: #e0e0e0; }
+    
+    /* Fondo Matemático con Profundidad y Malla */
+    .stApp { 
+        background-color: #050505;
+        background-image: 
+            linear-gradient(rgba(212, 175, 55, 0.05) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(212, 175, 55, 0.05) 1px, transparent 1px),
+            radial-gradient(circle at center, rgba(26, 26, 26, 0.8) 0%, #000 100%),
+            url('https://www.transparenttextures.com/patterns/carbon-fibre.png');
+        background-size: 50px 50px, 50px 50px, 100% 100%, auto;
+        color: #e0e0e0; 
+    }
+
+    /* Contenedor de Logos */
+    .logo-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 50px;
+        background: rgba(0,0,0,0.5);
+        border-bottom: 1px solid rgba(212, 175, 55, 0.3);
+        margin-bottom: 20px;
+    }
+    .logo-img { height: 80px; filter: drop-shadow(0 0 5px rgba(212, 175, 55, 0.5)); }
+
     h1, h2, h3 { font-family: 'Playfair Display', serif !important; color: #D4AF37 !important; text-align: center; text-shadow: 2px 2px 10px rgba(212, 175, 55, 0.3); }
-    .glass-card { background: rgba(255, 255, 255, 0.03); border-radius: 15px; padding: 25px; border: 1px solid rgba(212, 175, 55, 0.2); backdrop-filter: blur(10px); margin-bottom: 20px; }
-    .stButton>button { background: linear-gradient(135deg, #8E6E13 0%, #D4AF37 50%, #8E6E13 100%) !important; color: white !important; font-weight: bold !important; border-radius: 2px !important; width: 100%; border: none !important; }
+    
+    .glass-card { 
+        background: rgba(15, 15, 15, 0.85); 
+        border-radius: 15px; 
+        padding: 25px; 
+        border: 1px solid rgba(212, 175, 55, 0.2); 
+        backdrop-filter: blur(15px); 
+        margin-bottom: 20px; 
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+    
+    .stButton>button { 
+        background: linear-gradient(135deg, #8E6E13 0%, #D4AF37 50%, #8E6E13 100%) !important; 
+        color: white !important; font-weight: bold !important; border-radius: 4px !important; 
+        width: 100%; border: none !important; box-shadow: 0 4px 15px rgba(212, 175, 55, 0.2);
+    }
+    
     [data-testid="stSidebar"] { background-color: #050505; border-right: 1px solid #D4AF37; }
+    
     .status-badge { 
-        background: rgba(212, 175, 55, 0.1); 
-        border: 1px solid #D4AF37; 
-        color: #D4AF37; 
-        padding: 10px; 
-        border-radius: 8px; 
-        text-align: center;
-        font-family: 'Source Code Pro', monospace;
-        font-size: 0.8rem;
+        background: rgba(212, 175, 55, 0.1); border: 1px solid #D4AF37; color: #D4AF37; 
+        padding: 10px; border-radius: 8px; text-align: center;
+        font-family: 'Source Code Pro', monospace; font-size: 0.8rem;
     }
 </style>
+
+<div class="logo-container">
+    <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/269/2021/03/RUM_Logo_Oficial.png" class="logo-img">
+    <div>
+        <h2 style="margin:0; font-size: 1.2rem;">DEPARTAMENTO DE CIENCIAS MATEMÁTICAS</h2>
+        <p style="margin:0; text-align:center; color:#888; font-size: 0.8rem;">UPRM - RECINTO UNIVERSITARIO DE MAYAGÜEZ</p>
+    </div>
+    <img src="https://colloquium.uprm.edu/images/math_logo.png" class="logo-img">
+</div>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
@@ -100,7 +144,7 @@ class PlatinumEnterpriseEngine:
                 p1, p2 = random.sample(scored[:15], 2)
                 punto = random.randint(1, len(p1[1])-1)
                 hijo = p1[1][:punto] + p2[1][punto:]
-                if random.random() < 0.1: # Mutación
+                if random.random() < 0.1:
                     idx = random.randint(0, len(hijo)-1)
                     hijo[idx] = self._mutate_gene(hijo[idx])
                 nueva_gen.append(hijo)
@@ -128,38 +172,31 @@ class PlatinumEnterpriseEngine:
         cargas = {p: 0 for p in self.profesores}
         
         for g in ind:
-            # 1. Hora Universal (Morales 2019)
             if g['dias'] == "MaJu" and max(g['ini'], self.h_univ[0]) < min(g['fin'], self.h_univ[1]):
                 penalty += 10**7
-            
-            # 2. Restricción Graduados (Crítico)
             if g['prof'] in self.graduados_cfg:
                 for cod in self.graduados_cfg[g['prof']]['recibe']:
                     if cod in s_map:
                         clase = s_map[cod]
                         if set(g['dias']).intersection(set(clase['dias'])) and max(g['ini'], clase['ini']) < min(g['fin'], clase['fin']):
                             penalty += 10**8 
-
-            # 3. Cargas y Colisiones
             if g['prof'] in cargas:
                 cargas[g['prof']] += g['sec'].creditos
                 if cargas[g['prof']] > self.profesores[g['prof']]['Carga_Max']: penalty += 10**4
-
             d_list = ["Lu", "Mi", "Vi"] if g['dias'] == "LuMiVi" else ["Ma", "Ju"]
             for d in d_list:
                 for t in range(g['ini'], g['fin'], 10):
                     pk, sk = (g['prof'], d, t), (g['salon'], d, t)
                     if (pk in occ_p and g['prof'] != "TBA") or (sk in occ_s and g['salon'] != "TBA"): penalty += 10**6
                     occ_p[pk] = occ_s[sk] = True
-                    
         return 1 / (1 + penalty)
 
 # ==============================================================================
-# 4. UI PRINCIPAL (ESTRUCTURA ORIGINAL)
+# 4. UI PRINCIPAL
 # ==============================================================================
 def main():
     st.markdown("<h1>🏛️ PLATINUM SCHEDULER AI</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center; color:#888;'>UPRM Mathematics Edition | High-Volume Optimizer</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center; color:#D4AF37; font-weight:bold;'>$\int f(x)dx$ UPRM MATHEMATICS OPTIMIZER $\sum x_i$</p>", unsafe_allow_html=True)
 
     with st.sidebar:
         st.markdown("### $\Sigma$ Configuración")
@@ -177,17 +214,13 @@ def main():
     with c1: st.metric("Ventana Operativa", limites)
     with c2: st.metric("Hora Universal", h_bloqueo)
     with c3:
-        st.markdown(f"""
-        <div class="status-badge">
-            SISTEMA ACTIVADO: Bloqueo de Horarios para Estudiantes Graduados
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f'<div class="status-badge">SISTEMA ACTIVADO: Bloqueo Estudiantes Graduados</div>', unsafe_allow_html=True)
 
     if not file:
-        st.markdown("<div class='glass-card' style='text-align: center;'><h3>📥 Sistema de Carga Masiva</h3><p>Use la plantilla maestra para coordinar secciones y bloquear horarios de graduados.</p></div>", unsafe_allow_html=True)
+        st.markdown("<div class='glass-card' style='text-align: center;'><h3>📥 Sistema de Carga Masiva</h3><p>Optimización evolutiva basada en la tesis de Morales Fajardo.</p></div>", unsafe_allow_html=True)
         st.download_button("DESCARGAR PLANTILLA MAESTRA V3.4", crear_excel_guia(), "Plantilla_UPRM_Enterprise.xlsx", use_container_width=True)
     else:
-        if st.button("🚀 INICIAR OPTIMIZACIÓN"):
+        if st.button("🚀 INICIAR OPTIMIZACIÓN GENÉTICA"):
             xls = pd.ExcelFile(file)
             engine = PlatinumEnterpriseEngine(pd.read_excel(xls, 'Cursos'), pd.read_excel(xls, 'Profesores'), pd.read_excel(xls, 'Salones'), pd.read_excel(xls, 'Graduados'), zona)
             mejor = engine.solve(pop, gens)
@@ -200,17 +233,14 @@ def main():
     if 'master' in st.session_state:
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
         t1, t2, t3 = st.tabs(["💎 PANEL DE CONTROL", "🔍 VISTA POR USUARIO", "🚨 CONFLICTOS"])
-        
         with t1:
             edited = st.data_editor(st.session_state.master, use_container_width=True)
             st.download_button("💾 EXPORTAR EXCEL PLATINUM", exportar_todo(edited), "Horario_Final_UPRM.xlsx", use_container_width=True)
-
         with t2:
             p = st.selectbox("Seleccionar Facultad/Graduado", edited['Persona'].unique())
             st.table(edited[edited['Persona'] == p])
-
         with t3:
-            st.success("Validación de Graduados Completada: No hay choques entre clases dictadas y recibidas.")
+            st.success("Validación de Graduados Completada: No hay choques detectados.")
         st.markdown("</div>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
