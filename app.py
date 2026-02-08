@@ -7,7 +7,7 @@ import time
 from datetime import datetime
 
 # ==============================================================================
-# 1. ESTÉTICA PLATINUM ELITE (DISEÑO MATEMÁTICO ÚNICO - SIN IMÁGENES)
+# 1. ESTÉTICA PLATINUM ELITE (DISEÑO MATEMÁTICO AVANZADO)
 # ==============================================================================
 st.set_page_config(page_title="UPRM Scheduler Platinum AI v3", page_icon="🏛️", layout="wide")
 
@@ -42,7 +42,6 @@ st.markdown("""
         overflow: hidden;
     }
 
-    /* Elementos decorativos abstractos (Círculos de Euclides) */
     .math-header::before {
         content: '∑';
         position: absolute;
@@ -60,10 +59,7 @@ st.markdown("""
         font-family: serif;
     }
 
-    .title-box {
-        text-align: center;
-        z-index: 2;
-    }
+    .title-box { text-align: center; z-index: 2; }
 
     .abstract-icon {
         font-size: 3rem;
@@ -94,6 +90,7 @@ st.markdown("""
         box-shadow: 0 15px 40px rgba(0,0,0,0.8);
     }
 
+    /* Botones Generales */
     .stButton>button { 
         background: linear-gradient(135deg, #8E6E13 0%, #D4AF37 50%, #8E6E13 100%) !important; 
         color: white !important; font-weight: bold !important; border-radius: 4px !important; 
@@ -102,8 +99,23 @@ st.markdown("""
     }
     .stButton>button:hover { transform: scale(1.02); box-shadow: 0 0 25px rgba(212, 175, 55, 0.4); }
 
+    /* Estilo Dorado para "Descargar Plantilla" */
+    .stDownloadButton>button {
+        background: linear-gradient(135deg, #B8860B 0%, #FFD700 50%, #B8860B 100%) !important;
+        color: #000 !important;
+        font-weight: 800 !important;
+        border: 1px solid #D4AF37 !important;
+    }
+
+    /* Sidebar y Título Σ Configuración */
     [data-testid="stSidebar"] { background-color: #050505; border-right: 1px solid #D4AF37; }
     
+    [data-testid="stSidebar"] h3 {
+        color: #D4AF37 !important;
+        text-shadow: 0 0 10px rgba(212, 175, 55, 0.4);
+        font-family: 'Playfair Display', serif;
+    }
+
     .status-badge { 
         background: rgba(212, 175, 55, 0.1); 
         border: 1px solid #D4AF37; 
@@ -128,7 +140,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Divisor elegante con LaTeX simple
 st.latex(r"\blacksquare \quad \text{SISTEMA DE PLANIFICACIÓN ACADÉMICA AVANZADA} \quad \blacksquare")
 
 # ==============================================================================
@@ -161,7 +172,7 @@ def exportar_todo(df):
     return out.getvalue()
 
 # ==============================================================================
-# 3. MOTOR IA DE ALTO RENDIMIENTO (OPTIMIZADO - SIN CAMBIOS)
+# 3. MOTOR IA (LÓGICA INTACTA)
 # ==============================================================================
 class SeccionData:
     def __init__(self, cod, creditos, cupo, cands, tipo_salon, es_ayudantia=False):
@@ -261,7 +272,7 @@ def main():
     c1, c2, c3 = st.columns(3)
     
     h_bloqueo = "10:30 AM - 12:30 PM" if zona == "CENTRAL" else "10:00 AM - 12:00 PM"
-    limites = "07:30 AM - 07:00 PM" if zona == "CENTRAL" else "07:00 AM - 06:00 PM"
+    limites = "07:30 AM - 06:30 PM" if zona == "CENTRAL" else "07:00 AM - 06:00 PM"
     
     with c1: st.metric("Ventana Operativa", limites)
     with c2: st.metric("Hora Universal", h_bloqueo)
@@ -271,7 +282,7 @@ def main():
     if not file:
         st.markdown("""
             <div class='glass-card' style='text-align: center;'>
-                <h3 style='margin-top:0;'>📥 Sincronización de Datos</h3>
+                <h3 style='margin-top:0; color: #D4AF37;'>📥 Sincronización de Datos</h3>
                 <p>Cargue el protocolo de secciones para iniciar el procesamiento de optimización multivariable.</p>
             </div>
         """, unsafe_allow_html=True)
