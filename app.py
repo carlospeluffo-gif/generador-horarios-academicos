@@ -24,7 +24,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. UTILIDADES Y PLANTILLA OPTIMIZADA
+# 2. UTILIDADES Y PLANTILLA (LIBRO GRADUADOS ACTUALIZADO)
 # ==============================================================================
 def mins_to_str(minutes):
     h, m = divmod(int(minutes), 60)
@@ -42,21 +42,21 @@ def str_to_mins(time_str):
 def crear_excel_guia():
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        # Simplificado: Sin NOMBRE, solo CODIGO
         pd.DataFrame(columns=['CODIGO', 'CREDITOS', 'CANT_SECCIONES', 'CUPO', 'CANDIDATOS', 'TIPO_SALON']).to_excel(writer, sheet_name='Cursos', index=False)
-        # Agregadas Preferencias
         pd.DataFrame(columns=['Nombre', 'Carga_Min', 'Carga_Max', 'Pref_Dias', 'Pref_Horario']).to_excel(writer, sheet_name='Profesores', index=False)
         pd.DataFrame(columns=['CODIGO', 'CAPACIDAD', 'TIPO']).to_excel(writer, sheet_name='Salones', index=False)
-        pd.DataFrame(columns=['COD_GRAD', 'CREDITOS', 'CANTIDAD']).to_excel(writer, sheet_name='Graduados', index=False)
+        # NUEVO: Estructura para Graduados de Matemáticas
+        pd.DataFrame(columns=['NOMBRE_GRADUADO', 'CREDITOS_A_DICTAR', 'CODIGOS_RECIBE']).to_excel(writer, sheet_name='Graduados', index=False)
     return output.getvalue()
 
 # ==============================================================================
-# 3. MOTOR IA CON PREFERENCIAS DE PROFESORES
+# 3. MOTOR IA (LÓGICA DE BLOQUEO MATEMÁTICO)
 # ==============================================================================
 class Seccion:
-    def __init__(self, uid, creditos, cupo, candidatos, tipo_salon):
+    def __init__(self, uid, creditos, cupo, candidatos, tipo_salon, es_ayudantia=False):
         self.uid, self.creditos = uid, creditos
         self.cupo, self.tipo_salon, self.cands = cupo, tipo_salon, candidatos
+        self.es_ayudantia = es_ayudantia
 
 class PlatinumGeneticEngine:
     def __init__(self, df_cursos, df_profes, df_salones, df_grad, zona, pop_size, generations):
@@ -65,17 +65,19 @@ class PlatinumGeneticEngine:
         self.generations = generations
         self.salones = df_salones.to_dict('records')
         
-        # Diccionario de profes con sus preferencias
-        self.profesores = {}
-        for _, r in df_profes.iterrows():
-            nombre = str(r['Nombre']).upper().strip()
-            self.profesores[nombre] = {
-                'min': r['Carga_Min'], 
-                'max': r['Carga_Max'],
-                'pref_dias': str(r['Pref_Dias']).strip(), # "LuMiVi", "MaJu" o "Cualquiera"
-                'pref_horario': str(r['Pref_Horario']).strip() # "AM", "PM" o "Cualquiera"
-            }
-            
+        # Diccionario de Profesores
+        self.profesores = {str(r['Nombre']).upper().strip(): {
+            'min': r['Carga_Min'], 'max': r['Carga_Max'],
+            'pref_dias': str(r['Pref_Dias']).strip(), 'pref_horario': str(r['Pref_Horario']).strip()
+        } for _, r in df_profes.iterrows()}
+        
+        # Diccionario de Graduados (Solo para Matemáticas)
+        self.graduados = {}
+        for _, r in df_grad.iterrows():
+            nombre = str(r['NOMBRE_GRADUADO']).upper().strip()
+            clases_recibe = [c.strip().upper() for c in str(r['CODIGOS_RECIBE']).split(',') if c.strip()]
+            self.graduados[nombre] = clases_recibe
+
         self.secciones = self._generar_secciones(df_cursos, df_grad)
         
         if zona == "CENTRAL":
@@ -89,51 +91,42 @@ class PlatinumGeneticEngine:
             cands = [c.strip().upper() for c in str(r['CANDIDATOS']).split(',') if c.strip()]
             for i in range(int(r['CANT_SECCIONES'])):
                 oferta.append(Seccion(f"{r['CODIGO']}-{i+1:02d}", r['CREDITOS'], r['CUPO'], cands, r['TIPO_SALON']))
+        
+        # Añadir Ayudantías de Graduados
         for _, r in df_g.iterrows():
-            for i in range(int(r['CANTIDAD'])):
-                oferta.append(Seccion(f"GRAD-{r['COD_GRAD']}-{i+1}", r['CREDITOS'], 1, ["TBA"], "OFICINA"))
+            nombre = str(r['NOMBRE_GRADUADO']).upper().strip()
+            oferta.append(Seccion(f"AYUD-{nombre[:3]}", r['CREDITOS_A_DICTAR'], 1, [nombre], "OFICINA", True))
         return oferta
-
-    def es_hora_segura(self, ini, fin, dias):
-        if "MaJu" in dias:
-            if max(ini, self.h_univ[0]) < min(fin, self.h_univ[1]): return False
-        return True
-
-    def generar_individuo(self):
-        ind = []
-        for sec in self.secciones:
-            prof = random.choice(sec.cands) if sec.cands else "TBA"
-            sal_filtrados = [s for s in self.salones if s['CAPACIDAD'] >= sec.cupo]
-            salon = random.choice(sal_filtrados)['CODIGO'] if sal_filtrados else "TBA"
-            
-            # Decisión de días basada en créditos o azar
-            es_mj = (sec.creditos == 4 or random.random() > 0.5)
-            dias, dur = ("MaJu", 80) if es_mj else ("LuMiVi", 50)
-            
-            h_ini = random.randrange(self.lim_inf, self.lim_sup - dur, 30)
-            ind.append({'sec': sec, 'prof': prof, 'salon': salon, 'ini': h_ini, 'fin': h_ini + dur, 'dias': dias})
-        return ind
 
     def fitness(self, cromosoma):
         penalizacion = 0
         oc_p, oc_s = {}, {}
         
+        # Mapa rápido de horarios para verificar qué clases "recibe" el graduado
+        horario_clases = {g['sec'].uid.split('-')[0]: g for g in cromosoma}
+        
         for g in cromosoma:
             # 1. Bloqueo Universitario
-            if not self.es_hora_segura(g['ini'], g['fin'], g['dias']): penalizacion += 100000
+            if "MaJu" in g['dias']:
+                if max(g['ini'], self.h_univ[0]) < min(g['fin'], self.h_univ[1]): 
+                    penalizacion += 100000
             
-            # 2. Preferencias del Profesor (NUEVO)
+            # 2. RESTRICCIÓN OBLIGATORIA: Graduado recibiendo clase
             p_nom = g['prof']
-            if p_nom in self.profesores:
-                pref = self.profesores[p_nom]
-                # Validar Días
-                if pref['pref_dias'] != "Cualquiera" and pref['pref_dias'] != g['dias']:
-                    penalizacion += 5000
-                # Validar Horario (AM < 720 mins [12 PM])
-                if pref['pref_horario'] == "AM" and g['ini'] >= 720: penalizacion += 5000
-                if pref['pref_horario'] == "PM" and g['ini'] < 720: penalizacion += 5000
+            if p_nom in self.graduados:
+                clases_que_toma = self.graduados[p_nom]
+                for cod_clase in clases_que_toma:
+                    if cod_clase in horario_clases:
+                        clase_dictada = horario_clases[cod_clase]
+                        # Si los días coinciden, verificar solapamiento entre la clase que da y la que recibe
+                        dias_dan = set(["Lu", "Mi", "Vi"] if g['dias'] == "LuMiVi" else ["Ma", "Ju"])
+                        dias_recibe = set(["Lu", "Mi", "Vi"] if clase_dictada['dias'] == "LuMiVi" else ["Ma", "Ju"])
+                        
+                        if dias_dan.intersection(dias_recibe):
+                            if max(g['ini'], clase_dictada['ini']) < min(g['fin'], clase_dictada['fin']):
+                                penalizacion += 500000 # Penalidad máxima: No puede estar en dos sitios
 
-            # 3. Colisiones
+            # 3. Colisiones de Profesores y Salones
             d_list = ["Lu", "Mi", "Vi"] if g['dias'] == "LuMiVi" else ["Ma", "Ju"]
             for d in d_list:
                 for t in range(g['ini'], g['fin'], 10):
@@ -159,71 +152,49 @@ class PlatinumGeneticEngine:
             bar.progress((gen + 1) / self.generations)
         return pob[0]
 
+    def generar_individuo(self):
+        ind = []
+        for sec in self.secciones:
+            prof = random.choice(sec.cands) if sec.cands else "TBA"
+            sal_filtrados = [s for s in self.salones if s['CAPACIDAD'] >= sec.cupo]
+            salon = random.choice(sal_filtrados)['CODIGO'] if sal_filtrados else "TBA"
+            es_mj = (sec.creditos == 4 or random.random() > 0.5)
+            dias, dur = ("MaJu", 80) if es_mj else ("LuMiVi", 50)
+            h_ini = random.randrange(self.lim_inf, self.lim_sup - dur, 30)
+            ind.append({'sec': sec, 'prof': prof, 'salon': salon, 'ini': h_ini, 'fin': h_ini + dur, 'dias': dias})
+        return ind
+
 # ==============================================================================
-# 4. INTERFAZ PRINCIPAL
+# 4. UI
 # ==============================================================================
 def main():
     st.markdown("<h1>🏛️ PLATINUM SCHEDULER AI</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center; color:#888;'>UPRM Computational Intelligence Unit | Version 3.1</p>", unsafe_allow_html=True)
-    st.markdown("---")
+    st.markdown("<p style='text-align:center; color:#888;'>Specialized for Mathematics Graduate Program</p>", unsafe_allow_html=True)
 
     with st.sidebar:
-        st.markdown("### $\Sigma$ Parámetros")
+        st.markdown("### $\Sigma$ Configuración")
         zona = st.selectbox("Zona Campus", ["CENTRAL", "PERIFERICA"])
-        pop = st.slider("Población (n)", 20, 100, 50)
-        gens = st.slider("Generaciones (g)", 50, 500, 100)
-        st.markdown("---")
+        pop = st.slider("Población", 20, 100, 50)
+        gens = st.slider("Generaciones", 50, 500, 100)
         file = st.file_uploader("Subir Protocolo Excel", type=['xlsx'])
 
-    with st.container():
-        st.markdown(f"### $\Omega$ Condiciones de Zona: {zona}")
-        col1, col2, col3 = st.columns(3)
-        h_bloqueo = "10:30 AM - 12:30 PM" if zona == "CENTRAL" else "10:00 AM - 12:00 PM"
-        limites = "07:30 AM - 06:30 PM" if zona == "CENTRAL" else "07:00 AM - 06:00 PM"
-        
-        col1.metric("Límite Operativo", limites)
-        col2.metric("Bloqueo Universitario", h_bloqueo)
-        col3.markdown("<div class='math-text'>f(pref) = \sum (Día_{match} + Hora_{match})</div>", unsafe_allow_html=True)
-
-    st.markdown("---")
-
     if not file:
-        st.markdown("""
-            <div class='glass-card' style='text-align: center;'>
-                <h3>📥 Inicializar Sistema Simplificado</h3>
-                <p>La nueva plantilla elimina nombres innecesarios e incluye <b>Preferencias de Profesores</b>.</p>
-            </div>
-        """, unsafe_allow_html=True)
-        st.download_button("DESCARGAR PLANTILLA MAESTRA V3.1", crear_excel_guia(), "Plantilla_UPRM_V3.1.xlsx", use_container_width=True)
+        st.markdown("<div class='glass-card' style='text-align: center;'><h3>📥 Plantilla con Bloqueo de Graduados</h3></div>", unsafe_allow_html=True)
+        st.download_button("DESCARGAR PLANTILLA V3.2", crear_excel_guia(), "Plantilla_Matematicas_UPRM.xlsx", use_container_width=True)
     else:
         xls = pd.ExcelFile(file)
-        if st.button("🚀 EJECUTAR OPTIMIZACIÓN BASADA EN PREFERENCIAS"):
-            with st.spinner("Sincronizando preferencias y evitando colisiones..."):
-                engine = PlatinumGeneticEngine(pd.read_excel(xls, 'Cursos'), pd.read_excel(xls, 'Profesores'), pd.read_excel(xls, 'Salones'), pd.read_excel(xls, 'Graduados'), zona, pop, gens)
-                mejor = engine.evolucionar()
-                st.session_state.engine = engine
-                st.session_state.master = pd.DataFrame([{
-                    'ID': g['sec'].uid, 'Profesor': g['prof'], 
-                    'Días': g['dias'], 'Horario': f"{mins_to_str(g['ini'])} - {mins_to_str(g['fin'])}",
-                    'Salón': g['salon']
-                } for g in mejor])
+        if st.button("🚀 INICIAR OPTIMIZACIÓN"):
+            engine = PlatinumGeneticEngine(pd.read_excel(xls, 'Cursos'), pd.read_excel(xls, 'Profesores'), pd.read_excel(xls, 'Salones'), pd.read_excel(xls, 'Graduados'), zona, pop, gens)
+            mejor = engine.evolucionar()
+            st.session_state.master = pd.DataFrame([{
+                'ID': g['sec'].uid, 'Persona': g['prof'], 
+                'Días': g['dias'], 'Horario': f"{mins_to_str(g['ini'])} - {mins_to_str(g['fin'])}",
+                'Salón': g['salon']
+            } for g in mejor])
 
     if 'master' in st.session_state:
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-        tab_edit, tab_view = st.tabs(["💎 PANEL DE CONTROL", "🔍 VISTA POR PROFESOR"])
-        
-        with tab_edit:
-            edited_df = st.data_editor(st.session_state.master, use_container_width=True)
-            # Función de exportación simplificada para el nuevo formato
-            out = io.BytesIO()
-            with pd.ExcelWriter(out, engine='xlsxwriter') as writer:
-                edited_df.to_excel(writer, sheet_name='Maestro', index=False)
-            
-            st.download_button("💾 EXPORTAR RESULTADO FINAL", out.getvalue(), "Horario_Final.xlsx", use_container_width=True)
-
-        with tab_view:
-            col_p = st.selectbox("Seleccionar Académico", edited_df['Profesor'].unique())
-            st.dataframe(edited_df[edited_df['Profesor'] == col_p], use_container_width=True)
+        st.data_editor(st.session_state.master, use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
