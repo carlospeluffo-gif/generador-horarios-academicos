@@ -9,25 +9,22 @@ import plotly.graph_objects as go
 from datetime import datetime
 
 # ==============================================================================
-# 1. ESTÉTICA PLATINUM (CONSERVADA ÍNTEGRAMENTE)
+# 1. ESTÉTICA PLATINUM
 # ==============================================================================
-st.set_page_config(page_title="UPRM Scheduler Platinum AI", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="UPRM Scheduler Platinum AI v3", page_icon="🏛️", layout="wide")
 
 st.markdown("""
 <style>
-    .stApp { background-color: #000000; background-image: linear-gradient(rgba(15, 15, 15, 0.50), rgba(15, 15, 15, 0.50)), url("https://www.transparenttextures.com/patterns/cubes.png"); color: #ffffff; }
-    p, label, .stMarkdown, .stDataFrame, div[data-testid="stMarkdownContainer"] p { color: #e0e0e0 !important; font-family: 'Segoe UI', sans-serif; }
-    h1, h2, h3, h4 { color: #FFD700 !important; text-shadow: 0px 0px 15px rgba(255, 215, 0, 0.4); }
-    [data-testid="stSidebar"] { background-color: #080808; border-right: 1px solid #333; }
-    .stButton>button { background: linear-gradient(90deg, #B8860B, #FFD700); color: #000 !important; font-weight: 800; border: none; padding: 0.6rem 1.2rem; border-radius: 6px; transition: transform 0.2s; }
-    .stButton>button:hover { transform: scale(1.05); box-shadow: 0 0 20px rgba(255, 215, 0, 0.5); }
-    .stTabs [data-baseweb="tab-list"] { background-color: transparent; }
-    .stTabs [data-baseweb="tab"] { color: #FFD700; border-bottom-color: #FFD700; font-weight: bold; }
+    .stApp { background-color: #000000; color: #ffffff; }
+    h1, h2, h3 { color: #FFD700 !important; text-shadow: 0px 0px 10px rgba(255, 215, 0, 0.3); }
+    .stButton>button { background: linear-gradient(90deg, #B8860B, #FFD700); color: #000; font-weight: bold; border-radius: 8px; }
+    .stTabs [data-baseweb="tab"] { color: #FFD700; font-weight: bold; }
+    .error-box { padding: 10px; background-color: rgba(255,0,0,0.2); border-left: 5px solid red; margin-bottom: 10px; }
 </style>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. UTILIDADES DE TIEMPO
+# 2. FUNCIONES DE APOYO
 # ==============================================================================
 def mins_to_str(minutes):
     h, m = divmod(int(minutes), 60)
@@ -42,17 +39,8 @@ def str_to_mins(time_str):
         return t.hour * 60 + t.minute
     except: return None
 
-def crear_excel_guia():
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        pd.DataFrame(columns=['CODIGO', 'NOMBRE', 'CREDITOS', 'DEMANDA_TOTAL', 'CANT_SECC_GRANDES', 'CUPO_GRANDE', 'CUPO_NORMAL', 'CANDIDATOS', 'TIPO_SALON']).to_excel(writer, sheet_name='Cursos', index=False)
-        pd.DataFrame(columns=['Nombre', 'Carga_Min', 'Carga_Max', 'DISPONIBILIDAD']).to_excel(writer, sheet_name='Profesores', index=False)
-        pd.DataFrame(columns=['CODIGO', 'CAPACIDAD', 'TIPO']).to_excel(writer, sheet_name='Salones', index=False)
-        pd.DataFrame(columns=['NOMBRE', 'CREDITOS', 'CLASES_NECESARIAS']).to_excel(writer, sheet_name='Graduados', index=False)
-    return output.getvalue()
-
 # ==============================================================================
-# 3. MOTOR DE ALGORITMO GENÉTICO
+# 3. MOTOR GENÉTICO AVANZADO
 # ==============================================================================
 class Seccion:
     def __init__(self, uid, cod_base, nombre, creditos, cupo, candidatos, tipo_salon, es_grad=False):
@@ -65,6 +53,7 @@ class PlatinumGeneticEngine:
         self.salones = df_salones.to_dict('records')
         self.profesores = self._procesar_profesores(df_profes)
         self.secciones = self._automatizar_oferta(df_cursos, df_grad)
+        self.best_fitness_history = []
         
         if zona == "CENTRAL":
             self.lim_inf, self.lim_sup, self.h_univ = 450, 1110, (630, 750)
@@ -75,16 +64,7 @@ class PlatinumGeneticEngine:
         p_dict = {}
         for _, r in df.iterrows():
             nombre = str(r['Nombre']).upper()
-            prefs = []
-            disp = str(r.get('DISPONIBILIDAD', ""))
-            if disp and disp.lower() != 'nan':
-                for bloque in disp.split(';'):
-                    try:
-                        partes = bloque.strip().split(' ')
-                        dias, horas = partes[0], partes[1].split('-')
-                        prefs.append({'dias': dias, 'ini': str_to_mins(horas[0]), 'fin': str_to_mins(horas[1])})
-                    except: continue
-            p_dict[nombre] = {'min': r['Carga_Min'], 'max': r['Carga_Max'], 'prefs': prefs}
+            p_dict[nombre] = {'min': r['Carga_Min'], 'max': r['Carga_Max'], 'prefs': []}
         return p_dict
 
     def _automatizar_oferta(self, df_c, df_g):
@@ -111,13 +91,7 @@ class PlatinumGeneticEngine:
             if max(ini, self.h_univ[0]) < min(fin, self.h_univ[1]): return False
         return True
 
-    def generar_hora_valida(self, dur, dias):
-        for _ in range(100):
-            h_ini = random.randrange(self.lim_inf, self.lim_sup - dur, 30)
-            if self.es_hora_segura(h_ini, h_ini + dur, dias): return h_ini
-        return self.lim_inf
-
-    def crear_individuo(self):
+    def generar_individuo(self):
         ind = []
         for sec in self.secciones:
             prof = random.choice(sec.cands) if sec.cands else "TBA"
@@ -125,142 +99,195 @@ class PlatinumGeneticEngine:
             salon = random.choice(sal_filtrados)['CODIGO'] if sal_filtrados else "TBA"
             es_mj = (sec.creditos == 4 or random.random() > 0.5)
             dias, dur = ("MaJu", 80) if es_mj else ("LuMiVi", 50)
-            h_ini = self.generar_hora_valida(dur, dias)
+            
+            # Coherencia: Se busca una sola hora y salón para todos los días de la sección
+            h_ini = 0
+            for _ in range(100):
+                h_ini = random.randrange(self.lim_inf, self.lim_sup - dur, 30)
+                if self.es_hora_segura(h_ini, h_ini + dur, dias): break
+                
             ind.append({'sec': sec, 'prof': prof, 'salon': salon, 'ini': h_ini, 'fin': h_ini + dur, 'dias': dias})
         return ind
 
     def fitness(self, cromosoma):
         penalizacion = 0
         oc_p, oc_s = {}, {}
-        cargas = {p: 0 for p in self.profesores}
+        cargas = {p: [] for p in self.profesores}
+        
         for g in cromosoma:
-            if not self.es_hora_segura(g['ini'], g['fin'], g['dias']): penalizacion += 100000
+            # 1. Bloqueo Hora Universal
+            if not self.es_hora_segura(g['ini'], g['fin'], g['dias']): penalizacion += 200000
+            
+            # 2. Choques y Registro de Carga
             d_list = ["Lu", "Mi", "Vi"] if g['dias'] == "LuMiVi" else ["Ma", "Ju"]
             for d in d_list:
                 for t in range(g['ini'], g['fin'], 10):
                     pk, sk = (g['prof'], d, t), (g['salon'], d, t)
-                    if pk in oc_p and g['prof'] != "TBA": penalizacion += 10000
-                    if sk in oc_s and g['salon'] != "TBA": penalizacion += 10000
+                    if pk in oc_p and g['prof'] != "TBA": penalizacion += 50000
+                    if sk in oc_s and g['salon'] != "TBA": penalizacion += 50000
                     oc_p[pk] = oc_s[sk] = True
-            p_inf = self.profesores.get(g['prof'])
-            if p_inf and p_inf['prefs']:
-                if not any(g['dias'] in pr['dias'] and g['ini'] >= pr['ini'] and g['fin'] <= pr['fin'] for pr in p_inf['prefs']): penalizacion += 100
-            if g['prof'] in cargas: cargas[g['prof']] += g['sec'].creditos
-        for p, c in cargas.items():
-            if c > self.profesores[p]['max']: penalizacion += 500
-            if 0 < c < self.profesores[p]['min']: penalizacion += 200
+                cargas[g['prof']].append({'ini': g['ini'], 'fin': g['fin'], 'dia': d})
+
+        # 3. Restricción: No más de 3 clases seguidas (180 min aprox)
+        for p, periods in cargas.items():
+            if p == "TBA": continue
+            for d in ["Lu", "Ma", "Mi", "Ju", "Vi"]:
+                day_clases = sorted([x for x in periods if x['dia'] == d], key=lambda x: x['ini'])
+                seguidas = 0
+                for i in range(len(day_clases)-1):
+                    if day_clases[i+1]['ini'] - day_clases[i]['fin'] <= 15: # 15 min de margen
+                        seguidas += 1
+                        if seguidas >= 3: penalizacion += 10000
+                    else: seguidas = 0
+        
         return 1 / (1 + penalizacion)
 
     def evolucionar(self):
-        pob = [self.crear_individuo() for _ in range(self.pop_size)]
+        pob = [self.generar_individuo() for _ in range(self.pop_size)]
+        mutation_rate = 0.2
+        last_best = 0
+        stagnant_gens = 0
         bar = st.progress(0)
+        
         for gen in range(self.generations):
             pob.sort(key=self.fitness, reverse=True)
-            next_gen = pob[:4]
+            current_best = self.fitness(pob[0])
+            
+            # Mutación Adaptativa
+            if current_best == last_best:
+                stagnant_gens += 1
+            else:
+                stagnant_gens = 0
+                last_best = current_best
+            
+            if stagnant_gens > 10:
+                mutation_rate = min(0.8, mutation_rate + 0.05)
+            else:
+                mutation_rate = 0.2
+
+            next_gen = pob[:2] # Elitismo estricto
+            
             while len(next_gen) < self.pop_size:
-                p1, p2 = random.sample(pob[:15], 2)
-                hijo = p1[:len(p1)//2] + p2[len(p1)//2:]
-                if random.random() < 0.2:
+                # Selección por Torneo
+                p1 = self.torneo(pob)
+                p2 = self.torneo(pob)
+                
+                # Crossover Inteligente (Bloques)
+                punto = random.randint(0, len(p1)-1)
+                hijo = p1[:punto] + p2[punto:]
+                
+                # Mutación
+                if random.random() < mutation_rate:
                     idx = random.randint(0, len(hijo)-1)
-                    dur = hijo[idx]['fin'] - hijo[idx]['ini']
-                    hijo[idx]['ini'] = self.generar_hora_valida(dur, hijo[idx]['dias'])
-                    hijo[idx]['fin'] = hijo[idx]['ini'] + dur
+                    hijo[idx] = self.generar_individuo()[idx]
+                
                 next_gen.append(hijo)
+            
             pob = next_gen
             bar.progress((gen + 1) / self.generations)
+            
         return pob[0]
 
+    def torneo(self, pob):
+        aspirantes = random.sample(pob, 3)
+        aspirantes.sort(key=self.fitness, reverse=True)
+        return aspirantes[0]
+
 # ==============================================================================
-# 4. ANALIZADOR DE ERRORES (DEBUGGER)
+# 4. FUNCIONES DE EXPORTACIÓN Y ANALIZADOR
 # ==============================================================================
-def analizar_errores(horario, engine):
+def exportar_excel_completo(df):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, sheet_name='Horario_Maestro', index=False)
+        # Pestañas por Profesor
+        for prof in df['Profesor'].unique():
+            if prof != "TBA":
+                df[df['Profesor'] == prof].to_excel(writer, sheet_name=f"Prof_{prof[:20]}", index=False)
+        # Pestañas por Salón
+        for salon in df['Salón'].unique():
+            if salon != "TBA":
+                df[df['Salón'] == salon].to_excel(writer, sheet_name=f"Salon_{salon}", index=False)
+    return output.getvalue()
+
+def analizar_horario(df, engine):
     errores = []
+    # Simular la lógica de choques
     oc_p, oc_s = {}, {}
-    cargas = {p: 0 for p in engine.profesores}
-    
-    for g in horario:
-        # Check Hora Universal
-        if not engine.es_hora_segura(g['ini'], g['fin'], g['dias']):
-            errores.append(f"❌ CRÍTICO: {g['sec'].uid} viola Hora Universal ({g['dias']} en {mins_to_str(g['ini'])})")
+    for _, r in df.iterrows():
+        # Validar Hora Universal
+        # (Aquí se usaría la misma lógica de fitness para reportar)
+        dias = ["Lu", "Mi", "Vi"] if r['Días'] == "LuMiVi" else ["Ma", "Ju"]
+        ini = str_to_mins(r['Horario'].split(' - ')[0])
+        fin = str_to_mins(r['Horario'].split(' - ')[1])
         
-        # Check Choques
-        d_list = ["Lu", "Mi", "Vi"] if g['dias'] == "LuMiVi" else ["Ma", "Ju"]
-        for d in d_list:
-            for t in range(g['ini'], g['fin'], 10):
-                pk, sk = (g['prof'], d, t), (g['salon'], d, t)
-                if pk in oc_p and g['prof'] != "TBA":
-                    errores.append(f"⚠️ CHOQUE PROFESOR: {g['prof']} tiene dos clases el {d} a las {mins_to_str(t)}")
-                if sk in oc_s and g['salon'] != "TBA":
-                    errores.append(f"⚠️ CHOQUE SALÓN: El salón {g['salon']} está doblemente ocupado el {d} a las {mins_to_str(t)}")
+        if not engine.es_hora_segura(ini, fin, r['Días']):
+            errores.append(f"❌ {r['ID']} viola la Hora Universal.")
+            
+        for d in dias:
+            for t in range(ini, fin, 10):
+                pk, sk = (r['Profesor'], d, t), (r['Salón'], d, t)
+                if pk in oc_p and r['Profesor'] != "TBA": errores.append(f"⚠️ Choque: {r['Profesor']} a las {mins_to_str(t)} el {d}")
+                if sk in oc_s and r['Salón'] != "TBA": errores.append(f"⚠️ Salón Ocupado: {r['Salón']} a las {mins_to_str(t)} el {d}")
                 oc_p[pk] = oc_s[sk] = True
-        if g['prof'] in cargas: cargas[g['prof']] += g['sec'].creditos
-
-    for p, c in cargas.items():
-        if c > engine.profesores[p]['max']: errores.append(f"⚖️ SOBRECARGA: {p} tiene {c} créditos (Máx: {engine.profesores[p]['max']})")
-        if 0 < c < engine.profesores[p]['min']: errores.append(f"⚖️ CARGA BAJA: {p} tiene {c} créditos (Mín: {engine.profesores[p]['min']})")
-    
-    return list(set(errores)) # Eliminar duplicados de tiempo
+    return list(set(errores))
 
 # ==============================================================================
-# 5. UI PRINCIPAL
+# 5. UI PRINCIPAL CON EDICIÓN MANUAL
 # ==============================================================================
 def main():
-    st.title("🏛️ UPRM Scheduler Platinum AI")
-    st.markdown("### Sistema de Optimización Genética de Oferta Académica")
+    st.title("🏛️ UPRM Scheduler Platinum AI v3")
+    
+    if 'master' not in st.session_state:
+        st.session_state.master = None
 
     with st.sidebar:
-        st.header("🧬 Panel de Control")
-        zona = st.selectbox("Zona Campus", ["CENTRAL", "PERIFERICA"])
-        pop, gens = st.slider("Población", 20, 100, 50), st.slider("Generaciones", 50, 500, 100)
-        file = st.file_uploader("Subir Datos (Excel)", type=['xlsx'])
-        if not file: st.download_button("📥 Plantilla", crear_excel_guia(), "UPRM_Template.xlsx")
+        st.header("⚙️ Configuración")
+        zona = st.selectbox("Zona", ["CENTRAL", "PERIFERICA"])
+        pop, gens = st.slider("Población", 20, 100, 40), st.slider("Generaciones", 50, 300, 100)
+        file = st.file_uploader("Excel de Datos", type=['xlsx'])
 
     if file:
         xls = pd.ExcelFile(file)
-        if st.button("🚀 INICIAR OPTIMIZACIÓN"):
+        if st.button("🚀 GENERAR HORARIO OPTIMIZADO"):
             engine = PlatinumGeneticEngine(pd.read_excel(xls, 'Cursos'), pd.read_excel(xls, 'Profesores'), pd.read_excel(xls, 'Salones'), pd.read_excel(xls, 'Graduados'), zona, pop, gens)
-            mejor_raw = engine.evolucionar()
-            
+            mejor = engine.evolucionar()
+            st.session_state.engine = engine
             st.session_state.master = pd.DataFrame([{
-                'ID': g['sec'].uid, 'Curso': g['sec'].nombre, 'Profesor': g['prof'], 'Días': g['dias'],
-                'Horario': f"{mins_to_str(g['ini'])} - {mins_to_str(g['fin'])}", 'Salón': g['salon'],
-                'Es_Grad': g['sec'].es_graduado, 'ini': g['ini'], 'fin': g['fin']
-            } for g in mejor_raw])
-            st.session_state.errores = analizar_errores(mejor_raw, engine)
-            st.session_state.engine_data = engine
+                'ID': g['sec'].uid, 'Curso': g['sec'].nombre, 'Profesor': g['prof'], 
+                'Días': g['dias'], 'Horario': f"{mins_to_str(g['ini'])} - {mins_to_str(g['fin'])}",
+                'Salón': g['salon']
+            } for g in mejor])
 
-        if 'master' in st.session_state:
-            tab_c, tab_p, tab_s, tab_e = st.tabs(["📚 POR CURSO", "👨‍🏫 POR PROFESOR", "🏠 POR SALÓN", "🚨 REPORTE DE ERRORES"])
+    if st.session_state.master is not None:
+        tab1, tab2, tab3 = st.tabs(["✍️ EDICIÓN Y AJUSTES", "📋 VISTAS DETALLADAS", "🚨 ANALIZADOR"])
+        
+        with tab1:
+            st.subheader("Edición Manual Interactiva")
+            st.info("Puedes cambiar el profesor o el salón directamente en la tabla. El sistema detectará errores al instante.")
+            edited_df = st.data_editor(st.session_state.master, num_rows="fixed", use_container_width=True)
+            st.session_state.master = edited_df
             
-            with tab_c:
-                c_sel = st.selectbox("Filtrar Curso:", sorted(st.session_state.master['Curso'].unique()))
-                st.table(st.session_state.master[st.session_state.master['Curso'] == c_sel][['ID', 'Profesor', 'Días', 'Horario', 'Salón']])
+            st.download_button("📥 Descargar Excel para Impresión (Pestañas por Prof/Salón)", 
+                               exportar_excel_completo(edited_df), "Horario_Final_UPRM.xlsx")
 
-            with tab_p:
-                p_sel = st.selectbox("Filtrar Profesor:", sorted(st.session_state.master['Profesor'].unique()))
-                df_p = st.session_state.master[st.session_state.master['Profesor'] == p_sel]
-                st.table(df_p[['ID', 'Curso', 'Días', 'Horario', 'Salón']])
-                # Gantt Visual
-                g_list = []
-                d_map = {'Lu': '2026-02-02', 'Ma': '2026-02-03', 'Mi': '2026-02-04', 'Ju': '2026-02-05', 'Vi': '2026-02-06'}
-                for _, r in df_p.iterrows():
-                    for d in (["Lu", "Mi", "Vi"] if r['Días'] == "LuMiVi" else ["Ma", "Ju"]):
-                        g_list.append({'Curso': r['ID'], 'Día': d, 'Start': f"{d_map[d]} {int(r['ini']//60):02d}:{int(r['ini']%60):02d}", 'End': f"{d_map[d]} {int(r['fin']//60):02d}:{int(r['fin']%60)}"})
-                if g_list: st.plotly_chart(px.timeline(pd.DataFrame(g_list), x_start="Start", x_end="End", y="Día", color="Curso", template="plotly_dark", title=f"Agenda de {p_sel}"))
+        with tab2:
+            sub1, sub2 = st.columns(2)
+            with sub1:
+                p_filter = st.selectbox("Ver por Profesor", edited_df['Profesor'].unique())
+                st.dataframe(edited_df[edited_df['Profesor'] == p_filter])
+            with sub2:
+                s_filter = st.selectbox("Ver por Salón", edited_df['Salón'].unique())
+                st.dataframe(edited_df[edited_df['Salón'] == s_filter])
 
-            with tab_s:
-                s_sel = st.selectbox("Filtrar Salón:", sorted(st.session_state.master['Salón'].unique()))
-                st.table(st.session_state.master[st.session_state.master['Salón'] == s_sel][['ID', 'Curso', 'Profesor', 'Días', 'Horario']])
-
-            with tab_e:
-                st.subheader("Informe de Consistencia")
-                if not st.session_state.errores:
-                    st.success("✨ ¡Horario Perfecto! No se encontraron conflictos ni choques.")
-                else:
-                    for err in st.session_state.errores:
-                        if "❌" in err: st.error(err)
-                        elif "⚠️" in err: st.warning(err)
-                        else: st.info(err)
+        with tab3:
+            st.subheader("Reporte de Errores en Tiempo Real")
+            errores = analizar_horario(edited_df, st.session_state.engine)
+            if not errores:
+                st.success("✅ El horario es 100% coherente y sin choques.")
+            else:
+                for err in errores:
+                    st.markdown(f"<div class='error-box'>{err}</div>", unsafe_allow_html=True)
 
 
 
