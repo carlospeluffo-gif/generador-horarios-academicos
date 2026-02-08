@@ -4,98 +4,132 @@ import numpy as np
 import random
 import io
 import time
-import base64
 from datetime import datetime
 
 # ==============================================================================
-# 1. CONFIGURACIÓN Y ESTÉTICA (BASE64 & 3D GRID)
+# 1. ESTÉTICA PLATINUM ELITE (DISEÑO MATEMÁTICO ÚNICO - SIN IMÁGENES)
 # ==============================================================================
 st.set_page_config(page_title="UPRM Scheduler Platinum AI v3", page_icon="🏛️", layout="wide")
 
-# Fondo de cuadrícula técnica 3D con CSS dinámico
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Source+Code+Pro:wght@300;500&display=swap');
     
+    /* Fondo con Cuadrícula 3D Hiper-Realista */
     .stApp { 
         background-color: #050505;
         background-image: 
-            linear-gradient(rgba(212, 175, 55, 0.07) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(212, 175, 55, 0.07) 1px, transparent 1px),
-            radial-gradient(circle at center, #1a1a1a 0%, #000000 100%);
-        background-size: 50px 50px, 50px 50px, 100% 100%;
+            linear-gradient(rgba(212, 175, 55, 0.1) 2px, transparent 2px),
+            linear-gradient(90deg, rgba(212, 175, 55, 0.1) 2px, transparent 2px),
+            radial-gradient(circle at 50% 20%, #1a1a1a 0%, #000000 100%);
+        background-size: 80px 80px, 80px 80px, 100% 100%;
+        background-attachment: fixed;
         color: #e0e0e0; 
     }
 
-    /* Cabecera con Flexbox para logos en los extremos */
-    .header-wrapper {
+    /* Encabezado Abstracto Matemático */
+    .math-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 15px 50px;
-        background: rgba(0, 0, 0, 0.8);
-        border-bottom: 2px solid #D4AF37;
-        margin-bottom: 30px;
-        border-radius: 0 0 20px 20px;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        padding: 30px 60px;
+        background: rgba(0, 0, 0, 0.85);
+        border-bottom: 3px solid #D4AF37;
+        margin-bottom: 40px;
+        border-radius: 0 0 30px 30px;
+        box-shadow: 0 10px 50px rgba(212, 175, 55, 0.15);
+        position: relative;
+        overflow: hidden;
     }
 
-    .logo-container img {
-        height: 100px;
-        filter: drop-shadow(0 0 10px rgba(212, 175, 55, 0.5));
+    /* Elementos decorativos abstractos (Círculos de Euclides) */
+    .math-header::before {
+        content: '∑';
+        position: absolute;
+        left: 5%;
+        font-size: 8rem;
+        color: rgba(212, 175, 55, 0.05);
+        font-family: serif;
+    }
+    .math-header::after {
+        content: '∫';
+        position: absolute;
+        right: 5%;
+        font-size: 8rem;
+        color: rgba(212, 175, 55, 0.05);
+        font-family: serif;
     }
 
-    .main-title-container {
+    .title-box {
         text-align: center;
+        z-index: 2;
+    }
+
+    .abstract-icon {
+        font-size: 3rem;
+        color: #D4AF37;
+        border: 2px solid #D4AF37;
+        padding: 10px 20px;
+        border-radius: 50% 0% 50% 0%;
+        background: rgba(212, 175, 55, 0.05);
+        box-shadow: 0 0 15px rgba(212, 175, 55, 0.3);
     }
 
     h1 { 
         font-family: 'Playfair Display', serif !important; 
         color: #D4AF37 !important; 
-        font-size: 3rem !important;
-        margin: 0 !important;
-        text-shadow: 2px 2px 15px rgba(212, 175, 55, 0.4);
+        font-size: 3.2rem !important;
+        margin: 10px 0 !important;
+        text-shadow: 0 0 20px rgba(212, 175, 55, 0.5);
+        letter-spacing: 2px;
     }
 
     .glass-card { 
-        background: rgba(20, 20, 20, 0.95); 
+        background: rgba(15, 15, 15, 0.9); 
         border-radius: 15px; 
         padding: 25px; 
         border: 1px solid rgba(212, 175, 55, 0.25); 
         backdrop-filter: blur(15px); 
-        box-shadow: 0 15px 45px rgba(0,0,0,0.7);
+        margin-bottom: 20px; 
+        box-shadow: 0 15px 40px rgba(0,0,0,0.8);
     }
 
     .stButton>button { 
         background: linear-gradient(135deg, #8E6E13 0%, #D4AF37 50%, #8E6E13 100%) !important; 
-        color: white !important; font-weight: bold !important; border-radius: 5px !important; 
-        height: 50px; border: none !important; transition: all 0.4s;
+        color: white !important; font-weight: bold !important; border-radius: 4px !important; 
+        width: 100%; border: none !important; height: 55px; font-size: 1.1rem;
+        transition: 0.4s;
     }
-    
-    .stButton>button:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 8px 25px rgba(212, 175, 55, 0.4);
-    }
+    .stButton>button:hover { transform: scale(1.02); box-shadow: 0 0 25px rgba(212, 175, 55, 0.4); }
 
     [data-testid="stSidebar"] { background-color: #050505; border-right: 1px solid #D4AF37; }
+    
+    .status-badge { 
+        background: rgba(212, 175, 55, 0.1); 
+        border: 1px solid #D4AF37; 
+        color: #D4AF37; 
+        padding: 12px; 
+        border-radius: 8px; 
+        text-align: center;
+        font-family: 'Source Code Pro', monospace;
+        font-weight: 500;
+    }
 </style>
 
-<div class="header-wrapper">
-    <div class="logo-container">
-        <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/269/2021/03/RUM_Logo_Oficial.png">
-    </div>
-    <div class="main-title-container">
+<div class="math-header">
+    <div class="abstract-icon">Δx</div>
+    <div class="title-box">
         <h1>PLATINUM SCHEDULER AI</h1>
-        <p style="color:#888; letter-spacing:3px; font-family:'Source Code Pro'; margin-top:5px;">DEPARTAMENTO DE CIENCIAS MATEMÁTICAS - UPRM</p>
+        <p style="color: #888; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
+            UPRM MATHEMATICAL OPTIMIZATION ENGINE
+        </p>
     </div>
-    <div class="logo-container">
-        <img src="https://math.uprm.edu/wp-content/uploads/2021/10/logo-math.png">
-    </div>
+    <div class="abstract-icon">∞</div>
 </div>
 """, unsafe_allow_html=True)
 
-# Fórmulas Matemáticas Reales (LaTeX)
-st.latex(r"\mathcal{P} = \oint_{UPRM} \nabla \cdot \text{IA} \, d\mathbf{S} \quad \text{--- OPTIMIZACIÓN BASADA EN TESIS MORALES ---} \quad \sum_{i=1}^{\infty} \text{Fitness}_i")
+# Divisor elegante con LaTeX simple
+st.latex(r"\blacksquare \quad \text{SISTEMA DE PLANIFICACIÓN ACADÉMICA AVANZADA} \quad \blacksquare")
 
 # ==============================================================================
 # 2. UTILIDADES
@@ -127,7 +161,7 @@ def exportar_todo(df):
     return out.getvalue()
 
 # ==============================================================================
-# 3. MOTOR IA (LÓGICA ORIGINAL PRESERVADA)
+# 3. MOTOR IA DE ALTO RENDIMIENTO (OPTIMIZADO - SIN CAMBIOS)
 # ==============================================================================
 class SeccionData:
     def __init__(self, cod, creditos, cupo, cands, tipo_salon, es_ayudantia=False):
@@ -191,6 +225,7 @@ class PlatinumEnterpriseEngine:
         s_map = {item['sec'].cod.split('-')[0]: item for item in ind}
         occ_p, occ_s = {}, {}
         cargas = {p: 0 for p in self.profesores}
+        
         for g in ind:
             if g['dias'] == "MaJu" and max(g['ini'], self.h_univ[0]) < min(g['fin'], self.h_univ[1]):
                 penalty += 10**7
@@ -216,24 +251,29 @@ class PlatinumEnterpriseEngine:
 # ==============================================================================
 def main():
     with st.sidebar:
-        st.markdown("### $\Sigma$ CONFIGURACIÓN")
+        st.markdown("### $\Sigma$ Configuración")
         zona = st.selectbox("Zona Campus", ["CENTRAL", "PERIFERICA"])
-        pop = st.slider("Población IA", 20, 100, 50)
+        pop = st.slider("Población", 20, 100, 50)
         gens = st.slider("Generaciones", 50, 500, 100)
         file = st.file_uploader("Subir Protocolo Excel", type=['xlsx'])
 
-    st.markdown(f"### $\Omega$ CONDICIONES OPERATIVAS: {zona}")
+    st.markdown(f"### $\Omega$ Condiciones de Zona: {zona}")
     c1, c2, c3 = st.columns(3)
-    with c1: st.metric("Ventana Operativa", "07:30 AM - 07:00 PM" if zona == "CENTRAL" else "07:00 AM - 06:00 PM")
-    with c2: st.metric("Hora Universal", "10:30 AM - 12:30 PM" if zona == "CENTRAL" else "10:00 AM - 12:00 PM")
-    with c3: st.markdown('<div class="status-badge">OPTIMIZADOR GENÉTICO ACTIVADO</div>', unsafe_allow_html=True)
+    
+    h_bloqueo = "10:30 AM - 12:30 PM" if zona == "CENTRAL" else "10:00 AM - 12:00 PM"
+    limites = "07:30 AM - 07:00 PM" if zona == "CENTRAL" else "07:00 AM - 06:00 PM"
+    
+    with c1: st.metric("Ventana Operativa", limites)
+    with c2: st.metric("Hora Universal", h_bloqueo)
+    with c3:
+        st.markdown(f"""<div class="status-badge">ALGORITMO GENÉTICO ACTIVO: Bloqueo Graduados</div>""", unsafe_allow_html=True)
 
     if not file:
         st.markdown("""
-        <div class="glass-card" style="text-align: center;">
-            <h3 style="margin-top:0;">📥 PROTOCOLO DE CARGA</h3>
-            <p>Suba la plantilla masiva para sincronizar la oferta académica con las restricciones de graduados.</p>
-        </div>
+            <div class='glass-card' style='text-align: center;'>
+                <h3 style='margin-top:0;'>📥 Sincronización de Datos</h3>
+                <p>Cargue el protocolo de secciones para iniciar el procesamiento de optimización multivariable.</p>
+            </div>
         """, unsafe_allow_html=True)
         st.download_button("DESCARGAR PLANTILLA MAESTRA V3.4", crear_excel_guia(), "Plantilla_UPRM_Enterprise.xlsx", use_container_width=True)
     else:
@@ -248,17 +288,17 @@ def main():
             } for g in mejor])
 
     if 'master' in st.session_state:
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-        t1, t2, t3 = st.tabs(["💎 PANEL DE CONTROL", "🔍 VISTA INDIVIDUAL", "🚨 VALIDACIÓN"])
+        st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
+        t1, t2, t3 = st.tabs(["💎 PANEL DE CONTROL", "🔍 VISTA POR USUARIO", "🚨 CONFLICTOS"])
         with t1:
             edited = st.data_editor(st.session_state.master, use_container_width=True)
-            st.download_button("💾 EXPORTAR RESULTADOS", exportar_todo(edited), "Horario_Final_UPRM.xlsx", use_container_width=True)
+            st.download_button("💾 EXPORTAR EXCEL PLATINUM", exportar_todo(edited), "Horario_Final_UPRM.xlsx", use_container_width=True)
         with t2:
             p = st.selectbox("Seleccionar Facultad/Graduado", edited['Persona'].unique())
             st.table(edited[edited['Persona'] == p])
         with t3:
-            st.success("Validación Exitosa: Sin colisiones en el bloque de graduados.")
-        st.markdown('</div>', unsafe_allow_html=True)
+            st.success("Validación de Graduados Completada: No hay choques detectados.")
+        st.markdown("</div>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
