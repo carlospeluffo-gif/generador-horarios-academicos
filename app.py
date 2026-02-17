@@ -7,15 +7,14 @@ import time
 import re
 
 # ==============================================================================
-# 1. ESTÉTICA PLATINUM ELITE (DISEÑO MATEMÁTICO AVANZADO - INTACTO)
+# 1. ESTÉTICA PLATINUM ELITE (INTACTA)
 # ==============================================================================
-st.set_page_config(page_title="UPRM Scheduler Platinum AI v6", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="UPRM Scheduler Platinum AI v7", page_icon="🏛️", layout="wide")
 
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Source+Code+Pro:wght@300;500&display=swap');
     
-    /* Fondo con Cuadrícula 3D Hiper-Realista */
     .stApp { 
         background-color: #050505;
         background-image: 
@@ -27,7 +26,6 @@ st.markdown("""
         color: #e0e0e0; 
     }
 
-    /* Encabezado Abstracto Matemático */
     .math-header {
         display: flex;
         justify-content: space-between;
@@ -42,22 +40,8 @@ st.markdown("""
         overflow: hidden;
     }
 
-    .math-header::before {
-        content: '∑';
-        position: absolute;
-        left: 5%;
-        font-size: 8rem;
-        color: rgba(212, 175, 55, 0.05);
-        font-family: serif;
-    }
-    .math-header::after {
-        content: '∫';
-        position: absolute;
-        right: 5%;
-        font-size: 8rem;
-        color: rgba(212, 175, 55, 0.05);
-        font-family: serif;
-    }
+    .math-header::before { content: '∑'; position: absolute; left: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.05); font-family: serif; }
+    .math-header::after { content: '∫'; position: absolute; right: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.05); font-family: serif; }
 
     .title-box { text-align: center; z-index: 2; }
 
@@ -90,7 +74,6 @@ st.markdown("""
         box-shadow: 0 15px 40px rgba(0,0,0,0.8);
     }
 
-    /* Botones Generales */
     .stButton>button { 
         background: linear-gradient(135deg, #8E6E13 0%, #D4AF37 50%, #8E6E13 100%) !important; 
         color: white !important; font-weight: bold !important; border-radius: 4px !important; 
@@ -99,7 +82,6 @@ st.markdown("""
     }
     .stButton>button:hover { transform: scale(1.02); box-shadow: 0 0 25px rgba(212, 175, 55, 0.4); }
 
-    /* Estilo Dorado para "Descargar Plantilla" */
     .stDownloadButton>button {
         background: linear-gradient(135deg, #B8860B 0%, #FFD700 50%, #B8860B 100%) !important;
         color: #000 !important;
@@ -107,7 +89,6 @@ st.markdown("""
         border: 1px solid #D4AF37 !important;
     }
 
-    /* Sidebar y Título Σ Configuración */
     [data-testid="stSidebar"] { background-color: #050505; border-right: 1px solid #D4AF37; }
     
     [data-testid="stSidebar"] h3 {
@@ -133,7 +114,7 @@ st.markdown("""
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
         <p style="color: #888; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
-            UPRM MATHEMATICAL OPTIMIZATION ENGINE v6.0 (PLATINUM PERFECT)
+            UPRM MATHEMATICAL OPTIMIZATION ENGINE v7.0 (STRICT ENFORCEMENT)
         </p>
     </div>
     <div class="abstract-icon">∞</div>
@@ -143,7 +124,7 @@ st.markdown("""
 st.latex(r"\blacksquare \quad \text{SISTEMA DE PLANIFICACIÓN ACADÉMICA OPTIMIZADA - TESIS MASTER} \quad \blacksquare")
 
 # ==============================================================================
-# 2. UTILIDADES DE EXPORTACIÓN Y FORMATO
+# 2. UTILIDADES
 # ==============================================================================
 def mins_to_str(m):
     h, mins = divmod(int(m), 60)
@@ -158,10 +139,8 @@ def crear_excel_guia(con_graduados=True):
         pd.DataFrame(columns=['CODIGO', 'CREDITOS', 'CANT_SECCIONES', 'DEMANDA', 'CANDIDATOS', 'TIPO_SALON']).to_excel(writer, sheet_name='Cursos', index=False)
         pd.DataFrame(columns=['Nombre', 'CREDITOS', 'Pref_Dias', 'Pref_horas']).to_excel(writer, sheet_name='Profesores', index=False)
         pd.DataFrame(columns=['CODIGO', 'CAPACIDAD', 'TIPO']).to_excel(writer, sheet_name='Salones', index=False)
-        
         if con_graduados:
             pd.DataFrame(columns=['NOMBRE_GRADUADO', 'CREDITOS_A_DICTAR', 'CODIGOS_RECIBE']).to_excel(writer, sheet_name='Graduados', index=False)
-            
     return output.getvalue()
 
 def exportar_todo(df):
@@ -175,90 +154,120 @@ def exportar_todo(df):
     return out.getvalue()
 
 # ==============================================================================
-# 3. MOTOR IA (PLATINUM ENGINE V6.0 - PERFECT LOGIC)
+# 3. MOTOR IA (PLATINUM ENGINE V7.0)
 # ==============================================================================
 class SeccionData:
     def __init__(self, cod, creditos, cupo, cands, tipo_salon, es_ayudantia=False):
-        self.cod = cod
-        self.creditos = creditos
-        self.cupo = cupo
+        self.cod = str(cod)
+        self.creditos = int(creditos)
+        self.cupo = int(cupo)
         if isinstance(cands, list):
             self.cands = cands
         else:
             self.cands = [c.strip().upper() for c in str(cands).split(',') if c.strip() and str(c).upper() != 'NAN']
         
-        self.tipo_salon = int(tipo_salon) if str(tipo_salon).isdigit() else 1 # Asegurar entero
+        # Limpieza robusta del tipo de salón
+        try:
+            self.tipo_salon = int(float(str(tipo_salon)))
+        except:
+            self.tipo_salon = 1
+            
         self.es_ayudantia = es_ayudantia
         
-        # Identificar cursos fusionables (Mate 3171, 72, 73)
-        base = cod.split('-')[0].upper().replace(" ", "")
+        # Identificar cursos fusionables (Mate 3171, 72, 73 y sus Labs)
+        base = self.cod.split('-')[0].upper().replace(" ", "")
+        # Solo fusionamos las conferencias, los labs usualmente no se fusionan en el mismo espacio físico igual
         self.es_fusionable = base in ["MATE3171", "MATE3172", "MATE3173"]
 
 class PlatinumEnterpriseEngine:
     def __init__(self, df_cursos, df_profes, df_salones, df_grad, zona):
         self.zona = zona
-        df_salones.columns = [c.strip().upper() for c in df_salones.columns]
         
-        # Procesar Salones y Detectar "Grandes" (FA, FB, FC)
+        # --- PROCESAMIENTO ROBUSTO DE SALONES ---
+        df_salones.columns = [c.strip().upper() for c in df_salones.columns]
         self.salones = []
-        self.mega_salones = set() # Set de códigos de salones grandes
+        self.mega_salones = set()
         
         for _, r in df_salones.iterrows():
             codigo = str(r['CODIGO']).strip().upper()
             cap = int(r['CAPACIDAD'])
-            tipo = int(r['TIPO'])
+            try:
+                tipo = int(r['TIPO'])
+            except:
+                tipo = 1 # Default a salón regular
             
             self.salones.append({'CODIGO': codigo, 'CAPACIDAD': cap, 'TIPO': tipo})
             
-            # Criterio para FA, FB, FC (Por nombre o alta capacidad)
-            # Normalizamos quitando espacios para detectar F A, F-B, etc.
+            # Detectar salones grandes (FA, FB, FC)
             norm_cod = codigo.replace(" ", "").replace("-", "")
-            if norm_cod.startswith("FA") or norm_cod.startswith("FB") or norm_cod.startswith("FC"):
+            if any(x in norm_cod for x in ["FA", "FB", "FC"]):
                 self.mega_salones.add(codigo)
-        
-        # Mapa de Profesores y Preferencias
+
+        # --- PROCESAMIENTO DE PROFESORES ---
         self.profesores = {}
         for _, r in df_profes.iterrows():
             nombre = str(r['Nombre']).upper().strip()
             self.profesores[nombre] = {
-                'Carga_Max': r['CREDITOS'], # Para profesores regulares es un máximo
+                'Carga_Max': r['CREDITOS'], 
                 'Pref_Bloque': str(r.get('Pref_horas', 'AM')).upper() 
             }
-            
-        # Mapa de Graduados (Restricción Estricta)
+
+        # --- PROCESAMIENTO DE GRADUADOS (CRÍTICO) ---
         self.graduados_cfg = {}
         self.graduados_por_curso = {} 
-        self.es_graduado = set()
+        self.cursos_basicos_graduados = ["MATE3171", "MATE3171L", "MATE3172", "MATE3172L", "MATE3173", "MATE3173L"]
         
         if df_grad is not None and not df_grad.empty:
             for _, r in df_grad.iterrows():
                 nom_grad = str(r['NOMBRE_GRADUADO']).upper().strip()
-                creditos_exactos = r['CREDITOS_A_DICTAR'] # ESTO ES OBLIGATORIO
-                cursos_recibe = [c.strip().upper() for c in str(r['CODIGOS_RECIBE']).split(',') if c.strip()]
+                creditos_exactos = int(r['CREDITOS_A_DICTAR']) # OBLIGATORIO
                 
+                raw_codigos = str(r['CODIGOS_RECIBE']).strip()
+                cursos_recibe = []
+                
+                # LÓGICA DE RESPALDO: Si la celda está vacía o es 'nan', asume que puede dar los básicos
+                if raw_codigos.lower() == 'nan' or raw_codigos == '':
+                    cursos_recibe = self.cursos_basicos_graduados
+                else:
+                    cursos_recibe = [c.strip().upper() for c in raw_codigos.split(',') if c.strip()]
+                    # Si el usuario puso MATE3171, asumimos que también puede dar MATE3171L
+                    extras = []
+                    for c in cursos_recibe:
+                        if c + "L" not in cursos_recibe and c in ["MATE3171", "MATE3172", "MATE3173"]:
+                            extras.append(c + "L")
+                    cursos_recibe.extend(extras)
+
                 self.graduados_cfg[nom_grad] = {
                     'recibe': cursos_recibe,
                     'dar': creditos_exactos
                 }
-                self.es_graduado.add(nom_grad)
                 
+                # Mapa inverso
                 for curso in cursos_recibe:
                     if curso not in self.graduados_por_curso:
                         self.graduados_por_curso[curso] = []
                     self.graduados_por_curso[curso].append(nom_grad)
         
-        # Generación de Oferta
+        # --- GENERACIÓN DE OFERTA ACADÉMICA ---
         self.oferta = []
         for _, r in df_cursos.iterrows():
             codigo_base = str(r['CODIGO']).strip().upper()
             candidatos_raw = str(r['CANDIDATOS'])
             lista_candidatos = []
             
+            # DETECCIÓN DE PALABRA CLAVE "GRADUADOS"
             if "GRADUADOS" in candidatos_raw.upper():
+                # Si el curso está en el mapa, traer los graduados
                 if codigo_base in self.graduados_por_curso:
                     lista_candidatos = self.graduados_por_curso[codigo_base]
                 else:
-                    lista_candidatos = ["TBA"]
+                    # Si no hay nadie explícito, pero es un curso básico, traer a TODOS los graduados disponibles
+                    # Esto asegura que no falte gente para MATE3171L etc.
+                    todos_los_grads = list(self.graduados_cfg.keys())
+                    if not todos_los_grads:
+                        lista_candidatos = ["TBA"]
+                    else:
+                        lista_candidatos = todos_los_grads
             else:
                 lista_candidatos = [c.strip().upper() for c in candidatos_raw.split(',') if c.strip()]
 
@@ -272,12 +281,11 @@ class PlatinumEnterpriseEngine:
                     r['TIPO_SALON']
                 ))
         
-        # Ayudantías (Solo para ocupar tiempo del graduado, no salon)
+        # Ayudantías ficticias (0 créditos, solo relleno de agenda personal)
         for nom, cfg in self.graduados_cfg.items():
-            # Nota: Esto es simbólico para el horario personal, no ocupa salón físico de clases
-            self.oferta.append(SeccionData(f"AYUD-{nom[:4]}", 0, 1, [nom], 0, True)) 
+            self.oferta.append(SeccionData(f"AYUD-{nom[:4]}", 0, 1, [nom], 0, True))
 
-        # Bloques
+        # BLOQUES
         self.bloques_lmv = [450, 510, 570, 630, 690, 750, 810, 870, 930, 990] 
         self.bloques_mj = [450, 540, 750, 840, 930, 1020]
         self.h_univ = (630, 750) if zona == "CENTRAL" else (600, 720) 
@@ -293,8 +301,8 @@ class PlatinumEnterpriseEngine:
         for gen in range(generations):
             scored = []
             for ind in pob:
-                score = self._fitness(ind)
-                scored.append((score, ind))
+                s = self._fitness(ind)
+                scored.append((s, ind))
             
             scored.sort(key=lambda x: x[0], reverse=True)
             
@@ -302,7 +310,6 @@ class PlatinumEnterpriseEngine:
                 best_score = scored[0][0]
                 best_overall = scored[0][1]
 
-            # Elitismo agresivo para mantener la perfección
             nueva_gen = [x[1] for x in scored[:int(pop_size*0.15)]] 
             
             status_text.markdown(f"**Optimizando Gen {gen+1}/{generations}** | Precisión: `{best_score:.8f}`")
@@ -310,14 +317,13 @@ class PlatinumEnterpriseEngine:
             while len(nueva_gen) < pop_size:
                 padres = random.sample(scored[:int(pop_size*0.5)], 2) 
                 p1, p2 = padres[0][1], padres[1][1]
-                
-                # Cruce Uniforme (Mejor mezcla)
                 hijo = []
                 for i in range(len(p1)):
                     hijo.append(p1[i] if random.random() < 0.5 else p2[i])
                 
-                # Mutación Adaptativa
-                if random.random() < 0.25:
+                # Mutación más agresiva si el score es bajo
+                prob_mut = 0.3 if best_score < 0.0001 else 0.1
+                if random.random() < prob_mut:
                     idx = random.randint(0, len(hijo)-1)
                     hijo[idx] = self._mutate_gene(hijo[idx], aggressive_search=True)
                 
@@ -330,37 +336,35 @@ class PlatinumEnterpriseEngine:
 
     def _mutate_gene(self, gene, aggressive_search=False):
         s = gene['sec']
-        es_mj = (s.creditos >= 4) or (random.random() > 0.6)
+        # MATE317x suelen ser 3 creditos (LuMiVi) y Labs 1 credito (Cualquier dia, a veces MaJu)
+        # Si creditos > 3, es MaJu casi seguro. Si es 1, puede flotar.
+        es_mj = (s.creditos >= 4)
+        if s.creditos == 3: es_mj = False # Forzar LuMiVi para clases de 3
+        if s.creditos == 1: es_mj = (random.random() > 0.5) # Labs aleatorios
+        
         dias = "MaJu" if es_mj else "LuMiVi"
         dur = 80 if es_mj else 50 
         
         posibles_inicios = self.bloques_mj if es_mj else self.bloques_lmv
         h_ini = random.choice(posibles_inicios)
         
-        # Selección de Profesor
         prof = random.choice(s.cands) if s.cands else "TBA"
         
-        # Selección de Salón con Lógica Estricta + Fusión
-        # 1. Filtrar por TIPO exacto (1 o 2)
+        # Selección de Salón
         candidatos_salon = [sl['CODIGO'] for sl in self.salones if sl['TIPO'] == s.tipo_salon and sl['CAPACIDAD'] >= s.cupo]
         
-        # 2. Si el curso es fusionable (Mate317x), AÑADIR los Mega Salones (FA, FB, FC) aunque sean otro tipo
-        #    asumiendo que FA/FB/FC pueden alojar estos cursos.
+        # Fusión permitida en Mega Salones
         if s.es_fusionable:
              candidatos_salon.extend([sl['CODIGO'] for sl in self.salones if sl['CODIGO'] in self.mega_salones])
         
-        # Eliminar duplicados
         candidatos_salon = list(set(candidatos_salon))
-
         sal = "TBA"
         if candidatos_salon:
             sal = random.choice(candidatos_salon)
-        else:
-            # RETRY AGRESIVO: Si no hay salón, intentar relajar restricciones de tipo solo si es desesperado,
-            # o buscar en todos los salones que quepan.
-            if aggressive_search:
-                backup = [sl['CODIGO'] for sl in self.salones if sl['CAPACIDAD'] >= s.cupo]
-                if backup: sal = random.choice(backup)
+        elif aggressive_search:
+            # Si no encuentra, intentar cualquier salón que quepa
+            backup = [sl['CODIGO'] for sl in self.salones if sl['CAPACIDAD'] >= s.cupo]
+            if backup: sal = random.choice(backup)
 
         return {'sec': s, 'prof': prof, 'salon': sal, 'dias': dias, 'ini': h_ini, 'fin': h_ini + dur}
 
@@ -371,10 +375,6 @@ class PlatinumEnterpriseEngine:
         penalty = 0
         soft_penalty = 0 
         
-        s_map = {item['sec'].cod.split('-')[0]: item for item in ind}
-        
-        # Estructuras para colisiones
-        # occ_s: (salon, dia) -> lista de (inicio, fin, ocupacion_actual, curso_es_fusionable)
         occ_s = {} 
         occ_p = {}
         cargas_graduados = {g: 0 for g in self.graduados_cfg}
@@ -383,99 +383,74 @@ class PlatinumEnterpriseEngine:
         for g in ind:
             sec = g['sec']
             
-            # --- 1. PENALIZACIÓN TBA (Muerte Súbita) ---
-            if g['salon'] == "TBA": penalty += 1000000
-            if g['prof'] == "TBA": penalty += 1000000
+            # 1. TBA FATAL
+            if g['salon'] == "TBA": penalty += 1e7
+            if g['prof'] == "TBA": penalty += 1e7
 
-            # --- 2. TIPO DE SALÓN INCORRECTO ---
-            # Si el salón no es TBA, verificar que el tipo coincida
+            # 2. TIPO SALÓN
             if g['salon'] != "TBA":
-                # Buscar info del salón
                 salon_info = next((s for s in self.salones if s['CODIGO'] == g['salon']), None)
                 if salon_info:
-                    # Excepción: Si es fusionable y está en Mega Salón, se permite
                     es_fusion_valida = sec.es_fusionable and (g['salon'] in self.mega_salones)
-                    if not es_fusion_valida:
-                        if salon_info['TIPO'] != sec.tipo_salon:
-                            penalty += 50000 # Muy grave usar lab para teoria
+                    if not es_fusion_valida and salon_info['TIPO'] != sec.tipo_salon:
+                        penalty += 50000 
 
-            # --- 3. CRÉDITOS GRADUADOS (SUMA) ---
+            # 3. SUMA DE CRÉDITOS (ESTRICTA)
+            # Aquí suma los créditos reales de la sección (ej. 3 o 1)
             if g['prof'] in cargas_graduados:
                 cargas_graduados[g['prof']] += sec.creditos
             elif g['prof'] in cargas_profes:
                 cargas_profes[g['prof']] += sec.creditos
 
-            # --- 4. CHOQUE DE HORARIO Y FUSIÓN ---
+            # 4. CHOQUES
             dias_lista = ["Lu", "Mi", "Vi"] if g['dias'] == "LuMiVi" else ["Ma", "Ju"]
-            
             for dia in dias_lista:
-                # A. Choque Profesor
+                # Profesor
                 pk = (g['prof'], dia)
                 rango = (g['ini'], g['fin'])
                 if g['prof'] != "TBA":
                     if pk in occ_p:
                         for r in occ_p[pk]:
                             if max(rango[0], r[0]) < min(rango[1], r[1]): 
-                                penalty += 50000 # Profesor no puede estar en dos sitios
+                                penalty += 50000 
                         occ_p[pk].append(rango)
-                    else:
-                        occ_p[pk] = [rango]
+                    else: occ_p[pk] = [rango]
 
-                # B. Choque Salón (Con Lógica de Fusión)
+                # Salón (Fusión)
                 if g['salon'] != "TBA":
                     sk = (g['salon'], dia)
+                    if sk not in occ_s: occ_s[sk] = []
                     
-                    if sk not in occ_s:
-                        occ_s[sk] = []
-                    
-                    # Verificar colisiones con ocupantes existentes
                     for (ini_ex, fin_ex, cupo_ex, fusionable_ex) in occ_s[sk]:
-                        # Si hay solapamiento de tiempo
                         if max(rango[0], ini_ex) < min(rango[1], fin_ex):
-                            
-                            # LOGICA DE FUSION
-                            # Se permite SOLO SI:
-                            # 1. El salón es Mega Salón (FA, FB, FC)
-                            # 2. El curso nuevo es fusionable (Mate317x)
-                            # 3. El curso existente TAMBIEN es fusionable
-                            # 4. La suma de cupos cabe en el salón
-                            
                             es_mega = g['salon'] in self.mega_salones
                             ambos_fusionables = sec.es_fusionable and fusionable_ex
                             
                             if es_mega and ambos_fusionables:
-                                # Chequear capacidad total
                                 salon_cap = next((s['CAPACIDAD'] for s in self.salones if s['CODIGO'] == g['salon']), 0)
                                 if (sec.cupo + cupo_ex) > salon_cap:
-                                    penalty += 20000 # Se pasa de capacidad
-                                # Si cabe, NO HAY PENALIZACIÓN (Fusión Exitosa)
+                                    penalty += 20000 
                             else:
-                                # Choque normal (No se pueden fusionar o no es el salón correcto)
                                 penalty += 50000
-                    
-                    # Registrar ocupación
                     occ_s[sk].append((g['ini'], g['fin'], sec.cupo, sec.es_fusionable))
 
-            # --- 5. HORA UNIVERSAL ---
-            if g['dias'] == "MaJu":
-                if max(g['ini'], self.h_univ[0]) < min(g['fin'], self.h_univ[1]):
-                    penalty += 50000
+            # 5. UNIVERSAL
+            if g['dias'] == "MaJu" and max(g['ini'], self.h_univ[0]) < min(g['fin'], self.h_univ[1]):
+                penalty += 50000
 
-        # --- VALIDACIÓN GLOBAL DE CRÉDITOS GRADUADOS (HARD CONSTRAINT) ---
+        # --- VALIDACIÓN DE CRÉDITOS GRADUADOS (SUPER HARD CONSTRAINT) ---
         for grad, carga_actual in cargas_graduados.items():
             objetivo = self.graduados_cfg[grad]['dar']
             if carga_actual != objetivo:
-                # Penalización brutal por cada crédito de diferencia
+                # Penalización EXPONENCIAL para forzar la igualdad
                 diff = abs(carga_actual - objetivo)
-                penalty += (diff * 100000) 
+                penalty += (diff * 1e6) 
 
-        # Validación Profesores (Carga Máxima)
+        # Profesores regulares (Carga Máxima)
         for prof, carga in cargas_profes.items():
             max_c = self.profesores[prof]['Carga_Max']
-            if carga > max_c:
-                penalty += 10000
+            if carga > max_c: penalty += 10000
 
-        # Fitness inverso
         return 1 / (1 + penalty + soft_penalty)
 
 # ==============================================================================
@@ -485,7 +460,6 @@ def main():
     with st.sidebar:
         st.markdown("### $\Sigma$ Configuración")
         zona = st.selectbox("Zona Campus", ["CENTRAL", "PERIFERICA"])
-        # Aumentamos valores por defecto para buscar la perfección
         pop = st.slider("Población", 50, 500, 100)
         gens = st.slider("Generaciones", 100, 1000, 200)
         file = st.file_uploader("Subir Protocolo Excel", type=['xlsx'])
@@ -519,17 +493,18 @@ def main():
         if st.button("🚀 INICIAR OPTIMIZACIÓN PERFECTA"):
             xls = pd.ExcelFile(file)
             
+            # Forzar lectura de columnas como string para evitar errores de códigos numéricos
             df_grad = None
             if 'Graduados' in xls.sheet_names:
-                df_grad = pd.read_excel(xls, 'Graduados')
+                df_grad = pd.read_excel(xls, 'Graduados', dtype=str)
+                # Convertir creditos a numerico tras lectura
+                df_grad['CREDITOS_A_DICTAR'] = pd.to_numeric(df_grad['CREDITOS_A_DICTAR'], errors='coerce').fillna(0)
             
-            engine = PlatinumEnterpriseEngine(
-                pd.read_excel(xls, 'Cursos'), 
-                pd.read_excel(xls, 'Profesores'), 
-                pd.read_excel(xls, 'Salones'), 
-                df_grad, 
-                zona
-            )
+            df_cursos = pd.read_excel(xls, 'Cursos')
+            df_profes = pd.read_excel(xls, 'Profesores')
+            df_salones = pd.read_excel(xls, 'Salones')
+
+            engine = PlatinumEnterpriseEngine(df_cursos, df_profes, df_salones, df_grad, zona)
             
             start_time = time.time()
             mejor = engine.solve(pop, gens)
@@ -556,9 +531,14 @@ def main():
             st.download_button("💾 EXPORTAR EXCEL PLATINUM", exportar_todo(edited), "Horario_Final_UPRM.xlsx", use_container_width=True)
         with t2:
             lista_personas = sorted(st.session_state.master['Persona'].unique())
-            p = st.selectbox("Seleccionar Facultad/Graduado", lista_personas)
-            subset = st.session_state.master[st.session_state.master['Persona'] == p]
-            st.table(subset[['ID', 'Días', 'Horario', 'Salón']])
+            if lista_personas:
+                p = st.selectbox("Seleccionar Facultad/Graduado", lista_personas)
+                subset = st.session_state.master[st.session_state.master['Persona'] == p]
+                st.table(subset[['ID', 'Creditos', 'Días', 'Horario', 'Salón']])
+                
+                # Calcular total créditos para verificar
+                total_cr = subset['Creditos'].sum()
+                st.metric(f"Carga Total de {p}", f"{total_cr} Créditos")
         with t3:
             # Auditoría de TBAs
             tbas = st.session_state.master[
