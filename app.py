@@ -7,7 +7,7 @@ import time
 from datetime import datetime
 
 # ==============================================================================
-# 1. ESTÉTICA PLATINUM ELITE (DISEÑO MATEMÁTICO AVANZADO)
+# 1. ESTÉTICA PLATINUM ELITE (DISEÑO MATEMÁTICO AVANZADO - INTACTO)
 # ==============================================================================
 st.set_page_config(page_title="UPRM Scheduler Platinum AI v5", page_icon="🏛️", layout="wide")
 
@@ -143,7 +143,7 @@ st.markdown("""
 st.latex(r"\blacksquare \quad \text{SISTEMA DE PLANIFICACIÓN ACADÉMICA OPTIMIZADA - TESIS MASTER} \quad \blacksquare")
 
 # ==============================================================================
-# 2. UTILIDADES
+# 2. UTILIDADES DE EXPORTACIÓN Y FORMATO
 # ==============================================================================
 def mins_to_str(m):
     h, mins = divmod(int(m), 60)
@@ -152,13 +152,17 @@ def mins_to_str(m):
     if h_disp == 0: h_disp = 12
     return f"{h_disp:02d}:{mins:02d} {am_pm}"
 
-def crear_excel_guia():
+def crear_excel_guia(con_graduados=True):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        pd.DataFrame(columns=['CODIGO', 'CREDITOS', 'CANT_SECCIONES', 'CUPO', 'CANDIDATOS', 'TIPO_SALON']).to_excel(writer, sheet_name='Cursos', index=False)
-        pd.DataFrame(columns=['Nombre', 'Carga_Max', 'Pref_Horario']).to_excel(writer, sheet_name='Profesores', index=False)
+        # Estructura exacta basada en Plantilla_UPRM_Enterprise (8).xlsx
+        pd.DataFrame(columns=['CODIGO', 'CREDITOS', 'CANT_SECCIONES', 'DEMANDA', 'CANDIDATOS', 'TIPO_SALON']).to_excel(writer, sheet_name='Cursos', index=False)
+        pd.DataFrame(columns=['Nombre', 'CREDITOS', 'Pref_Dias', 'Pref_horas']).to_excel(writer, sheet_name='Profesores', index=False)
         pd.DataFrame(columns=['CODIGO', 'CAPACIDAD', 'TIPO']).to_excel(writer, sheet_name='Salones', index=False)
-        pd.DataFrame(columns=['NOMBRE_GRADUADO', 'CREDITOS_A_DICTAR', 'CODIGOS_RECIBE']).to_excel(writer, sheet_name='Graduados', index=False)
+        
+        if con_graduados:
+            pd.DataFrame(columns=['NOMBRE_GRADUADO', 'CREDITOS_A_DICTAR', 'CODIGOS_RECIBE']).to_excel(writer, sheet_name='Graduados', index=False)
+            
     return output.getvalue()
 
 def exportar_todo(df):
@@ -167,58 +171,109 @@ def exportar_todo(df):
         df.to_excel(writer, sheet_name='Maestro', index=False)
         for p in df['Persona'].unique():
             if str(p) != "TBA":
+                # Limpieza de caracteres no permitidos en nombres de hojas Excel
                 clean_name = "".join([c for c in str(p) if c.isalnum() or c==' '])[:25]
                 df[df['Persona'] == p].to_excel(writer, sheet_name=f"User_{clean_name}", index=False)
     return out.getvalue()
 
 # ==============================================================================
-# 3. MOTOR IA (PLATINUM ENGINE V5.0)
+# 3. MOTOR IA (PLATINUM ENGINE V5.0) - LÓGICA ACTUALIZADA
 # ==============================================================================
 class SeccionData:
     def __init__(self, cod, creditos, cupo, cands, tipo_salon, es_ayudantia=False):
-        self.cod, self.creditos, self.cupo = cod, creditos, cupo
-        # Limpieza de candidatos para evitar errores 'nan'
-        self.cands = [c.strip().upper() for c in str(cands).split(',') if c.strip() and str(c).upper() != 'NAN']
-        self.tipo_salon, self.es_ayudantia = tipo_salon, es_ayudantia
+        self.cod = cod
+        self.creditos = creditos
+        self.cupo = cupo
+        # Si cands es una lista (ya procesada por lógica de graduados), usarla. Si es string, separar por comas.
+        if isinstance(cands, list):
+            self.cands = cands
+        else:
+            self.cands = [c.strip().upper() for c in str(cands).split(',') if c.strip() and str(c).upper() != 'NAN']
+        
+        self.tipo_salon = tipo_salon
+        self.es_ayudantia = es_ayudantia
 
 class PlatinumEnterpriseEngine:
     def __init__(self, df_cursos, df_profes, df_salones, df_grad, zona):
         self.zona = zona
+        # Normalizar nombres de columnas de Salones para asegurar compatibilidad
+        df_salones.columns = [c.strip().upper() for c in df_salones.columns]
         self.salones = df_salones.to_dict('records')
         
-        # Mapa de Profesores y Preferencias
+        # 1. Procesar Profesores (Mapeo de columnas actualizado)
         self.profesores = {}
         for _, r in df_profes.iterrows():
             nombre = str(r['Nombre']).upper().strip()
+            # Mapeo: 'CREDITOS' del excel es la Carga Máxima. 'Pref_horas' es AM/PM.
             self.profesores[nombre] = {
-                'Carga_Max': r['Carga_Max'],
-                'Pref_Bloque': str(r.get('Pref_Horario', 'AM')).upper() # Preferencia Suave
+                'Carga_Max': r['CREDITOS'], 
+                'Pref_Bloque': str(r.get('Pref_horas', 'AM')).upper() 
             }
             
-        # Mapa de Graduados
-        self.graduados_cfg = {str(r['NOMBRE_GRADUADO']).upper().strip(): {
-            'recibe': [c.strip().upper() for c in str(r['CODIGOS_RECIBE']).split(',') if c.strip()],
-            'dar': r['CREDITOS_A_DICTAR']
-        } for _, r in df_grad.iterrows()}
+        # 2. Procesar Graduados (Si existen)
+        self.graduados_cfg = {}
+        # Diccionario auxiliar: {CODIGO_CURSO: [LISTA_DE_GRADUADOS_QUE_PUEDEN_DARLO]}
+        self.graduados_por_curso = {} 
         
-        # Generación de la Oferta Académica (Genes Base)
+        if df_grad is not None and not df_grad.empty:
+            for _, r in df_grad.iterrows():
+                nom_grad = str(r['NOMBRE_GRADUADO']).upper().strip()
+                creditos_dar = r['CREDITOS_A_DICTAR']
+                
+                # Obtener cursos que puede dar
+                cursos_recibe = [c.strip().upper() for c in str(r['CODIGOS_RECIBE']).split(',') if c.strip()]
+                
+                self.graduados_cfg[nom_grad] = {
+                    'recibe': cursos_recibe,
+                    'dar': creditos_dar
+                }
+                
+                # Llenar el mapa inverso para asignación rápida en Cursos
+                for curso in cursos_recibe:
+                    if curso not in self.graduados_por_curso:
+                        self.graduados_por_curso[curso] = []
+                    self.graduados_por_curso[curso].append(nom_grad)
+        
+        # 3. Generación de la Oferta Académica (Genes Base)
         self.oferta = []
         for _, r in df_cursos.iterrows():
-            for i in range(int(r['CANT_SECCIONES'])):
-                self.oferta.append(SeccionData(f"{r['CODIGO']}-{i+1:02d}", r['CREDITOS'], r['CUPO'], r['CANDIDATOS'], r['TIPO_SALON']))
+            codigo_base = str(r['CODIGO']).strip().upper()
+            candidatos_raw = str(r['CANDIDATOS'])
+            lista_candidatos = []
+            
+            # --- LÓGICA DE GRADUADOS VS REGULAR ---
+            # Si en la celda dice "graduados" (case insensitive), buscar en la hoja de Graduados
+            if "GRADUADOS" in candidatos_raw.upper():
+                # Buscar en el mapa que creamos antes
+                if codigo_base in self.graduados_por_curso:
+                    lista_candidatos = self.graduados_por_curso[codigo_base]
+                else:
+                    # Si dice graduados pero nadie está inscrito para darlo, fallback a TBA
+                    lista_candidatos = ["TBA"]
+            else:
+                # Comportamiento normal: lista separada por comas
+                lista_candidatos = [c.strip().upper() for c in candidatos_raw.split(',') if c.strip()]
+
+            # Crear Secciones individuales
+            cant_secciones = int(r['CANT_SECCIONES'])
+            for i in range(cant_secciones):
+                self.oferta.append(SeccionData(
+                    f"{codigo_base}-{i+1:02d}", 
+                    r['CREDITOS'], 
+                    r['DEMANDA'], # Mapeado a DEMANDA según archivo
+                    lista_candidatos, 
+                    r['TIPO_SALON']
+                ))
         
-        # Añadir 'clases' ficticias para los Graduados (Ayudantías)
+        # 4. Añadir 'clases' ficticias para los Graduados (Ayudantías - Restricción)
+        # Solo si existen graduados cargados
         for nom, cfg in self.graduados_cfg.items():
+            # Crear una "clase" que representa sus horas de oficina/trabajo propio
             self.oferta.append(SeccionData(f"AYUD-{nom[:4]}", cfg['dar'], 1, [nom], "OFICINA", True))
 
         # --- BLOQUES DE TIEMPO OFICIALES UPRM ---
-        # Convertimos horas a minutos (e.g., 7:30 = 450 min)
-        # Bloques LMV (1 hora estándar)
         self.bloques_lmv = [450, 510, 570, 630, 690, 750, 810, 870, 930, 990] 
-        # Bloques MaJu (1.5 horas estándar, saltando Hora Universal)
         self.bloques_mj = [450, 540, 750, 840, 930, 1020]
-        
-        # Hora Universal (Bloqueo Duro)
         self.h_univ = (630, 750) if zona == "CENTRAL" else (600, 720) 
 
     def solve(self, pop_size, generations):
@@ -227,23 +282,17 @@ class PlatinumEnterpriseEngine:
         status_text = st.empty()
         
         for gen in range(generations):
-            # Evaluar toda la población
             scored = sorted([(self._fitness(ind), ind) for ind in pob], key=lambda x: x[0], reverse=True)
-            
-            # Elitismo: Conservar el TOP 10% intacto
-            nueva_gen = [x[1] for x in scored[:int(pop_size*0.1)]]
+            nueva_gen = [x[1] for x in scored[:int(pop_size*0.1)]] # Elitismo
             
             status_text.markdown(f"**Generando Solución {gen+1}/{generations}** | Fitness Actual: `{scored[0][0]:.6f}`")
             
-            # Operadores Genéticos: Torneo y Cruce
             while len(nueva_gen) < pop_size:
                 padres = random.sample(scored[:int(pop_size*0.5)], 2) 
                 p1, p2 = padres[0][1], padres[1][1]
-                
                 punto = random.randint(1, len(p1)-1)
                 hijo = p1[:punto] + p2[punto:]
                 
-                # Mutación Dinámica (más alta al principio, baja al final)
                 prob_mut = 0.2 if gen < generations * 0.3 else 0.05
                 if random.random() < prob_mut:
                     idx = random.randint(0, len(hijo)-1)
@@ -258,20 +307,15 @@ class PlatinumEnterpriseEngine:
 
     def _mutate_gene(self, gene):
         s = gene['sec']
-        
-        # Lógica de días: Clases de 4+ créditos o aleatorio suelen ser MJ
         es_mj = (s.creditos >= 4) or (random.random() > 0.6)
         dias = "MaJu" if es_mj else "LuMiVi"
-        dur = 80 if es_mj else 50 # Duración en minutos
+        dur = 80 if es_mj else 50 
         
-        # Selección de hora restringida a BLOQUES VÁLIDOS
         posibles_inicios = self.bloques_mj if es_mj else self.bloques_lmv
         h_ini = random.choice(posibles_inicios)
         
-        # Selección de Profesor
         prof = random.choice(s.cands) if s.cands else "TBA"
         
-        # Selección de Salón (Solo si cumple capacidad y tipo)
         sal_compatibles = [sl['CODIGO'] for sl in self.salones if sl['CAPACIDAD'] >= s.cupo and sl['TIPO'] == s.tipo_salon]
         sal = random.choice(sal_compatibles) if sal_compatibles else "TBA"
         
@@ -287,14 +331,10 @@ class PlatinumEnterpriseEngine:
         s_map = {item['sec'].cod.split('-')[0]: item for item in ind}
         occ_p, occ_s = {}, {}
         cargas = {p: 0 for p in self.profesores}
-        horarios_por_curso = {} # Para controlar distribución (Anti-Aglomeración)
+        horarios_por_curso = {} 
         
         for g in ind:
-            # =========================================
-            # RESTRICCIONES DURAS (Hard Constraints)
-            # =========================================
-            
-            # 1. PENALIZACIÓN "TBA" (Crucial para obligar asignación)
+            # 1. PENALIZACIÓN "TBA"
             if g['salon'] == "TBA": penalty += 5000
             if g['prof'] == "TBA": penalty += 5000
 
@@ -305,10 +345,10 @@ class PlatinumEnterpriseEngine:
 
             # 3. CHOQUE DE GRADUADOS (Profesor vs Estudiante)
             if g['prof'] in self.graduados_cfg:
+                # Verificar si el graduado está tomando clases que chocan con las que dicta
                 for cod in self.graduados_cfg[g['prof']]['recibe']:
                     if cod in s_map:
                         clase = s_map[cod]
-                        # Intersección simple de días
                         dias_g = ["Ma", "Ju"] if g['dias'] == "MaJu" else ["Lu", "Mi", "Vi"]
                         dias_c = ["Ma", "Ju"] if clase['dias'] == "MaJu" else ["Lu", "Mi", "Vi"]
                         
@@ -321,7 +361,7 @@ class PlatinumEnterpriseEngine:
                 cargas[g['prof']] += g['sec'].creditos
                 if cargas[g['prof']] > self.profesores[g['prof']]['Carga_Max']: penalty += 5000
 
-            # 5. CHOQUES DE TIEMPO/ESPACIO (Salones y Profesores)
+            # 5. CHOQUES DE TIEMPO/ESPACIO
             d_list = ["Lu", "Mi", "Vi"] if g['dias'] == "LuMiVi" else ["Ma", "Ju"]
             for d in d_list:
                 pk, sk = (g['prof'], d), (g['salon'], d)
@@ -341,30 +381,21 @@ class PlatinumEnterpriseEngine:
                         occ_s[sk].append(rango)
                     else: occ_s[sk] = [rango]
             
-            # =========================================
-            # RESTRICCIONES SUAVES (Soft Constraints)
-            # =========================================
-            
-            # A. Preferencias AM/PM del profesor
+            # RESTRICCIONES SUAVES
             if g['prof'] in self.profesores:
                 pref = self.profesores[g['prof']]['Pref_Bloque']
                 es_am = g['ini'] < 720
                 if (pref == 'AM' and not es_am) or (pref == 'PM' and es_am):
                     soft_penalty += 100
 
-            # B. DISTRIBUCIÓN DE SECCIONES (NUEVO: Hace el horario "Perfecto")
-            # Evita que todas las secciones de un curso (ej. MATE3005) sean a la misma hora
+            # DISTRIBUCIÓN DE SECCIONES
             curso_base = g['sec'].cod.split('-')[0]
             if curso_base not in horarios_por_curso:
                 horarios_por_curso[curso_base] = []
-            
-            # Si este curso ya tiene una sección a esta hora, penalizar la aglomeración
             if g['ini'] in horarios_por_curso[curso_base]:
                 soft_penalty += 500 
-            
             horarios_por_curso[curso_base].append(g['ini'])
 
-        # Cálculo final del Fitness
         return 1 / (1 + penalty + (soft_penalty * 0.001))
 
 # ==============================================================================
@@ -394,13 +425,33 @@ def main():
             <div class='glass-card' style='text-align: center;'>
                 <h3 style='margin-top:0; color: #D4AF37;'>📥 Sincronización de Datos</h3>
                 <p>Cargue el protocolo de secciones para iniciar el procesamiento de optimización multivariable.</p>
+                <p style="font-size: 0.8rem; color: #888;">Seleccione la plantilla adecuada según si su programa utiliza estudiantes graduados.</p>
             </div>
         """, unsafe_allow_html=True)
-        st.download_button("DESCARGAR PLANTILLA MAESTRA V5.0", crear_excel_guia(), "Plantilla_UPRM_Enterprise.xlsx", use_container_width=True)
+        
+        col_d1, col_d2 = st.columns(2)
+        with col_d1:
+            st.download_button("Plantilla Completa (Con Graduados)", crear_excel_guia(con_graduados=True), "Plantilla_UPRM_Full.xlsx", use_container_width=True)
+        with col_d2:
+            st.download_button("Plantilla Simple (Sin Graduados)", crear_excel_guia(con_graduados=False), "Plantilla_UPRM_Simple.xlsx", use_container_width=True)
+            
     else:
         if st.button("🚀 INICIAR OPTIMIZACIÓN"):
+            # Leer todas las hojas primero para evitar errores si falta Graduados
             xls = pd.ExcelFile(file)
-            engine = PlatinumEnterpriseEngine(pd.read_excel(xls, 'Cursos'), pd.read_excel(xls, 'Profesores'), pd.read_excel(xls, 'Salones'), pd.read_excel(xls, 'Graduados'), zona)
+            
+            df_grad = None
+            if 'Graduados' in xls.sheet_names:
+                df_grad = pd.read_excel(xls, 'Graduados')
+            
+            # Instanciar motor con las columnas correctas del excel proporcionado
+            engine = PlatinumEnterpriseEngine(
+                pd.read_excel(xls, 'Cursos'), 
+                pd.read_excel(xls, 'Profesores'), 
+                pd.read_excel(xls, 'Salones'), 
+                df_grad, 
+                zona
+            )
             
             start_time = time.time()
             mejor = engine.solve(pop, gens)
@@ -445,7 +496,7 @@ def main():
             # Auditoría de Aglomeración
             df = st.session_state.master
             counts = df.groupby(['Asignatura', 'Horario']).size().reset_index(name='count')
-            aglomerados = counts[counts['count'] > 2] # Si hay más de 2 secciones del mismo curso a la misma hora
+            aglomerados = counts[counts['count'] > 2] 
             if not aglomerados.empty:
                 st.info("Nota: Algunos cursos tienen múltiples secciones en el mismo horario. Verifique si es deseado.")
                 st.dataframe(aglomerados)
