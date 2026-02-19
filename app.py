@@ -125,7 +125,7 @@ st.markdown("""
 st.latex(r"\blacksquare \quad \text{SISTEMA DE PLANIFICACIÓN ACADÉMICA OPTIMIZADA - TESIS MASTER} \quad \blacksquare")
 
 # ==============================================================================
-# 2. UTILIDADES
+# 2. UTILIDADES Y TABLA DE PATRONES (Tesis)
 # ==============================================================================
 def mins_to_str(m):
     h, mins = divmod(int(m), 60)
@@ -134,10 +134,53 @@ def mins_to_str(m):
     if h_disp == 0: h_disp = 12
     return f"{h_disp:02d}:{mins:02d} {am_pm}"
 
+# DICCIONARIO MAESTRO DE PATRONES HORARIOS (Días y su contribución)
+PATRONES = {
+    1: [{"name": "1 Día Lab/Teo", "days": {"Lu": 1}}], # Default
+    2: [{"name": "Ma-Ju", "days": {"Ma": 1, "Ju": 1}}], # Default
+    3: [
+        {"name": "Lu-Mi-Vi", "days": {"Lu": 1, "Mi": 1, "Vi": 1}},
+        {"name": "Ma-Ju", "days": {"Ma": 1.5, "Ju": 1.5}},
+        {"name": "Lu (Intensivo)", "days": {"Lu": 3}},
+        {"name": "Ma (Intensivo)", "days": {"Ma": 3}},
+        {"name": "Mi (Intensivo)", "days": {"Mi": 3}},
+        {"name": "Ju (Intensivo)", "days": {"Ju": 3}},
+        {"name": "Vi (Intensivo)", "days": {"Vi": 3}},
+    ],
+    4: [
+        {"name": "Lu-Ma-Mi-Ju", "days": {"Lu": 1, "Ma": 1, "Mi": 1, "Ju": 1}},
+        {"name": "Lu-Ma-Mi-Vi", "days": {"Lu": 1, "Ma": 1, "Mi": 1, "Vi": 1}},
+        {"name": "Lu-Ma-Ju-Vi", "days": {"Lu": 1, "Ma": 1, "Ju": 1, "Vi": 1}},
+        {"name": "Lu-Mi-Ju-Vi", "days": {"Lu": 1, "Mi": 1, "Ju": 1, "Vi": 1}},
+        {"name": "Ma-Mi-Ju-Vi", "days": {"Ma": 1, "Mi": 1, "Ju": 1, "Vi": 1}},
+        {"name": "Lu-Mi", "days": {"Lu": 2, "Mi": 2}},
+        {"name": "Lu-Vi", "days": {"Lu": 2, "Vi": 2}},
+        {"name": "Ma-Ju", "days": {"Ma": 2, "Ju": 2}},
+        {"name": "Mi-Vi", "days": {"Mi": 2, "Vi": 2}},
+    ],
+    5: [
+        {"name": "Lu-Ma-Mi-Ju-Vi", "days": {"Lu": 1, "Ma": 1, "Mi": 1, "Ju": 1, "Vi": 1}},
+        {"name": "Lu-Ma-Mi-Vi", "days": {"Lu": 1, "Ma": 1, "Mi": 1, "Vi": 2}},
+        {"name": "Lu-Ma-Ju-Vi", "days": {"Lu": 1, "Ma": 1, "Ju": 1, "Vi": 2}},
+        {"name": "Lu-Mi-Ju-Vi", "days": {"Lu": 1, "Mi": 1, "Ju": 1, "Vi": 2}},
+        {"name": "Ma-Mi-Ju-Vi", "days": {"Ma": 1, "Mi": 1, "Ju": 1, "Vi": 2}},
+        {"name": "Lu-Mi-Vi", "days": {"Lu": 2, "Mi": 2, "Vi": 1}},
+        {"name": "Ma-Ju-Vi", "days": {"Ma": 1.5, "Ju": 1.5, "Vi": 2}},
+        {"name": "Lu-Ma-Mi", "days": {"Lu": 2, "Ma": 1, "Mi": 2}},
+    ]
+}
+
+def format_horario(patron, h_ini):
+    parts = []
+    for dia, contrib in patron['days'].items():
+        mins_duracion = int(contrib * 50)
+        h_fin = h_ini + mins_duracion
+        parts.append(f"{dia}: {mins_to_str(h_ini)}-{mins_to_str(h_fin)}")
+    return " | ".join(parts)
+
 def crear_excel_guia():
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        # Se elimina la hoja graduados y se actualiza CANT_SECCIONES a CAPACIDAD_SECCIONES
         pd.DataFrame(columns=['CODIGO', 'CREDITOS', 'CAPACIDAD_SECCIONES', 'DEMANDA', 'CANDIDATOS', 'TIPO_SALON']).to_excel(writer, sheet_name='Cursos', index=False)
         pd.DataFrame(columns=['Nombre', 'CREDITOS', 'Pref_Dias', 'Pref_horas']).to_excel(writer, sheet_name='Profesores', index=False)
         pd.DataFrame(columns=['CODIGO', 'CAPACIDAD', 'TIPO']).to_excel(writer, sheet_name='Salones', index=False)
@@ -161,6 +204,7 @@ class SeccionData:
         self.cod = str(cod)
         self.creditos = int(creditos)
         self.cupo = int(cupo)
+        
         if isinstance(cands, list):
             self.cands = cands
         else:
@@ -186,14 +230,10 @@ class PlatinumEnterpriseEngine:
         
         for _, r in df_salones.iterrows():
             codigo = str(r['CODIGO']).strip().upper()
-            try:
-                cap = int(r['CAPACIDAD'])
-            except:
-                cap = 25
-            try:
-                tipo = int(r['TIPO'])
-            except:
-                tipo = 1
+            try: cap = int(r['CAPACIDAD'])
+            except: cap = 25
+            try: tipo = int(r['TIPO'])
+            except: tipo = 1
             
             self.salones.append({'CODIGO': codigo, 'CAPACIDAD': cap, 'TIPO': tipo})
             
@@ -210,11 +250,9 @@ class PlatinumEnterpriseEngine:
                     'Pref_Bloque': str(r.get('Pref_horas', 'AM')).upper() 
                 }
 
-        # --- GENERACIÓN DE OFERTA ACADÉMICA ---
         self.oferta = []
         df_cursos.columns = [c.strip().upper() for c in df_cursos.columns]
         
-        # Mapeo de columnas
         col_capacidad = 'CAPACIDAD_SECCIONES' if 'CAPACIDAD_SECCIONES' in df_cursos.columns else 'CANT_SECCIONES'
         
         for _, r in df_cursos.iterrows():
@@ -223,8 +261,7 @@ class PlatinumEnterpriseEngine:
             
             lista_candidatos = []
             if "GRADUADOS" in candidatos_raw.upper():
-                # Generamos una bolsa de graduados anónimos dinámicamente
-                lista_candidatos = [f"GRADUADO_{i}" for i in range(1, 21)]
+                lista_candidatos = ["GRADUADOS"] # Simplificación Requisito 1
             else:
                 lista_candidatos = [c.strip().upper() for c in candidatos_raw.split(',') if c.strip() and c.strip().upper() != 'NAN']
 
@@ -232,21 +269,18 @@ class PlatinumEnterpriseEngine:
             capacidad_sec = int(r.get(col_capacidad, 25))
             if capacidad_sec <= 0: capacidad_sec = 25
             
-            # 1. CÁLCULO DE CANTIDAD DE SECCIONES EN BASE A DEMANDA Y CAPACIDAD
             cant_secciones = math.ceil(demanda / capacidad_sec) if demanda > 0 else 1
-            cupo_por_seccion = capacidad_sec
 
             for i in range(cant_secciones):
                 self.oferta.append(SeccionData(
                     f"{codigo_base}-{i+1:02d}", 
                     r.get('CREDITOS', 3), 
-                    cupo_por_seccion, 
+                    capacidad_sec, 
                     lista_candidatos, 
                     r.get('TIPO_SALON', 1)
                 ))
 
-        self.bloques_lmv = [450, 510, 570, 630, 690, 750, 810, 870, 930, 990] 
-        self.bloques_mj = [450, 540, 750, 840, 930, 1020]
+        self.bloques = [450, 510, 540, 570, 630, 690, 750, 810, 840, 870, 930, 990, 1020] 
         self.h_univ = (630, 750) if zona == "CENTRAL" else (600, 720) 
 
     def solve(self, pop_size, generations):
@@ -256,23 +290,24 @@ class PlatinumEnterpriseEngine:
         
         best_overall = None
         best_score = -1
+        best_conflict_list = []
 
         for gen in range(generations):
             scored = []
             for ind in pob:
-                s, conflicts, _, _ = self._fitness_detailed(ind)
-                scored.append((s, ind, conflicts))
+                s, c_count, c_details, bad_indices = self._fitness_detailed(ind)
+                scored.append((s, ind, c_count, c_details, bad_indices))
             
             scored.sort(key=lambda x: x[0], reverse=True)
             
             if scored[0][0] > best_score:
                 best_score = scored[0][0]
                 best_overall = scored[0][1]
+                best_conflict_list = scored[0][3]
 
-            # Elitismo
             nueva_gen = [x[1] for x in scored[:int(pop_size*0.1)]] 
             
-            status_text.markdown(f"**Optimizando Gen {gen+1}/{generations}** | Precisión: `{best_score:.4f}` | Conflictos: `{scored[0][2]}`")
+            status_text.markdown(f"**Optimizando Gen {gen+1}/{generations}** | Precisión: `{best_score:.8f}` | Conflictos: `{scored[0][2]}`")
             
             while len(nueva_gen) < pop_size:
                 t1 = random.choice(scored[:int(pop_size*0.5)])
@@ -281,93 +316,80 @@ class PlatinumEnterpriseEngine:
                 
                 hijo = []
                 for i in range(len(p1)):
-                    gene = p1[i] if random.random() < 0.5 else p2[i]
-                    hijo.append(gene)
+                    hijo.append(p1[i] if random.random() < 0.5 else p2[i])
                 
+                # Mutación Dirigida: Más probabilidad de mutar genes malos (los que causan conflictos)
                 prob_mut = 0.2
                 if random.random() < prob_mut:
-                    for _ in range(random.randint(1, 3)):
+                    if t1[4]: # Si hay bad indices, mutar uno de esos
+                        idx = random.choice(t1[4])
+                    else:
                         idx = random.randint(0, len(hijo)-1)
-                        hijo[idx] = self._mutate_gene(hijo[idx], aggressive_search=True)
+                    hijo[idx] = self._mutate_gene(hijo[idx], aggressive_search=True)
                 
                 nueva_gen.append(hijo)
             
             pob = nueva_gen
             bar.progress((gen + 1) / generations)
             
-            if scored[0][2] == 0 and scored[0][0] > 0.99:
+            if scored[0][2] == 0:
                 status_text.markdown(f"**¡Solución Perfecta Encontrada en Gen {gen+1}!**")
                 break
                 
-        # 5. REPARACIÓN HEURÍSTICA: Repara los solapamientos remanentes forzando espacios vacíos
-        best_overall = self._repair_individual(best_overall)
-            
-        return best_overall
+        best_overall, final_score, final_conflicts, best_conflict_list = self._repair_individual(best_overall)
+        return best_overall, best_conflict_list
         
     def _repair_individual(self, ind):
         max_attempts = 150
+        best_c = float('inf')
+        b_list = []
         for _ in range(max_attempts):
-            score, conflicts, occ_s, occ_p = self._fitness_detailed(ind)
-            if conflicts == 0:
-                break
+            score, conflicts, c_details, bad_indices = self._fitness_detailed(ind)
+            if conflicts < best_c:
+                best_c = conflicts
+                b_list = c_details
+            if conflicts == 0: break
             
-            for i, g in enumerate(ind):
-                sec = g['sec']
-                rango = (g['ini'], g['fin'])
-                dias_lista = ["Lu", "Mi", "Vi"] if g['dias'] == "LuMiVi" else ["Ma", "Ju"]
+            for i in bad_indices:
+                ind[i] = self._mutate_gene(ind[i], aggressive_search=True)
                 
-                has_clash = False
-                for dia in dias_lista:
-                    pk = (g['prof'], dia)
-                    if pk in occ_p and sum(1 for r in occ_p[pk] if max(rango[0], r[0]) < min(rango[1], r[1])) > 1:
-                        has_clash = True
-                    sk = (g['salon'], dia)
-                    if sk in occ_s:
-                        for r in occ_s[sk]:
-                            # Si chocan y no es una mega fusión permitida
-                            if max(rango[0], r[0]) < min(rango[1], r[1]) and not (sec.es_fusionable and r[3] and g['salon'] in self.mega_salones):
-                                has_clash = True
-                                
-                if has_clash:
-                    ind[i] = self._mutate_gene(g, aggressive_search=True)
-        return ind
+        return ind, score, best_c, b_list
 
     def _mutate_gene(self, gene, aggressive_search=False):
         s = gene['sec']
         
-        es_mj = (s.creditos >= 4)
-        if s.creditos == 3: es_mj = False 
-        if s.creditos == 1: es_mj = (random.random() > 0.5) 
-        
-        dias = "MaJu" if es_mj else "LuMiVi"
-        
-        # 3. CÁLCULO ESTRICTO DE DURACIÓN: 50 mins por crédito distribuido en los días
-        num_dias = 3 if dias == "LuMiVi" else 2
-        dur = math.ceil((s.creditos * 50) / num_dias)
-        
-        # Límite mínimo para laboratorios
-        if dur < 50: dur = 50
-        
-        posibles_inicios = self.bloques_mj if es_mj else self.bloques_lmv
-        h_ini = random.choice(posibles_inicios)
-        
+        # Seleccionar patrón basado en la tabla requerida
+        creds = s.creditos
+        lista_patrones = PATRONES.get(creds)
+        if not lista_patrones:
+            # Fallback simple si hay clases de 1 o 2 créditos no mapeadas
+            lista_patrones = PATRONES[1] if creds == 1 else PATRONES[2]
+            
+        patron_elegido = random.choice(lista_patrones)
+        h_ini = random.choice(self.bloques)
         prof = random.choice(s.cands) if s.cands else "TBA"
         
-        candidatos_salon = [sl['CODIGO'] for sl in self.salones if sl['TIPO'] == s.tipo_salon and sl['CAPACIDAD'] >= s.cupo]
-        
-        if s.es_fusionable:
-             candidatos_salon.extend([sl['CODIGO'] for sl in self.salones if sl['CODIGO'] in self.mega_salones])
+        candidatos_salon = []
+        # Cumplimiento Estricto TIPO_SALON >= 3 (Fuerza salón específico o su tipo)
+        if s.tipo_salon >= 3:
+            candidatos_salon = [sl['CODIGO'] for sl in self.salones if sl['TIPO'] == s.tipo_salon and sl['CAPACIDAD'] >= s.cupo]
+            if not candidatos_salon: # Fallback extremo si configuraron mal la BD, ignora cupo
+                candidatos_salon = [sl['CODIGO'] for sl in self.salones if sl['TIPO'] == s.tipo_salon]
+        else:
+            candidatos_salon = [sl['CODIGO'] for sl in self.salones if sl['TIPO'] == s.tipo_salon and sl['CAPACIDAD'] >= s.cupo]
+            if s.es_fusionable:
+                 candidatos_salon.extend([sl['CODIGO'] for sl in self.salones if sl['CODIGO'] in self.mega_salones])
         
         candidatos_salon = list(set(candidatos_salon))
         sal = "TBA"
+        
         if candidatos_salon:
             sal = random.choice(candidatos_salon)
-        elif aggressive_search:
+        elif aggressive_search and s.tipo_salon < 3: # Solo busca reemplazo agresivo si no es salón estricto
             backup = [sl['CODIGO'] for sl in self.salones if sl['CAPACIDAD'] >= s.cupo]
             if backup: sal = random.choice(backup)
 
-        # 2. MISMA HORA Y SALÓN: Se empaqueta en un solo gen forzando la consistencia semanal
-        return {'sec': s, 'prof': prof, 'salon': sal, 'dias': dias, 'ini': h_ini, 'fin': h_ini + dur}
+        return {'sec': s, 'prof': prof, 'salon': sal, 'patron': patron_elegido, 'ini': h_ini}
 
     def _random_ind(self):
         return [self._mutate_gene({'sec': s}, aggressive_search=True) for s in self.oferta]
@@ -375,47 +397,64 @@ class PlatinumEnterpriseEngine:
     def _fitness_detailed(self, ind):
         penalty = 0
         conflicts = 0
+        conflict_details = []
+        bad_indices = set()
         
         occ_s = {} 
         occ_p = {}
         cargas_profes = {}
         
-        for g in ind:
+        for i, g in enumerate(ind):
             sec = g['sec']
+            patron = g['patron']
+            ini = g['ini']
             
             if g['salon'] == "TBA": 
-                penalty += 1000
+                penalty += 10000
                 conflicts += 1
+                conflict_details.append(f"[{sec.cod}] Salón no asignado (TBA).")
+                bad_indices.add(i)
+                
             if g['prof'] == "TBA": 
-                penalty += 1000
+                penalty += 10000
                 conflicts += 1
+                conflict_details.append(f"[{sec.cod}] Profesor no asignado (TBA).")
+                bad_indices.add(i)
 
             if g['salon'] != "TBA":
                 salon_info = next((s for s in self.salones if s['CODIGO'] == g['salon']), None)
                 if salon_info:
                     es_fusion_valida = sec.es_fusionable and (g['salon'] in self.mega_salones)
                     if not es_fusion_valida and salon_info['TIPO'] != sec.tipo_salon:
-                        penalty += 500 
+                        penalty += 5000 
                         conflicts += 1
+                        conflict_details.append(f"[{sec.cod}] Salón {g['salon']} no cumple el Tipo {sec.tipo_salon}.")
+                        bad_indices.add(i)
 
-            if g['prof'] not in cargas_profes:
-                cargas_profes[g['prof']] = 0
-            cargas_profes[g['prof']] += sec.creditos
+            # Omitir suma de carga para GRADUADOS
+            if g['prof'] != "TBA" and g['prof'] != "GRADUADOS":
+                if g['prof'] not in cargas_profes:
+                    cargas_profes[g['prof']] = 0
+                cargas_profes[g['prof']] += sec.creditos
 
-            dias_lista = ["Lu", "Mi", "Vi"] if g['dias'] == "LuMiVi" else ["Ma", "Ju"]
-            for dia in dias_lista:
-                pk = (g['prof'], dia)
-                rango = (g['ini'], g['fin'])
+            for dia, contrib in patron['days'].items():
+                fin = ini + int(contrib * 50)
+                rango = (ini, fin)
                 
-                if g['prof'] != "TBA" and not "GRADUADO" in g['prof']: 
+                # Check Profesor (Omite "GRADUADOS")
+                if g['prof'] not in ["TBA", "GRADUADOS"]: 
+                    pk = (g['prof'], dia)
                     if pk in occ_p:
                         for r in occ_p[pk]:
                             if max(rango[0], r[0]) < min(rango[1], r[1]): 
-                                penalty += 1000 
+                                penalty += 5000 
                                 conflicts += 1
+                                conflict_details.append(f"Cruce Prof: {g['prof']} en {dia} ({mins_to_str(ini)}-{mins_to_str(fin)})")
+                                bad_indices.add(i)
                         occ_p[pk].append(rango)
                     else: occ_p[pk] = [rango]
 
+                # Check Salón
                 if g['salon'] != "TBA":
                     sk = (g['salon'], dia)
                     if sk not in occ_s: occ_s[sk] = []
@@ -428,25 +467,36 @@ class PlatinumEnterpriseEngine:
                             if es_mega and ambos_fusionables:
                                 salon_cap = next((s['CAPACIDAD'] for s in self.salones if s['CODIGO'] == g['salon']), 0)
                                 if (sec.cupo + cupo_ex) > salon_cap:
-                                    penalty += 1000 
+                                    penalty += 3000 
                                     conflicts += 1
+                                    conflict_details.append(f"Cupo excedido Fusión MegaSalón: {g['salon']} el {dia}")
+                                    bad_indices.add(i)
                             else:
-                                penalty += 1000
+                                penalty += 5000
                                 conflicts += 1
-                    occ_s[sk].append((g['ini'], g['fin'], sec.cupo, sec.es_fusionable))
+                                conflict_details.append(f"Cruce Salón: {g['salon']} en {dia} ({mins_to_str(ini)}-{mins_to_str(fin)})")
+                                bad_indices.add(i)
+                                
+                    occ_s[sk].append((ini, fin, sec.cupo, sec.es_fusionable))
 
-            if g['dias'] == "MaJu" and max(g['ini'], self.h_univ[0]) < min(g['fin'], self.h_univ[1]):
-                penalty += 1000
-                conflicts += 1
+            if max(ini, self.h_univ[0]) < min(ini + 50, self.h_univ[1]):
+                # Lógica simplificada de choque con hora universal si toca en Martes o Jueves
+                if "Ma" in patron['days'] or "Ju" in patron['days']:
+                    penalty += 2000
+                    conflicts += 1
+                    conflict_details.append(f"[{sec.cod}] Invade hora universal Ma-Ju")
+                    bad_indices.add(i)
 
         for prof, carga in cargas_profes.items():
-            if prof in self.profesores and "GRADUADO" not in prof:
+            if prof in self.profesores:
                 max_c = self.profesores[prof]['Carga_Max']
                 if carga > max_c: 
-                    penalty += (carga - max_c) * 100
+                    penalty += (carga - max_c) * 500
+                    conflicts += 1
+                    conflict_details.append(f"Sobrecarga: Prof. {prof} ({carga}/{max_c} crs)")
 
         score = 1 / (1 + penalty)
-        return score, conflicts, occ_s, occ_p
+        return score, conflicts, conflict_details, list(bad_indices)
 
 # ==============================================================================
 # 4. UI PRINCIPAL
@@ -491,60 +541,71 @@ def main():
             engine = PlatinumEnterpriseEngine(df_cursos, df_profes, df_salones, zona)
             
             start_time = time.time()
-            mejor = engine.solve(pop, gens)
+            mejor, conflict_list = engine.solve(pop, gens)
             elapsed = time.time() - start_time
             
-            st.success(f"Cálculo finalizado en {elapsed:.2f} segundos. Solución óptima encontrada.")
+            st.success(f"Cálculo finalizado en {elapsed:.2f} segundos.")
             
             st.session_state.master = pd.DataFrame([{
                 'ID': g['sec'].cod, 
                 'Asignatura': g['sec'].cod.split('-')[0],
                 'Creditos': g['sec'].creditos,
                 'Persona': g['prof'], 
-                'Días': g['dias'], 
-                'Horario': f"{mins_to_str(g['ini'])} - {mins_to_str(g['fin'])}", 
+                'Días': g['patron']['name'], 
+                'Horario': format_horario(g['patron'], g['ini']), 
                 'Salón': g['salon'],
-                'Tipo': 'REGULAR'
+                'Tipo_Salon': g['sec'].tipo_salon
             } for g in mejor])
+            st.session_state.conflicts = conflict_list
 
     if 'master' in st.session_state:
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-        t1, t2, t3 = st.tabs(["💎 PANEL DE CONTROL", "🔍 VISTA POR USUARIO", "🚨 AUDITORÍA DE CALIDAD"])
+        t1, t2, t3 = st.tabs(["💎 PANEL DE CONTROL", "🔍 VISTAS DETALLADAS", "🚨 AUDITORÍA DE CALIDAD"])
+        
         with t1:
             edited = st.data_editor(st.session_state.master, use_container_width=True, height=500)
             st.download_button("💾 EXPORTAR EXCEL PLATINUM", exportar_todo(edited), "Horario_Final_UPRM.xlsx", use_container_width=True)
+            
         with t2:
-            lista_personas = sorted(st.session_state.master['Persona'].unique())
-            if lista_personas:
-                p = st.selectbox("Seleccionar Facultad/Graduado", lista_personas)
-                subset = st.session_state.master[st.session_state.master['Persona'] == p]
-                st.table(subset[['ID', 'Creditos', 'Días', 'Horario', 'Salón']])
+            f1, f2, f3, f4 = st.tabs(["Por Profesor", "Por Curso", "Por Salón", "Graduados"])
+            df_master = st.session_state.master
+            
+            with f1:
+                lista_profes = sorted([p for p in df_master['Persona'].unique() if p != "GRADUADOS"])
+                if lista_profes:
+                    p = st.selectbox("Seleccionar Profesor", lista_profes)
+                    subset = df_master[df_master['Persona'] == p]
+                    st.table(subset[['ID', 'Creditos', 'Días', 'Horario', 'Salón']])
+                    st.metric(f"Carga Total", f"{subset['Creditos'].sum()} Créditos")
+            
+            with f2:
+                lista_cursos = sorted(df_master['Asignatura'].unique())
+                if lista_cursos:
+                    c = st.selectbox("Seleccionar Curso", lista_cursos)
+                    subset = df_master[df_master['Asignatura'] == c]
+                    st.table(subset[['ID', 'Persona', 'Días', 'Horario', 'Salón']])
+            
+            with f3:
+                lista_salones = sorted(df_master['Salón'].unique())
+                if lista_salones:
+                    sl = st.selectbox("Seleccionar Salón", lista_salones)
+                    subset = df_master[df_master['Salón'] == sl]
+                    st.table(subset[['ID', 'Asignatura', 'Persona', 'Días', 'Horario']])
+            
+            with f4:
+                st.markdown("#### Clases asignadas a Estudiantes Graduados")
+                subset = df_master[df_master['Persona'] == "GRADUADOS"]
+                st.table(subset[['ID', 'Asignatura', 'Días', 'Horario', 'Salón']])
+                st.metric("Total Secciones de Graduados", len(subset))
                 
-                total_cr = subset['Creditos'].sum()
-                st.metric(f"Carga Total de {p}", f"{total_cr} Créditos")
         with t3:
-            tbas = st.session_state.master[
-                (st.session_state.master['Salón'] == 'TBA') | 
-                (st.session_state.master['Persona'] == 'TBA')
-            ]
-            
-            c1_a, c2_a = st.columns(2)
-            with c1_a:
-                if not tbas.empty:
-                    st.error(f"⚠️ {len(tbas)} Asignaciones Pendientes (TBA). Aumente las generaciones.")
-                else:
-                    st.success("✅ 100% Asignación de Espacios y Profesores.")
-
-            df = st.session_state.master
-            counts = df[df['Salón'] != 'TBA'].groupby(['Salón', 'Días', 'Horario']).size().reset_index(name='secciones_juntas')
-            fusiones = counts[counts['secciones_juntas'] > 1]
-            
-            with c2_a:
-                if not fusiones.empty:
-                    st.info(f"ℹ️ Se realizaron {len(fusiones)} fusiones de secciones en salones grandes.")
-                    st.dataframe(fusiones)
-                else:
-                    st.success("✅ 0 Conflictos detectados (No fue necesario fusionar).")
+            conflictos = st.session_state.conflicts
+            if len(conflictos) > 0:
+                st.error(f"⚠️ Se detectaron {len(conflictos)} conflictos o irregularidades. Ajuste iteraciones o revise el Excel.")
+                for i, txt in enumerate(conflictos):
+                    st.markdown(f"- `{txt}`")
+            else:
+                st.success("✅ 100% Asignación Perfecta. Cero Conflictos.")
                 
         st.markdown("</div>", unsafe_allow_html=True)
 
