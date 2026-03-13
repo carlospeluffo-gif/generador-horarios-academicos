@@ -4,13 +4,14 @@ import numpy as np
 import random
 import io
 import time
+import re
 import math
 from datetime import time as dtime
 
 # ==============================================================================
 # 1. ESTÉTICA PLATINUM ELITE (INTACTA)
 # ==============================================================================
-st.set_page_config(page_title="UPRM Scheduler Platinum AI v9", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="UPRM Scheduler Platinum AI v8", page_icon="🏛️", layout="wide")
 
 st.markdown("""
 <style>
@@ -115,7 +116,7 @@ st.markdown("""
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
         <p style="color: #888; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
-            UPRM MATHEMATICAL OPTIMIZATION ENGINE v9.0 (RESTRICCIONES FORMALES)
+            UPRM MATHEMATICAL OPTIMIZATION ENGINE v8.0 (STRICT ENFORCEMENT)
         </p>
     </div>
     <div class="abstract-icon">∞</div>
@@ -144,7 +145,6 @@ def str_to_mins(t_str):
     if ampm == "AM" and h == 12: h = 0
     return h * 60 + m
 
-# Patrones actualizados para reflejar duraciones reales (en horas, 1 = 50 min)
 PATRONES = {
     3: [
         {"name": "Lu-Mi-Vi", "days": {"Lu": 1, "Mi": 1, "Vi": 1}},
@@ -229,7 +229,7 @@ def exportar_todo(df):
     return out.getvalue()
 
 # ==============================================================================
-# 3. DEFINICIÓN DE RESTRICCIONES DURAS Y SUAVES
+# 3. MOTOR IA (PLATINUM ENGINE V8.0 - TESIS INTEGRADA)
 # ==============================================================================
 class SeccionData:
     def __init__(self, cod, creditos, cupo, cands, tipo_salon, es_ayudantia=False):
@@ -346,16 +346,10 @@ class PlatinumEliteEngine:
                 if cap <= 0: continue
                 self.oferta.append(SeccionData(f"{codigo_base}-{i+1:02d}", creditos, cap, candidatos_raw, tipo_salon))
 
-        # Bloques de 30 minutos desde 7:00 AM hasta 7:30 PM (420 a 1170)
-        self.bloques = list(range(420, 1171, 30))
+        self.bloques = list(range(420, 1141, 30))  # 7:00 AM a 7:00 PM
         
-        # Restricciones institucionales según zona
-        if zona == "CENTRAL":
-            self.hora_universal = (630, 750)  # 10:30 AM - 12:30 PM
-            self.limite_operativo = (450, 1170)  # 7:30 AM - 7:30 PM (pero nuestro rango ya es 7:00-7:30, ajustamos)
-        else:  # PERIFERICA
-            self.hora_universal = (600, 720)  # 10:00 AM - 12:00 PM
-            self.limite_operativo = (420, 1140)  # 7:00 AM - 7:00 PM
+        # HORA UNIVERSAL RIGUROSA (Restriccion Fuerte)
+        self.h_univ = (630, 750) if zona == "CENTRAL" else (600, 720) 
 
     def _es_bloqueo_activo(self, prof, dia, ini, fin):
         if not prof.bloqueo_dias or dia not in prof.bloqueo_dias: return False
@@ -368,220 +362,159 @@ class PlatinumEliteEngine:
             return 2.0 * prioridad if prof.acepta_grandes == 1 else 0.0
         return prioridad
 
-    # ==========================================================================
-    # Construcción priorizada de individuos (asignación secuencial)
-    # ==========================================================================
-    def _build_individual_prioritized(self):
-        """
-        Construye un individuo asignando primero las secciones con un solo candidato,
-        luego las de profesores con menor carga acumulada, etc.
-        """
-        # Copia de la oferta para ir asignando
-        secciones_pendientes = self.oferta.copy()
+    def _get_dominio_factibilidad_local(self, sec, prof_nombre):
+        """ Implementación estricta de la Tesis: Dominio de Factibilidad Ω(e) """
+        # 1. Salones válidos
+        salones_validos = []
+        if sec.tipo_salon >= 3:
+            salones_validos = [sl['CODIGO'] for sl in self.salones if sl['TIPO'] == sec.tipo_salon and sl['CAPACIDAD'] >= sec.cupo]
+            if not salones_validos: salones_validos = [sl['CODIGO'] for sl in self.salones if sl['TIPO'] == sec.tipo_salon]
+        else:
+            salones_validos = [sl['CODIGO'] for sl in self.salones if sl['TIPO'] == sec.tipo_salon and sl['CAPACIDAD'] >= sec.cupo]
+            if sec.es_fusionable:
+                salones_validos.extend([sl['CODIGO'] for sl in self.salones if sl['CODIGO'] in self.mega_salones and sl['CAPACIDAD'] >= sec.cupo])
         
-        # Diccionarios para llevar control de ocupación
-        occ_prof = {}   # (prof, dia) -> lista de (ini, fin)
-        occ_salon = {}  # (salon, dia) -> lista de (ini, fin, cupo, fusionable)
-        carga_prof = {} # prof -> creditos acumulados
-        
-        # Resultado: lista de genes
-        individuo = []
-        
-        # Función auxiliar para verificar si un bloque es válido para una sección con un profesor y salón dados
-        def bloque_valido(seccion, prof, salon, patron, ini):
-            # Verificar límite operativo
-            for dia, contrib in patron['days'].items():
-                fin = ini + int(contrib * 50)
-                if fin > self.limite_operativo[1] or ini < self.limite_operativo[0]:
-                    return False
+        salones_validos = list(set(salones_validos))
+        if not salones_validos:
+            salones_validos = [sl['CODIGO'] for sl in self.salones if sl['CAPACIDAD'] >= sec.cupo]
             
-            # Verificar hora universal
-            for dia, contrib in patron['days'].items():
-                if dia in ["Ma", "Ju"]:
+        # 2. Tiempos (patrones y horas) válidos
+        tiempos_validos = []
+        prof_obj = self.profesores.get(prof_nombre)
+        patrones = PATRONES.get(sec.creditos, PATRONES[3])
+        
+        for pat in patrones:
+            es_intensivo = sum(pat['days'].values()) >= 3 and max(pat['days'].values()) >= 3
+            for ini in self.bloques:
+                # Filtrar intensivos tempranos
+                if es_intensivo and ini < 930: continue
+                
+                valido = True
+                for dia, contrib in pat['days'].items():
                     fin = ini + int(contrib * 50)
-                    if max(ini, self.hora_universal[0]) < min(fin, self.hora_universal[1]):
-                        return False
-            
-            # Verificar restricción de cursos de 3 horas (intensivos después de 3:30 PM)
-            if seccion.creditos == 3:
-                # Si el patrón tiene algún día con duración >=3 horas, verificar inicio
-                for dia, contrib in patron['days'].items():
-                    if contrib >= 3:
-                        if ini < 930:  # 3:30 PM en minutos
-                            return False
-            
-            # Verificar disponibilidad del profesor (bloqueos)
-            if prof != "GRADUADOS" and prof != "TBA":
-                prof_obj = self.profesores.get(prof)
-                if prof_obj:
-                    for dia, contrib in patron['days'].items():
-                        fin = ini + int(contrib * 50)
-                        if self._es_bloqueo_activo(prof_obj, dia, ini, fin):
-                            return False
-            
-            # Verificar conflictos de profesor
-            if prof != "GRADUADOS" and prof != "TBA":
-                for dia, contrib in patron['days'].items():
-                    fin = ini + int(contrib * 50)
-                    clave = (prof, dia)
-                    if clave in occ_prof:
-                        for (ini_ex, fin_ex) in occ_prof[clave]:
-                            if max(ini, ini_ex) < min(fin, fin_ex):
-                                return False
-            
-            # Verificar conflictos de salón
-            if salon != "TBA":
-                salon_info = next((s for s in self.salones if s['CODIGO'] == salon), None)
-                for dia, contrib in patron['days'].items():
-                    fin = ini + int(contrib * 50)
-                    clave = (salon, dia)
-                    if clave in occ_salon:
-                        for (ini_ex, fin_ex, cupo_ex, fusionable_ex) in occ_salon[clave]:
-                            if max(ini, ini_ex) < min(fin, fin_ex):
-                                # Si es salón mega y ambas son fusionables, permitir si no excede capacidad
-                                if salon in self.mega_salones and seccion.es_fusionable and fusionable_ex:
-                                    if salon_info and (seccion.cupo + cupo_ex) <= salon_info['CAPACIDAD']:
-                                        continue  # fusión permitida
-                                return False
-            return True
-        
-        # Función para asignar una sección con un profesor dado (si es posible)
-        def asignar_seccion(seccion, prof=None):
-            nonlocal individuo, occ_prof, occ_salon, carga_prof
-            
-            # Determinar candidatos profesor
-            if prof is None:
-                # Si no se especifica, considerar todos los candidatos de la sección (incluyendo GRADUADOS y TBA como último recurso)
-                candidatos_prof = seccion.cands.copy() if seccion.cands else []
-                # Añadir TBA como opción de último recurso
-                candidatos_prof.append("TBA")
-            else:
-                candidatos_prof = [prof]
-            
-            # Ordenar candidatos: primero GRADUADOS, luego profesores con menor carga, luego TBA
-            def prioridad_prof(p):
-                if p == "GRADUADOS":
-                    return (0, 0)
-                if p == "TBA":
-                    return (2, 0)
-                # Profesores reales: ordenar por carga actual (menor mejor) y luego por prioridad de curso
-                carga_actual = carga_prof.get(p, 0)
-                prof_obj = self.profesores.get(p)
-                if prof_obj:
-                    prior = -self._suit_prof(prof_obj, seccion)  # negativo para que mayor prioridad sea menor valor
-                else:
-                    prior = 0
-                return (1, carga_actual, prior)
-            
-            candidatos_prof.sort(key=prioridad_prof)
-            
-            # Buscar combinación válida para algún profesor de la lista
-            for prof_cand in candidatos_prof:
-                # Si el profesor es TBA, no verificamos conflictos de profesor (pero luego se penalizará)
-                # Si es GRADUADOS, tampoco verificamos conflictos (se asume que no hay restricción de disponibilidad)
-                # Pero sí debemos verificar que si es un profesor real, exista y no exceda carga máxima
-                if prof_cand not in ["GRADUADOS", "TBA"]:
-                    prof_obj = self.profesores.get(prof_cand)
-                    if not prof_obj:
-                        continue
-                    # Verificar carga máxima
-                    if carga_prof.get(prof_cand, 0) + seccion.creditos > prof_obj.carga_max:
-                        continue
+                    # Filtrar Hora universal
+                    if dia in ["Ma", "Ju"] and max(ini, self.h_univ[0]) < min(fin, self.h_univ[1]):
+                        valido = False; break
+                    # Filtrar Bloqueo de profesor
+                    if prof_obj and prof_nombre != "GRADUADOS" and self._es_bloqueo_activo(prof_obj, dia, ini, fin):
+                        valido = False; break
                 
-                # Obtener patrones posibles para esta sección
-                patrones_posibles = PATRONES.get(seccion.creditos, PATRONES[3])
-                # Ordenar patrones de forma aleatoria para diversidad
-                random.shuffle(patrones_posibles)
+                if valido: tiempos_validos.append((pat, ini))
                 
-                # Posibles salones
-                # Primero buscar salones que cumplan tipo y capacidad
-                salones_posibles = [s['CODIGO'] for s in self.salones if s['TIPO'] == seccion.tipo_salon and s['CAPACIDAD'] >= seccion.cupo]
-                if not salones_posibles and seccion.tipo_salon < 3:
-                    # Si no hay, permitir cualquier salón con capacidad suficiente
-                    salones_posibles = [s['CODIGO'] for s in self.salones if s['CAPACIDAD'] >= seccion.cupo]
-                # Si aún así no hay, permitir cualquier salón (luego se penalizará)
-                if not salones_posibles:
-                    salones_posibles = [s['CODIGO'] for s in self.salones]
-                
-                # Mezclar para diversidad
-                random.shuffle(salones_posibles)
-                
-                # Intentar todas las combinaciones de patrón, inicio y salón
-                for patron in patrones_posibles:
-                    # Mezclar bloques para diversidad
-                    bloques_mezclados = self.bloques.copy()
-                    random.shuffle(bloques_mezclados)
-                    for ini in bloques_mezclados:
-                        for salon in salones_posibles:
-                            if bloque_valido(seccion, prof_cand, salon, patron, ini):
-                                # Asignar
-                                individuo.append({
-                                    'sec': seccion,
-                                    'prof': prof_cand,
-                                    'salon': salon,
-                                    'patron': patron,
-                                    'ini': ini
-                                })
-                                # Actualizar ocupaciones
-                                if prof_cand not in ["GRADUADOS", "TBA"]:
-                                    carga_prof[prof_cand] = carga_prof.get(prof_cand, 0) + seccion.creditos
-                                    for dia, contrib in patron['days'].items():
-                                        fin = ini + int(contrib * 50)
-                                        occ_prof.setdefault((prof_cand, dia), []).append((ini, fin))
-                                if salon != "TBA":
-                                    for dia, contrib in patron['days'].items():
-                                        fin = ini + int(contrib * 50)
-                                        occ_salon.setdefault((salon, dia), []).append((ini, fin, seccion.cupo, seccion.es_fusionable))
-                                return True
-            # Si no se pudo asignar, crear una asignación por defecto (con TBA y cualquier cosa)
-            # Elegir cualquier patrón, cualquier inicio, cualquier salón (sin verificar)
-            patron = random.choice(PATRONES.get(seccion.creditos, PATRONES[3]))
-            ini = random.choice(self.bloques)
-            salon = random.choice([s['CODIGO'] for s in self.salones]) if self.salones else "TBA"
-            prof_final = candidatos_prof[0] if candidatos_prof else "TBA"
-            individuo.append({
-                'sec': seccion,
-                'prof': prof_final,
-                'salon': salon,
-                'patron': patron,
-                'ini': ini
-            })
-            # No actualizamos ocupaciones porque puede tener conflictos, se penalizarán
-            return False
-        
-        # Paso 1: Secciones con un solo candidato (excluyendo TBA y GRADUADOS)
-        unico_candidato = [s for s in secciones_pendientes if len(s.cands) == 1 and s.cands[0] not in ["TBA", "GRADUADOS"]]
-        for s in unico_candidato:
-            if asignar_seccion(s, prof=s.cands[0]):
-                secciones_pendientes.remove(s)
-        
-        # Paso 2: Secciones con candidatos, pero ordenadas por número de candidatos (menos primero)
-        secciones_con_cands = [s for s in secciones_pendientes if s.cands and s not in unico_candidato]
-        secciones_con_cands.sort(key=lambda x: len(x.cands))
-        for s in secciones_con_cands:
-            if asignar_seccion(s):
-                secciones_pendientes.remove(s)
-        
-        # Paso 3: Secciones sin candidatos (solo TBA como opción)
-        secciones_sin_cands = [s for s in secciones_pendientes if not s.cands]
-        for s in secciones_sin_cands:
-            asignar_seccion(s, prof="TBA")
-            # Las removemos igual aunque no hayamos verificado
-            secciones_pendientes.remove(s)
-        
-        # Si quedan, asignar por defecto
-        for s in secciones_pendientes:
-            asignar_seccion(s)
-        
-        return individuo
+        return salones_validos, tiempos_validos
 
     def _create_smart_individual(self):
-        """Versión que usa la construcción priorizada"""
-        return self._build_individual_prioritized()
+        """ Inicialización guiada usando el Dominio Ω(e) y las heurísticas del usuario """
+        ind = []
+        occ_prof = {}
+        occ_salon = {}
+        carga_prof = {}
+        
+        # Heurística: 1. Clases con un solo profesor, 2. Ordenadas por cupo
+        def get_sort_key(sec):
+            cands_reales = [c for c in sec.cands if c != "GRADUADOS" and c in self.profesores]
+            is_single = 1 if len(cands_reales) == 1 else 0
+            return (-is_single, sec.cupo)
 
-    # ==========================================================================
-    # Función de fitness con todas las restricciones
-    # ==========================================================================
+        oferta_ordenada = sorted(self.oferta, key=get_sort_key)
+        
+        for s in oferta_ordenada:
+            candidatos = s.cands if s.cands else []
+            valid_profs = []
+            
+            for p in candidatos:
+                if p == "GRADUADOS":
+                    valid_profs.append(p)
+                    continue
+                prof_obj = self.profesores.get(p)
+                if prof_obj:
+                    if carga_prof.get(p, 0) + s.creditos <= prof_obj.carga_max:
+                        valid_profs.append(p)
+            
+            prof = "TBA"
+            if valid_profs:
+                # Heurística: Asignar primero a los de menor carga_max, luego mayor carga_max
+                profs_reales = [p for p in valid_profs if p != "GRADUADOS"]
+                if profs_reales:
+                    profs_reales.sort(key=lambda p: (
+                        self.profesores[p].carga_max, 
+                        carga_prof.get(p, 0),
+                        -self._suit_prof(self.profesores[p], s)
+                    ))
+                    prof = profs_reales[0]
+                else:
+                    prof = "GRADUADOS"
+            elif candidatos: 
+                prof = random.choice(candidatos)
+            
+            if prof != "TBA" and prof != "GRADUADOS":
+                carga_prof[prof] = carga_prof.get(prof, 0) + s.creditos
+
+            # Extraer del dominio de factibilidad (matemáticamente seguro)
+            salones_validos, tiempos_validos = self._get_dominio_factibilidad_local(s, prof)
+            
+            best_patron = PATRONES[s.creditos][0]
+            best_ini = self.bloques[0]
+            best_salon = "TBA"
+            
+            found_perfect = False
+            
+            # Buscar combinación sin solapamientos (Rf2 y Rf3)
+            if tiempos_validos:
+                random.shuffle(tiempos_validos)
+                for pat_test, ini_test in tiempos_validos:
+                    # Check choque profesor
+                    prof_overlap = False
+                    if prof != "TBA" and prof != "GRADUADOS":
+                        for dia, contrib in pat_test['days'].items():
+                            fin_test = ini_test + int(contrib * 50)
+                            for (ex_ini, ex_fin) in occ_prof.get((prof, dia), []):
+                                if max(ini_test, ex_ini) < min(fin_test, ex_fin):
+                                    prof_overlap = True; break
+                            if prof_overlap: break
+                    if prof_overlap: continue
+                    
+                    # Check choque salón
+                    if salones_validos:
+                        random.shuffle(salones_validos)
+                        for sal_test in salones_validos:
+                            room_overlap = False
+                            for dia, contrib in pat_test['days'].items():
+                                fin_test = ini_test + int(contrib * 50)
+                                for (ex_ini, ex_fin, _, _) in occ_salon.get((sal_test, dia), []):
+                                    if max(ini_test, ex_ini) < min(fin_test, ex_fin):
+                                        room_overlap = True; break
+                                if room_overlap: break
+                                
+                            if not room_overlap:
+                                best_patron = pat_test
+                                best_ini = ini_test
+                                best_salon = sal_test
+                                found_perfect = True
+                                break
+                    else:
+                        best_patron = pat_test
+                        best_ini = ini_test
+                        found_perfect = True
+                        
+                    if found_perfect: break
+
+                # Fallback si todo choca, escoger uno válido cualquiera
+                if not found_perfect:
+                    best_patron, best_ini = random.choice(tiempos_validos)
+                    if salones_validos: best_salon = random.choice(salones_validos)
+            
+            ind.append({'sec': s, 'prof': prof, 'salon': best_salon, 'patron': best_patron, 'ini': best_ini})
+            
+            if prof != "TBA" and prof != "GRADUADOS":
+                for dia, contrib in best_patron['days'].items():
+                    occ_prof.setdefault((prof, dia), []).append((best_ini, best_ini + int(contrib * 50)))
+            if best_salon != "TBA":
+                for dia, contrib in best_patron['days'].items():
+                    occ_salon.setdefault((best_salon, dia), []).append((best_ini, best_ini + int(contrib * 50), s.cupo, s.es_fusionable))
+                    
+        return ind
+
     def _fitness_detailed(self, ind):
         penalty = 0
         conflicts = 0
@@ -589,20 +522,9 @@ class PlatinumEliteEngine:
         bad_indices = set()
         soft_score = 0.0
 
-        occ_salon = {}   # (salon, dia) -> lista de (ini, fin, cupo, fusionable)
-        occ_prof = {}    # (prof, dia) -> lista de (ini, fin)
-        carga_prof = {}  # prof -> creditos acumulados
-        # Para restricción de doble rol (graduados)
-        # Asumimos que los graduados están en la lista de profesores con nombre "GRADUADOS" pero también pueden ser estudiantes.
-        # Simplificamos: si un profesor es "GRADUADOS", no aplicamos restricciones de disponibilidad ni carga.
-        # Para la restricción Rf10, necesitaríamos saber qué cursos toman los graduados. Como no tenemos esa info,
-        # omitimos por ahora (se podría añadir una hoja de inscripción). Dejamos la estructura pero sin implementar.
-        
-        # Para soft constraint R_s2 (distribución equitativa de secciones)
-        secciones_por_curso_base = {}  # curso_base -> lista de bloques (día, inicio, fin)
-        
-        # Para soft constraint R_s4 (compactación), necesitamos agrupar por profesor y día
-        horario_prof_dia = {}  # (prof, dia) -> lista de (ini, fin)
+        occ_salon = {}   
+        occ_prof = {}    
+        carga_prof = {}  
 
         for i, g in enumerate(ind):
             sec = g['sec']
@@ -610,271 +532,127 @@ class PlatinumEliteEngine:
             salon = g['salon']
             patron = g['patron']
             ini = g['ini']
-            curso_base = sec.cod.split('-')[0]
 
-            # ========== Restricciones Duras ==========
-            
-            # Rf1: Unicidad (por construcción, cada sección aparece una vez)
+            # Violaciones Duras Iniciales
+            if prof_nombre == "TBA":
+                penalty += 10000; conflicts += 1; conflict_details.append(f"[{sec.cod}] Profesor TBA"); bad_indices.add(i); continue
+            if salon == "TBA":
+                penalty += 10000; conflicts += 1; conflict_details.append(f"[{sec.cod}] Salón TBA"); bad_indices.add(i); continue
+            if prof_nombre != "GRADUADOS" and prof_nombre not in sec.cands:
+                penalty += 10000; conflicts += 1; conflict_details.append(f"[{sec.cod}] Profesor {prof_nombre} no elegible"); bad_indices.add(i); continue
 
-            # Rf2: Conflicto de profesor (se evalúa después con occ_prof)
-            # Rf3: Conflicto de salón (después con occ_salon)
-            
-            # Rf4: Suficiencia de capacidad
-            salon_info = next((s for s in self.salones if s['CODIGO'] == salon), None) if salon != "TBA" else None
-            if salon_info and salon_info['CAPACIDAD'] < sec.cupo:
-                penalty += 10000
-                conflicts += 1
-                conflict_details.append(f"[{sec.cod}] Capacidad insuficiente en {salon}")
-                bad_indices.add(i)
+            # Intensivos muy temprano
+            if sum(patron['days'].values()) >= 3 and max(patron['days'].values()) >= 3:
+                if ini < 930:
+                    penalty += 10000; conflicts += 1; conflict_details.append(f"[{sec.cod}] Intensivo antes de 3:30 PM"); bad_indices.add(i)
 
-            # Rf5: Compatibilidad de tipo de salón
-            if salon_info and salon_info['TIPO'] != sec.tipo_salon:
-                # Excepción: si es salón mega y la sección es fusionable, se permite
-                if not (salon in self.mega_salones and sec.es_fusionable):
-                    penalty += 10000
-                    conflicts += 1
-                    conflict_details.append(f"[{sec.cod}] Tipo de salón incorrecto")
-                    bad_indices.add(i)
+            salon_info = next((s for s in self.salones if s['CODIGO'] == salon), None)
+            if salon_info:
+                if salon_info['CAPACIDAD'] < sec.cupo:
+                    penalty += 10000; conflicts += 1; conflict_details.append(f"[{sec.cod}] Sobrecupo en {salon}"); bad_indices.add(i); continue
+                es_fusion_valida = sec.es_fusionable and (salon in self.mega_salones)
+                if not es_fusion_valida and salon_info['TIPO'] != sec.tipo_salon:
+                    penalty += 10000; conflicts += 1; conflict_details.append(f"[{sec.cod}] Tipo de salón {salon} erróneo"); bad_indices.add(i); continue
 
-            # Rf6: Disponibilidad del profesor (bloqueos)
-            if prof_nombre not in ["GRADUADOS", "TBA"]:
-                prof_obj = self.profesores.get(prof_nombre)
-                if prof_obj:
-                    for dia, contrib in patron['days'].items():
-                        fin = ini + int(contrib * 50)
-                        if self._es_bloqueo_activo(prof_obj, dia, ini, fin):
-                            penalty += 10000
-                            conflicts += 1
-                            conflict_details.append(f"[{sec.cod}] {prof_nombre} en hora de bloqueo")
-                            bad_indices.add(i)
-
-            # Rf7: Carga máxima del profesor (se acumula después)
-            # Rf8: Carga mínima (se evalúa al final)
-
-            # Rf9: Hora universal
-            for dia, contrib in patron['days'].items():
-                if dia in ["Ma", "Ju"]:
-                    fin = ini + int(contrib * 50)
-                    if max(ini, self.hora_universal[0]) < min(fin, self.hora_universal[1]):
-                        penalty += 10000
-                        conflicts += 1
-                        conflict_details.append(f"[{sec.cod}] Invade hora universal el {dia}")
-                        bad_indices.add(i)
-
-            # Rf10: Conflicto de doble rol (omitido por ahora, se podría implementar con datos de matrícula)
-
-            # Restricción institucional: cursos de 3 horas después de 3:30 PM
-            if sec.creditos == 3:
-                for dia, contrib in patron['days'].items():
-                    if contrib >= 3:  # intensivo
-                        if ini < 930:
-                            penalty += 10000
-                            conflicts += 1
-                            conflict_details.append(f"[{sec.cod}] Intensivo antes de 3:30 PM")
-                            bad_indices.add(i)
-
-            # ========== Acumulación para restricciones que requieren comparaciones ==========
-            if prof_nombre not in ["GRADUADOS", "TBA"]:
+            if prof_nombre != "GRADUADOS":
                 carga_prof[prof_nombre] = carga_prof.get(prof_nombre, 0) + sec.creditos
 
+            prof_obj = self.profesores.get(prof_nombre)
+
+            # Analisis por dia especifico
             for dia, contrib in patron['days'].items():
                 fin = ini + int(contrib * 50)
                 rango = (ini, fin)
 
-                # Ocupación de profesor (para Rf2)
-                if prof_nombre not in ["GRADUADOS", "TBA"]:
-                    clave_prof = (prof_nombre, dia)
-                    if clave_prof not in occ_prof:
-                        occ_prof[clave_prof] = []
-                    # Verificar conflictos con asignaciones previas
-                    for (ini_ex, fin_ex) in occ_prof[clave_prof]:
-                        if max(ini, ini_ex) < min(fin, fin_ex):
-                            penalty += 10000
-                            conflicts += 1
-                            conflict_details.append(f"[{sec.cod}] {prof_nombre} solapado el {dia}")
-                            bad_indices.add(i)
-                    occ_prof[clave_prof].append((ini, fin))
+                # Hora Universal (Restriccion Fuerte Rf9)
+                if dia in ["Ma", "Ju"]:
+                    if max(ini, self.h_univ[0]) < min(fin, self.h_univ[1]):
+                        penalty += 10000; conflicts += 1; conflict_details.append(f"[{sec.cod}] Invade hora universal el {dia}"); bad_indices.add(i)
 
-                # Ocupación de salón (para Rf3)
-                if salon != "TBA":
-                    clave_salon = (salon, dia)
-                    if clave_salon not in occ_salon:
-                        occ_salon[clave_salon] = []
-                    # Verificar conflictos
-                    for (ini_ex, fin_ex, cupo_ex, fusionable_ex) in occ_salon[clave_salon]:
-                        if max(ini, ini_ex) < min(fin, fin_ex):
-                            # Posible fusión
-                            if salon in self.mega_salones and sec.es_fusionable and fusionable_ex:
-                                # Verificar que la suma no exceda capacidad
-                                if salon_info and (sec.cupo + cupo_ex) <= salon_info['CAPACIDAD']:
-                                    continue  # fusión permitida, no hay conflicto
-                            penalty += 10000
-                            conflicts += 1
-                            conflict_details.append(f"[{sec.cod}] Salón {salon} solapado el {dia}")
-                            bad_indices.add(i)
-                    occ_salon[clave_salon].append((ini, fin, sec.cupo, sec.es_fusionable))
+                # Bloqueo de profesor
+                if prof_obj and prof_nombre != "GRADUADOS":
+                    if self._es_bloqueo_activo(prof_obj, dia, ini, fin):
+                        penalty += 10000; conflicts += 1; conflict_details.append(f"[{sec.cod}] {prof_nombre} en hora de bloqueo"); bad_indices.add(i)
 
-                # Para soft R_s2: agrupar por curso base y bloque (día, inicio)
-                # Definimos bloque como (dia, ini) para detectar múltiples secciones en el mismo horario
-                clave_curso_bloque = (curso_base, dia, ini)
-                secciones_por_curso_base.setdefault(clave_curso_bloque, []).append(sec.cod)
+                # Solapamiento Profesor
+                if prof_nombre != "GRADUADOS":
+                    pk = (prof_nombre, dia)
+                    if pk not in occ_prof: occ_prof[pk] = []
+                    for (ini_ex, fin_ex) in occ_prof[pk]:
+                        if max(rango[0], ini_ex) < min(rango[1], fin_ex):
+                            penalty += 10000; conflicts += 1; conflict_details.append(f"[{sec.cod}] {prof_nombre} solapado el {dia}"); bad_indices.add(i); break
+                    occ_prof[pk].append(rango)
 
-                # Para soft R_s4: horario por profesor y día
-                if prof_nombre not in ["GRADUADOS", "TBA"]:
-                    horario_prof_dia.setdefault((prof_nombre, dia), []).append((ini, fin))
+                # Solapamiento Salón
+                sk = (salon, dia)
+                if sk not in occ_salon: occ_salon[sk] = []
+                for (ini_ex, fin_ex, cupo_ex, fusionable_ex) in occ_salon[sk]:
+                    if max(rango[0], ini_ex) < min(rango[1], fin_ex):
+                        if salon in self.mega_salones and sec.es_fusionable and fusionable_ex:
+                            if (sec.cupo + cupo_ex) > salon_info['CAPACIDAD']:
+                                penalty += 5000; conflicts += 1; conflict_details.append(f"[{sec.cod}] Exceso en fusión {salon}"); bad_indices.add(i)
+                        else:
+                            penalty += 10000; conflicts += 1; conflict_details.append(f"[{sec.cod}] Salón {salon} solapado el {dia}"); bad_indices.add(i); break
+                occ_salon[sk].append((ini, fin, sec.cupo, sec.es_fusionable))
 
-        # ========== Restricciones que se evalúan después de acumular ==========
-        
-        # Rf7: Carga máxima
-        for prof, carga in carga_prof.items():
-            prof_obj = self.profesores.get(prof)
-            if prof_obj and carga > prof_obj.carga_max:
-                penalty += 10000
-                conflicts += 1
-                conflict_details.append(f"Profesor {prof} sobrecarga de créditos")
-                # Marcar todas las secciones de ese profesor como malas (opcional)
-                for idx, g in enumerate(ind):
-                    if g['prof'] == prof:
-                        bad_indices.add(idx)
+            # Soft Score (Preferencias - Bonificaciones)
+            if prof_nombre != "GRADUADOS" and prof_obj:
+                prior = self._suit_prof(prof_obj, sec)
+                soft_score += prior * 10 
+                if prof_obj.pref_dias:
+                    dias_patron = set(patron['days'].keys())
+                    dias_pref = set(prof_obj.pref_dias.replace(' ', '').split(','))
+                    if dias_patron & dias_pref: soft_score += 5
+                if prof_obj.pref_horas in ('AM', 'PM'):
+                    hora_media = ini + 25 
+                    if prof_obj.pref_horas == 'AM' and hora_media < 720: soft_score += 5
+                    elif prof_obj.pref_horas == 'PM' and hora_media >= 720: soft_score += 5
+                if prof_obj.compensacion:
+                    comp = calcular_compensacion(sec.creditos, sec.cupo)
+                    soft_score += comp * 2 
 
-        # Rf8: Carga mínima (penalización suave o dura? Según la tabla es dura)
-        for prof, carga in carga_prof.items():
-            prof_obj = self.profesores.get(prof)
-            if prof_obj and carga < prof_obj.carga_min:
-                penalty += 10000
-                conflicts += 1
-                conflict_details.append(f"Profesor {prof} no cumple carga mínima")
-                for idx, g in enumerate(ind):
-                    if g['prof'] == prof:
-                        bad_indices.add(idx)
+        # Evaluacion final de Carga de Profesores
+        for prof_nombre, carga in carga_prof.items():
+            prof_obj = self.profesores.get(prof_nombre)
+            if prof_obj:
+                if carga > prof_obj.carga_max:
+                    penalty += 10000; conflicts += 1; conflict_details.append(f"Profesor {prof_nombre} sobrecarga de créditos")
+                    for idx_g, g_val in enumerate(ind):
+                        if g_val['prof'] == prof_nombre: bad_indices.add(idx_g)
+                elif carga < prof_obj.carga_min:
+                    penalty += 1000
 
-        # ========== Restricciones Suaves ==========
-        
-        # R_s1: Preferencias horarias del profesor (AM/PM)
-        for i, g in enumerate(ind):
-            prof_nombre = g['prof']
-            if prof_nombre not in ["GRADUADOS", "TBA"]:
-                prof_obj = self.profesores.get(prof_nombre)
-                if prof_obj and prof_obj.pref_horas in ['AM', 'PM']:
-                    # Determinar si la clase cae en AM o PM (consideramos AM antes de 12:00)
-                    # Tomamos la hora de inicio como referencia
-                    if prof_obj.pref_horas == 'AM' and g['ini'] >= 720:
-                        soft_score -= 10  # penalización
-                    elif prof_obj.pref_horas == 'PM' and g['ini'] < 720:
-                        soft_score -= 10
+        # Ecuacion de Fitness: Previene números negativos matemáticamente
+        if penalty > 0:
+            fitness = 1.0 / (1.0 + penalty)  # Entre 0 y 1 si hay errores
+        else:
+            fitness = 1.0 + (soft_score * 0.001) # Mayor a 1 si el horario es legal y óptimo
 
-        # R_s2: Distribución equitativa de secciones
-        for (curso_base, dia, ini), secciones in secciones_por_curso_base.items():
-            if len(secciones) > 1:
-                # Penalizar por cada sección adicional
-                soft_score -= (len(secciones) - 1) * 20
-
-        # R_s3: Uso eficiente de la capacidad
-        for g in ind:
-            if g['salon'] != "TBA":
-                salon_info = next((s for s in self.salones if s['CODIGO'] == g['salon']), None)
-                if salon_info:
-                    desperdicio = (salon_info['CAPACIDAD'] - g['sec'].cupo) / salon_info['CAPACIDAD']
-                    soft_score -= desperdicio * 100  # factor de escala
-
-        # R_s4: Compactación de la jornada docente
-        for (prof, dia), horarios in horario_prof_dia.items():
-            if len(horarios) <= 1:
-                continue
-            # Ordenar por inicio
-            horarios.sort()
-            for k in range(len(horarios)-1):
-                fin_actual = horarios[k][1]
-                inicio_sig = horarios[k+1][0]
-                hueco = inicio_sig - fin_actual
-                if hueco > 120:  # umbral de 2 horas
-                    soft_score -= (hueco - 120) / 30  # penalización proporcional
-
-        # Bonus por preferencias de cursos
-        for g in ind:
-            prof_nombre = g['prof']
-            if prof_nombre not in ["GRADUADOS", "TBA"]:
-                prof_obj = self.profesores.get(prof_nombre)
-                if prof_obj:
-                    prior = self._suit_prof(prof_obj, g['sec'])
-                    soft_score += prior * 50
-
-        # Fitness: cuanto mayor mejor. Queremos minimizar penalizaciones duras y maximizar soft_score.
-        # Convertimos penalty en algo que reduzca fitness drásticamente.
-        # Usamos 1/(1+penalty) como base y sumamos soft_score normalizado.
-        fitness = 1 / (1 + penalty) + soft_score * 1e-4
         return fitness, conflicts, conflict_details, list(bad_indices)
 
     def _mutate_gene(self, gene, aggressive_search=False):
+        """ Mutación Segura en el Dominio Ω(e) """
         s = gene['sec']
-        lista_patrones = PATRONES.get(s.creditos, PATRONES[3])
         
-        # Intentar buscar un patrón y bloque que no viole restricciones básicas
-        patron_elegido = random.choice(lista_patrones)
-        h_ini = random.choice(self.bloques)
-        # Intentamos unas cuantas veces encontrar una combinación que cumpla las restricciones institucionales
-        for _ in range(20):
-            patron_test = random.choice(lista_patrones)
-            ini_test = random.choice(self.bloques)
-            # Verificar hora universal
-            invade = False
-            for dia, contrib in patron_test['days'].items():
-                if dia in ["Ma", "Ju"]:
-                    fin_test = ini_test + int(contrib * 50)
-                    if max(ini_test, self.hora_universal[0]) < min(fin_test, self.hora_universal[1]):
-                        invade = True
-                        break
-            if invade:
-                continue
-            # Verificar intensivos de 3 horas
-            if s.creditos == 3:
-                for dia, contrib in patron_test['days'].items():
-                    if contrib >= 3 and ini_test < 930:
-                        invade = True
-                        break
-            if invade:
-                continue
-            # Verificar límite operativo
-            dentro = True
-            for dia, contrib in patron_test['days'].items():
-                fin_test = ini_test + int(contrib * 50)
-                if fin_test > self.limite_operativo[1] or ini_test < self.limite_operativo[0]:
-                    dentro = False
-                    break
-            if not dentro:
-                continue
-            patron_elegido = patron_test
-            h_ini = ini_test
-            break
-        
-        if s.cands:
-            # Elegir profesor con probabilidad sesgada hacia los que tienen menor carga (si es posible)
-            # Para simplificar, elegimos aleatoriamente entre los candidatos, pero podemos mejorar
-            prof = random.choice(s.cands) if random.random() < 0.8 else "TBA"
-        else:
-            prof = "TBA"
+        prof = gene['prof']
+        if s.cands and random.random() < 0.2:
+            prof = random.choice(s.cands)
             
-        candidatos_salon = []
-        if s.tipo_salon >= 3:
-            candidatos_salon = [sl['CODIGO'] for sl in self.salones if sl['TIPO'] == s.tipo_salon and sl['CAPACIDAD'] >= s.cupo]
-            if not candidatos_salon: candidatos_salon = [sl['CODIGO'] for sl in self.salones if sl['TIPO'] == s.tipo_salon]
-        else:
-            candidatos_salon = [sl['CODIGO'] for sl in self.salones if sl['TIPO'] == s.tipo_salon and sl['CAPACIDAD'] >= s.cupo]
-            if s.es_fusionable:
-                candidatos_salon.extend([sl['CODIGO'] for sl in self.salones if sl['CODIGO'] in self.mega_salones and sl['CAPACIDAD'] >= s.cupo])
-                
-        candidatos_salon = list(set(candidatos_salon))
-        salon = "TBA"
-        if candidatos_salon:
-            salon = random.choice(candidatos_salon)
-        elif aggressive_search and s.tipo_salon < 3:
-            backup = [sl['CODIGO'] for sl in self.salones if sl['CAPACIDAD'] >= s.cupo]
-            if backup: salon = random.choice(backup)
+        salones_validos, tiempos_validos = self._get_dominio_factibilidad_local(s, prof)
+        
+        patron_elegido = gene['patron']
+        h_ini = gene['ini']
+        
+        if tiempos_validos:
+            patron_elegido, h_ini = random.choice(tiempos_validos)
+            
+        salon = gene['salon']
+        if salones_validos:
+            salon = random.choice(salones_validos)
 
         return {'sec': s, 'prof': prof, 'salon': salon, 'patron': patron_elegido, 'ini': h_ini}
 
     def solve(self, pop_size, generations):
-        # Población inicial usando construcción priorizada
         poblacion = [self._create_smart_individual() for _ in range(pop_size)]
         bar = st.progress(0)
         status_text = st.empty()
@@ -914,7 +692,7 @@ class PlatinumEliteEngine:
                 for i in range(len(padre1)):
                     hijo.append(padre1[i] if random.random() < 0.5 else padre2[i])
                     
-                # Mutacion
+                # Mutacion asistida gen por gen
                 pm = 0.05
                 for i in range(len(hijo)):
                     if random.random() < pm:
@@ -924,7 +702,7 @@ class PlatinumEliteEngine:
 
             poblacion = nueva_gen
 
-        # Reparación Final
+        # Reparación Final intensa si quedan conflictos
         if len(mejor_conflictos) > 0:
             status_text.markdown(f"**🛠️ Aplicando Reparación Final a {len(mejor_conflictos)} conflictos...**")
             mejor_ind, _, _, mejor_conflictos = self._repair_individual(mejor_ind)
@@ -941,7 +719,7 @@ class PlatinumEliteEngine:
         return ind, fit, conflictos, detalles
 
 # ==============================================================================
-# 4. UI PRINCIPAL (IDÉNTICA)
+# 4. UI PRINCIPAL Y PERSISTENCIA DE SESIÓN
 # ==============================================================================
 def main():
     with st.sidebar:
@@ -954,12 +732,8 @@ def main():
     st.markdown(f"### $\Omega$ Condiciones de Zona: {zona}")
     c1, c2, c3 = st.columns(3)
     
-    if zona == "CENTRAL":
-        h_bloqueo = "10:30 AM - 12:30 PM"
-        limites = "07:30 AM - 07:30 PM"
-    else:
-        h_bloqueo = "10:00 AM - 12:00 PM"
-        limites = "07:00 AM - 07:00 PM"
+    h_bloqueo = "10:30 AM - 12:30 PM" if zona == "CENTRAL" else "10:00 AM - 12:00 PM"
+    limites = "07:30 AM - 07:00 PM"
     
     with c1: st.metric("Ventana Operativa", limites)
     with c2: st.metric("Hora Universal", h_bloqueo)
@@ -976,6 +750,7 @@ def main():
         st.download_button("Plantilla Nueva (Actualizada)", crear_excel_guia(), "Plantilla_UPRM_Actualizada.xlsx", use_container_width=True)
             
     else:
+        # BOTON TRIGGER (Solo procesa datos, no renderiza UI abajo)
         if st.button("🚀 INICIAR OPTIMIZACIÓN PERFECTA"):
             with st.spinner("Inicializando Motor Evolutivo Platinum... Evaluando combinaciones..."):
                 xls = pd.ExcelFile(file)
@@ -989,6 +764,7 @@ def main():
                 mejor, conflict_list = engine.solve(pop, gens)
                 elapsed = time.time() - start_time
                 
+                # GUARDAR RESULTADOS EN LA MEMORIA DE STREAMLIT
                 st.session_state.elapsed_time = elapsed
                 st.session_state.conflicts = conflict_list
                 st.session_state.master = pd.DataFrame([{
@@ -1002,7 +778,9 @@ def main():
                     'Tipo_Salon': g['sec'].tipo_salon
                 } for g in mejor])
 
+    # RENDERIZADO FUERA DEL BOTÓN (Para que no desaparezca al hacer clic en pestañas)
     if 'master' in st.session_state:
+        # Mostrar barra de tiempo de ejecución
         st.success(f"✅ Optimización completada en {st.session_state.elapsed_time:.2f} segundos.")
         
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
@@ -1048,6 +826,7 @@ def main():
             conflictos = st.session_state.conflicts
             if len(conflictos) > 0:
                 st.error(f"⚠️ Se detectaron {len(conflictos)} conflictos o irregularidades. Ajuste iteraciones o revise el Excel.")
+                # Remover duplicados para que la lista no sea kilométrica
                 conflictos_unicos = list(set(conflictos))
                 for txt in conflictos_unicos:
                     st.markdown(f"- `{txt}`")
