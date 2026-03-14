@@ -374,7 +374,7 @@ class TabuScheduler:
         self.mejor_costo = self._costo_total(self.solucion)
         self.tabu_list = []
         self.tabu_tenure = 20
-        self.historial_costos = []  # NUEVO: para guardar la evolución del mejor costo
+        self.historial_costos = []  # Guardar la evolución del mejor costo
 
     def _construir_solucion_inicial(self):
         """Construye una solución asignando cada sección a un horario aleatorio pero respetando capacidades básicas."""
@@ -413,9 +413,9 @@ class TabuScheduler:
         return sol
 
     def _costo_total(self, sol):
-        """Calcula el número de conflictos duros (penalización alta) + soft constraints."""
+        """Calcula el costo total = conflictos duros * 10000 + penalizaciones suaves."""
         conflicts = 0
-        soft_score = 0
+        soft_penalty = 0  # Ahora es penalización (positiva)
         occ_prof = {}
         occ_salon = {}
         carga_prof = {}
@@ -427,7 +427,7 @@ class TabuScheduler:
             patron = asign['patron']
             ini = asign['ini']
             
-            # Duras
+            # --- Restricciones duras (penalización 10000) ---
             if prof == "TBA":
                 conflicts += 10000
                 continue
@@ -483,32 +483,42 @@ class TabuScheduler:
                         conflicts += 10000
                 occ_salon[clave_s].append((ini, fin, s.cupo, s.es_fusionable))
             
-            # Soft: preferencias, compensación, etc.
+            # --- Restricciones suaves (penalización en lugar de recompensa) ---
             if prof != "GRADUADOS" and prof in self.profesores:
                 prof_obj = self.profesores[prof]
+                # Penalización por no tener el curso en preferencias (a menor prioridad, mayor penalización)
                 prior = prof_obj.prioridad_curso(s.cod.split('-')[0])
-                soft_score += prior * 10
+                soft_penalty += (1 - prior) * 10  # Si prior=1, penalización 0; si prior=0, penalización 10
+                
+                # Penalización por no aceptar compensación cuando corresponde
                 if prof_obj.compensacion:
-                    comp = calcular_compensacion(s.creditos, s.cupo)
-                    soft_score += comp * 2
-                if prof_obj.pref_horas == 'AM' and ini < 720:
-                    soft_score += 5
-                elif prof_obj.pref_horas == 'PM' and ini >= 720:
-                    soft_score += 5
+                    # Si acepta, no hay penalización; si no acepta, se penaliza si el curso es grande
+                    if s.cupo >= 85 and not prof_obj.acepta_grandes:
+                        soft_penalty += 20  # penalización por no aceptar sección grande
+                else:
+                    # Si no acepta compensación, no hay penalización extra
+                    pass
+                
+                # Penalización por preferencia horaria no cumplida
+                if prof_obj.pref_horas == 'AM' and ini >= 720:
+                    soft_penalty += 5
+                elif prof_obj.pref_horas == 'PM' and ini < 720:
+                    soft_penalty += 5
         
-        # Carga máxima y mínima
+        # Carga máxima y mínima (duras, con 10000)
         for prof, carga in carga_prof.items():
             prof_obj = self.profesores.get(prof)
             if prof_obj:
                 if carga > prof_obj.carga_max:
                     conflicts += 10000
-                elif carga < prof_obj.carga_min:
-                    conflicts += 1000  # penalización menor
+                if carga < prof_obj.carga_min:
+                    conflicts += 10000  # Ahora también es dura
         
-        return conflicts - soft_score  # queremos minimizar conflictos y maximizar soft
+        # Costo total no negativo
+        return conflicts + soft_penalty
 
-    # NUEVO: función para obtener lista detallada de conflictos
     def _obtener_conflictos(self, sol):
+        """Genera una lista descriptiva de todos los conflictos duros y advertencias suaves."""
         conflictos_list = []
         occ_prof = {}
         occ_salon = {}
@@ -571,7 +581,7 @@ class TabuScheduler:
             if prof_obj:
                 if carga > prof_obj.carga_max:
                     conflictos_list.append(f"Profesor {prof} excede carga máxima ({carga} > {prof_obj.carga_max})")
-                elif carga < prof_obj.carga_min:
+                if carga < prof_obj.carga_min:
                     conflictos_list.append(f"Profesor {prof} no alcanza carga mínima ({carga} < {prof_obj.carga_min})")
         
         return conflictos_list
@@ -639,22 +649,22 @@ class TabuScheduler:
                     self.mejor_costo = mejor_costo_vecino
                     self.mejor_solucion = [asign.copy() for asign in self.solucion]
             
-            # NUEVO: guardar el mejor costo actual en el historial
+            # Guardar el mejor costo actual en el historial
             self.historial_costos.append(self.mejor_costo)
             
             if it % 10 == 0 or it == iteraciones - 1:
-                # NUEVO: calcular fitness a partir del costo
+                # Calcular fitness según fórmula de la tesis
                 fitness_val = 1 / (1 + self.mejor_costo) if self.mejor_costo >= 0 else 1.0
-                conflictos_aprox = max(0, self.mejor_costo // 10000)  # estimación
+                conflictos_aprox = self.mejor_costo // 10000  # número de conflictos duros aproximado
                 if status_text:
-                    status_text.markdown(f"**🔄 Iteración {it+1}/{iteraciones}** | Mejor costo: {self.mejor_costo} | Fitness: {fitness_val:.6f} | Conflictos estimados: {conflictos_aprox}")
+                    status_text.markdown(f"**🔄 Iteración {it+1}/{iteraciones}** | Mejor costo: {self.mejor_costo} | Fitness: {fitness_val:.6f} | Conflictos duros aprox: {conflictos_aprox}")
                 if bar:
                     bar.progress((it+1)/iteraciones)
         
-        return self.mejor_solucion, max(0, self.mejor_costo // 10000)
+        return self.mejor_solucion, self.mejor_costo // 10000  # número de conflictos duros
 
 # ==============================================================================
-# 5. UI PRINCIPAL (IDENTICA CON ADICIONES)
+# 5. UI PRINCIPAL
 # ==============================================================================
 def main():
     with st.sidebar:
@@ -713,14 +723,14 @@ def main():
                     'Demanda': a['seccion'].cupo
                 } for a in mejor_sol])
                 
-                # NUEVO: guardar historial de costos y lista de conflictos detallada
+                # Guardar historial y conflictos detallados
                 st.session_state.historial = scheduler.historial_costos
                 st.session_state.detailed_conflicts = scheduler._obtener_conflictos(mejor_sol)
 
     if 'master' in st.session_state:
         st.success(f"✅ Optimización completada en {st.session_state.elapsed_time:.2f} segundos.")
         
-        # NUEVO: mostrar gráfica de convergencia con fitness
+        # Mostrar gráfica de convergencia (fitness)
         if 'historial' in st.session_state and len(st.session_state.historial) > 0:
             with st.expander("📈 Ver evolución de la optimización"):
                 # Convertir historial de costos a fitness
@@ -758,7 +768,7 @@ def main():
                     st.table(subset[['ID', 'Creditos', 'Días', 'Horario', 'Salón']])
                     st.metric(f"Carga Total", f"{subset['Creditos'].sum()} Créditos")
                     
-                    # NUEVO: gráfica de carga por día para el profesor
+                    # Gráfica de carga por día
                     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
                     carga_dia = {dia: 0 for dia in dias_semana}
                     for _, row in subset.iterrows():
@@ -786,7 +796,7 @@ def main():
                     subset = df_master[df_master['Asignatura'] == c]
                     st.table(subset[['ID', 'Persona', 'Días', 'Horario', 'Salón']])
                     
-                    # NUEVO: distribución de secciones por día
+                    # Distribución de secciones por día
                     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
                     secciones_dia = {dia: 0 for dia in dias_semana}
                     for _, row in subset.iterrows():
@@ -814,8 +824,7 @@ def main():
                     subset = df_master[df_master['Salón'] == sl]
                     st.table(subset[['ID', 'Asignatura', 'Persona', 'Días', 'Horario']])
                     
-                    # NUEVO: ocupación horaria del salón (simplificada)
-                    st.markdown("**Ocupación por día**")
+                    # Ocupación por día
                     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
                     ocupacion = {dia: 0 for dia in dias_semana}
                     for _, row in subset.iterrows():
@@ -846,7 +855,6 @@ def main():
             conflictos = st.session_state.conflicts
             if conflictos > 0:
                 st.error(f"⚠️ Se detectaron aproximadamente {conflictos} conflictos duros. Aumente iteraciones o revise los datos.")
-                # NUEVO: mostrar lista detallada
                 if 'detailed_conflicts' in st.session_state and st.session_state.detailed_conflicts:
                     st.markdown("**Detalle de conflictos:**")
                     for conf in st.session_state.detailed_conflicts:
