@@ -6,7 +6,7 @@ import io
 import time
 import math
 from datetime import time as dtime
-import matplotlib.pyplot as plt  # NUEVO: para la gráfica
+import matplotlib.pyplot as plt
 
 # ==============================================================================
 # 1. ESTÉTICA PLATINUM ELITE (IDENTICA)
@@ -507,6 +507,75 @@ class TabuScheduler:
         
         return conflicts - soft_score  # queremos minimizar conflictos y maximizar soft
 
+    # NUEVO: función para obtener lista detallada de conflictos
+    def _obtener_conflictos(self, sol):
+        conflictos_list = []
+        occ_prof = {}
+        occ_salon = {}
+        carga_prof = {}
+        
+        for i, asign in enumerate(sol):
+            s = asign['seccion']
+            prof = asign['profesor']
+            salon = asign['salon']
+            patron = asign['patron']
+            ini = asign['ini']
+            
+            if prof == "TBA":
+                conflictos_list.append(f"Sección {s.cod}: profesor TBA")
+            if salon == "TBA":
+                conflictos_list.append(f"Sección {s.cod}: salón TBA")
+            if prof != "GRADUADOS" and prof not in s.cands:
+                conflictos_list.append(f"Sección {s.cod}: profesor {prof} no está en candidatos")
+            
+            salon_info = next((sl for sl in self.salones if sl['CODIGO'] == salon), None)
+            if salon_info and salon_info['CAPACIDAD'] < s.cupo:
+                conflictos_list.append(f"Sección {s.cod}: salón {salon} capacidad insuficiente ({salon_info['CAPACIDAD']} < {s.cupo})")
+            if salon_info and not (salon in self.mega_salones and s.es_fusionable) and salon_info['TIPO'] != s.tipo_salon:
+                conflictos_list.append(f"Sección {s.cod}: tipo de salón incorrecto (requiere {s.tipo_salon}, tiene {salon_info['TIPO']})")
+            
+            if prof != "GRADUADOS":
+                carga_prof[prof] = carga_prof.get(prof, 0) + s.creditos
+            
+            for dia, contrib in patron['days'].items():
+                fin = ini + int(contrib * 50)
+                if dia in ["Ma", "Ju"] and max(ini, self.hora_universal[0]) < min(fin, self.hora_universal[1]):
+                    conflictos_list.append(f"Sección {s.cod}: violación de hora universal el {dia}")
+                if s.creditos == 3 and contrib >= 3 and ini < 930:
+                    conflictos_list.append(f"Sección {s.cod}: intensivo antes de 3:30 PM")
+                if fin > self.limite_operativo[1] or ini < self.limite_operativo[0]:
+                    conflictos_list.append(f"Sección {s.cod}: fuera del límite operativo")
+                
+                if prof != "GRADUADOS":
+                    clave = (prof, dia)
+                    if clave not in occ_prof:
+                        occ_prof[clave] = []
+                    for (ini_ex, fin_ex) in occ_prof[clave]:
+                        if max(ini, ini_ex) < min(fin, fin_ex):
+                            conflictos_list.append(f"Conflicto de profesor {prof} el {dia} entre {mins_to_str(ini)}-{mins_to_str(fin)} y otra clase")
+                    occ_prof[clave].append((ini, fin))
+                
+                clave_s = (salon, dia)
+                if clave_s not in occ_salon:
+                    occ_salon[clave_s] = []
+                for (ini_ex, fin_ex, cupo_ex, fus_ex) in occ_salon[clave_s]:
+                    if max(ini, ini_ex) < min(fin, fin_ex):
+                        if salon in self.mega_salones and s.es_fusionable and fus_ex:
+                            if s.cupo + cupo_ex <= salon_info['CAPACIDAD']:
+                                continue
+                        conflictos_list.append(f"Conflicto de salón {salon} el {dia} entre {mins_to_str(ini)}-{mins_to_str(fin)} y otra clase")
+                occ_salon[clave_s].append((ini, fin, s.cupo, s.es_fusionable))
+        
+        for prof, carga in carga_prof.items():
+            prof_obj = self.profesores.get(prof)
+            if prof_obj:
+                if carga > prof_obj.carga_max:
+                    conflictos_list.append(f"Profesor {prof} excede carga máxima ({carga} > {prof_obj.carga_max})")
+                elif carga < prof_obj.carga_min:
+                    conflictos_list.append(f"Profesor {prof} no alcanza carga mínima ({carga} < {prof_obj.carga_min})")
+        
+        return conflictos_list
+
     def _generar_vecinos(self, sol, num_vecinos=5):
         """Genera vecinos moviendo una asignación conflictiva."""
         vecinos = []
@@ -574,16 +643,18 @@ class TabuScheduler:
             self.historial_costos.append(self.mejor_costo)
             
             if it % 10 == 0 or it == iteraciones - 1:
+                # NUEVO: calcular fitness a partir del costo
+                fitness_val = 1 / (1 + self.mejor_costo) if self.mejor_costo >= 0 else 1.0
                 conflictos_aprox = max(0, self.mejor_costo // 10000)  # estimación
                 if status_text:
-                    status_text.markdown(f"**🔄 Iteración {it+1}/{iteraciones}** | Mejor costo: {self.mejor_costo} | Conflictos estimados: {conflictos_aprox}")
+                    status_text.markdown(f"**🔄 Iteración {it+1}/{iteraciones}** | Mejor costo: {self.mejor_costo} | Fitness: {fitness_val:.6f} | Conflictos estimados: {conflictos_aprox}")
                 if bar:
                     bar.progress((it+1)/iteraciones)
         
         return self.mejor_solucion, max(0, self.mejor_costo // 10000)
 
 # ==============================================================================
-# 5. UI PRINCIPAL (IDENTICA)
+# 5. UI PRINCIPAL (IDENTICA CON ADICIONES)
 # ==============================================================================
 def main():
     with st.sidebar:
@@ -642,20 +713,23 @@ def main():
                     'Demanda': a['seccion'].cupo
                 } for a in mejor_sol])
                 
-                # NUEVO: guardar historial de costos
+                # NUEVO: guardar historial de costos y lista de conflictos detallada
                 st.session_state.historial = scheduler.historial_costos
+                st.session_state.detailed_conflicts = scheduler._obtener_conflictos(mejor_sol)
 
     if 'master' in st.session_state:
         st.success(f"✅ Optimización completada en {st.session_state.elapsed_time:.2f} segundos.")
         
-        # NUEVO: mostrar gráfica de convergencia (si hay datos)
+        # NUEVO: mostrar gráfica de convergencia con fitness
         if 'historial' in st.session_state and len(st.session_state.historial) > 0:
             with st.expander("📈 Ver evolución de la optimización"):
+                # Convertir historial de costos a fitness
+                fitness_hist = [1/(1+c) for c in st.session_state.historial]
                 fig, ax = plt.subplots(figsize=(10, 4))
-                ax.plot(st.session_state.historial, color='#D4AF37', linewidth=2)
+                ax.plot(fitness_hist, color='#D4AF37', linewidth=2)
                 ax.set_xlabel("Iteración")
-                ax.set_ylabel("Mejor costo")
-                ax.set_title("Convergencia del algoritmo Tabú")
+                ax.set_ylabel("Fitness (1/(1+costo))")
+                ax.set_title("Convergencia del algoritmo Tabú (Fitness)")
                 ax.grid(True, alpha=0.3)
                 ax.set_facecolor('#111111')
                 fig.patch.set_facecolor('#111111')
@@ -683,6 +757,27 @@ def main():
                     subset = df_master[df_master['Persona'] == p]
                     st.table(subset[['ID', 'Creditos', 'Días', 'Horario', 'Salón']])
                     st.metric(f"Carga Total", f"{subset['Creditos'].sum()} Créditos")
+                    
+                    # NUEVO: gráfica de carga por día para el profesor
+                    dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
+                    carga_dia = {dia: 0 for dia in dias_semana}
+                    for _, row in subset.iterrows():
+                        patron_nombre = row['Días']
+                        for dia in dias_semana:
+                            if dia in patron_nombre:
+                                carga_dia[dia] += row['Creditos']
+                    fig, ax = plt.subplots()
+                    ax.bar(carga_dia.keys(), carga_dia.values(), color='#D4AF37')
+                    ax.set_xlabel("Día")
+                    ax.set_ylabel("Créditos")
+                    ax.set_title(f"Carga semanal de {p}")
+                    ax.set_facecolor('#111111')
+                    fig.patch.set_facecolor('#111111')
+                    ax.tick_params(colors='white')
+                    ax.xaxis.label.set_color('white')
+                    ax.yaxis.label.set_color('white')
+                    ax.title.set_color('white')
+                    st.pyplot(fig)
             
             with f2:
                 lista_cursos = sorted(df_master['Asignatura'].unique())
@@ -690,6 +785,27 @@ def main():
                     c = st.selectbox("Seleccionar Curso", lista_cursos)
                     subset = df_master[df_master['Asignatura'] == c]
                     st.table(subset[['ID', 'Persona', 'Días', 'Horario', 'Salón']])
+                    
+                    # NUEVO: distribución de secciones por día
+                    dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
+                    secciones_dia = {dia: 0 for dia in dias_semana}
+                    for _, row in subset.iterrows():
+                        patron_nombre = row['Días']
+                        for dia in dias_semana:
+                            if dia in patron_nombre:
+                                secciones_dia[dia] += 1
+                    fig, ax = plt.subplots()
+                    ax.bar(secciones_dia.keys(), secciones_dia.values(), color='#D4AF37')
+                    ax.set_xlabel("Día")
+                    ax.set_ylabel("Número de secciones")
+                    ax.set_title(f"Secciones del curso {c} por día")
+                    ax.set_facecolor('#111111')
+                    fig.patch.set_facecolor('#111111')
+                    ax.tick_params(colors='white')
+                    ax.xaxis.label.set_color('white')
+                    ax.yaxis.label.set_color('white')
+                    ax.title.set_color('white')
+                    st.pyplot(fig)
             
             with f3:
                 lista_salones = sorted(df_master['Salón'].unique())
@@ -697,6 +813,28 @@ def main():
                     sl = st.selectbox("Seleccionar Salón", lista_salones)
                     subset = df_master[df_master['Salón'] == sl]
                     st.table(subset[['ID', 'Asignatura', 'Persona', 'Días', 'Horario']])
+                    
+                    # NUEVO: ocupación horaria del salón (simplificada)
+                    st.markdown("**Ocupación por día**")
+                    dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
+                    ocupacion = {dia: 0 for dia in dias_semana}
+                    for _, row in subset.iterrows():
+                        patron_nombre = row['Días']
+                        for dia in dias_semana:
+                            if dia in patron_nombre:
+                                ocupacion[dia] += 1
+                    fig, ax = plt.subplots()
+                    ax.bar(ocupacion.keys(), ocupacion.values(), color='#D4AF37')
+                    ax.set_xlabel("Día")
+                    ax.set_ylabel("Número de clases")
+                    ax.set_title(f"Ocupación del salón {sl}")
+                    ax.set_facecolor('#111111')
+                    fig.patch.set_facecolor('#111111')
+                    ax.tick_params(colors='white')
+                    ax.xaxis.label.set_color('white')
+                    ax.yaxis.label.set_color('white')
+                    ax.title.set_color('white')
+                    st.pyplot(fig)
             
             with f4:
                 st.markdown("#### Clases asignadas a Estudiantes Graduados")
@@ -708,6 +846,13 @@ def main():
             conflictos = st.session_state.conflicts
             if conflictos > 0:
                 st.error(f"⚠️ Se detectaron aproximadamente {conflictos} conflictos duros. Aumente iteraciones o revise los datos.")
+                # NUEVO: mostrar lista detallada
+                if 'detailed_conflicts' in st.session_state and st.session_state.detailed_conflicts:
+                    st.markdown("**Detalle de conflictos:**")
+                    for conf in st.session_state.detailed_conflicts:
+                        st.write(f"- {conf}")
+                else:
+                    st.write("No se pudo generar el detalle.")
             else:
                 st.success("✅ 100% Asignación Perfecta. Cero Conflictos. Se respetaron todas las métricas de espacio, carga y Hora Universal.")
                 
