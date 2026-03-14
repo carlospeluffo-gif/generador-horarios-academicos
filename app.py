@@ -5,7 +5,9 @@ import random
 import io
 import time
 import math
+import copy
 from datetime import time as dtime
+from collections import defaultdict
 
 # ==============================================================================
 # 1. ESTÉTICA PLATINUM ELITE (IDENTICA A LA ORIGINAL)
@@ -115,7 +117,7 @@ st.markdown("""
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
         <p style="color: #888; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
-            UPRM MATHEMATICAL OPTIMIZATION ENGINE v8.0 (STRICT ENFORCEMENT + TRAMPA)
+            UPRM MATHEMATICAL OPTIMIZATION ENGINE v8.0 (STRICT ENFORCEMENT)
         </p>
     </div>
     <div class="abstract-icon">∞</div>
@@ -229,14 +231,14 @@ def exportar_todo(df):
     return out.getvalue()
 
 # ==============================================================================
-# 3. MODELO DE DATOS (CORREGIDO)
+# 3. MODELO DE DATOS
 # ==============================================================================
 class SeccionData:
     def __init__(self, cod, creditos, cupo, candidatos_raw, tipo_salon, es_ayudantia=False):
         self.cod = str(cod)
         self.creditos = int(creditos)
         self.cupo = int(cupo)  # capacidad física del salón (máximo de estudiantes)
-        self.demanda_asignada = cupo  # por defecto, la demanda es igual a la capacidad (se puede ajustar después)
+        self.demanda_asignada = cupo  # por defecto, la demanda es igual al cupo
         if isinstance(candidatos_raw, list):
             self.cands = [c.strip().upper() for c in candidatos_raw if c.strip()]
         else:
@@ -258,14 +260,9 @@ class ProfesorData:
         self.carga_max = float(carga_max) if carga_max not in (None, '') else 12.0
         self.pref_dias = pref_dias if isinstance(pref_dias, str) else ''
         self.pref_horas = pref_horas if isinstance(pref_horas, str) else 'ANY'
-        # Manejo correcto de bloqueo_dias
         self.bloqueo_dias = set()
         if isinstance(bloqueo_dias, str) and bloqueo_dias.strip():
-            # Eliminar espacios y dividir por comas
-            for d in bloqueo_dias.split(','):
-                d_clean = d.strip().title()
-                if d_clean:
-                    self.bloqueo_dias.add(d_clean)
+            self.bloqueo_dias = {d.strip().title() for d in bloqueo_dias.split(',') if d.strip()}
         self.bloqueo_ini = str_to_mins(bloqueo_ini) if isinstance(bloqueo_ini, str) and bloqueo_ini else None
         self.bloqueo_fin = str_to_mins(bloqueo_fin) if isinstance(bloqueo_fin, str) and bloqueo_fin else None
         
@@ -282,7 +279,7 @@ class ProfesorData:
         return 0.0
 
 # ==============================================================================
-# 4. MOTOR GENÉTICO CON TRAMPA DE REPARACIÓN FORZADA
+# 4. MOTOR GENÉTICO MEJORADO (RÁPIDO Y CON VISUALIZACIÓN DE CONFLICTOS)
 # ==============================================================================
 class PlatinumEliteEngine:
     def __init__(self, df_cursos, df_profes, df_salones, zona):
@@ -365,12 +362,17 @@ class PlatinumEliteEngine:
             candidatos = datos['candidatos']
             tipo_salon = datos['tipo_salon']
             
-            # Calcular número de secciones: ceil(demanda / cupo_tipico)
-            num_secciones = math.ceil(demanda_total / cupo_tipico) if demanda_total > 0 else 1
-            # Distribuir estudiantes entre secciones (última puede tener menos)
-            estudiantes_por_seccion = [cupo_tipico] * (num_secciones - 1)
-            resto = demanda_total - sum(estudiantes_por_seccion)
-            estudiantes_por_seccion.append(resto if resto > 0 else cupo_tipico)
+            if demanda_total == 0:
+                # Si no hay demanda, crear una sección por defecto con cupo típico
+                num_secciones = 1
+                estudiantes_por_seccion = [cupo_tipico]
+            else:
+                # Calcular número de secciones: ceil(demanda / cupo_tipico)
+                num_secciones = math.ceil(demanda_total / cupo_tipico)
+                # Distribuir estudiantes entre secciones (última puede tener menos)
+                estudiantes_por_seccion = [cupo_tipico] * (num_secciones - 1)
+                resto = demanda_total - sum(estudiantes_por_seccion)
+                estudiantes_por_seccion.append(resto if resto > 0 else cupo_tipico)
             
             for i, cupo in enumerate(estudiantes_por_seccion):
                 cod_seccion = f"{cod_base}-{i+1:02d}"
@@ -409,8 +411,8 @@ class PlatinumEliteEngine:
         occ_salon = {}
         carga_prof = {}
         
-        # Ordenar secciones por demanda descendente y luego por candidatos únicos
-        oferta_ordenada = sorted(self.oferta, key=lambda x: (-x.demanda_asignada, -len(x.cands)))
+        # Ordenar secciones por demanda descendente y luego por número de candidatos (menos primero)
+        oferta_ordenada = sorted(self.oferta, key=lambda x: (-x.demanda_asignada, len(x.cands)))
         
         for s in oferta_ordenada:
             candidatos = s.cands if s.cands else []
@@ -529,7 +531,6 @@ class PlatinumEliteEngine:
         occ_salon = {}
         occ_prof = {}
         carga_prof = {}
-        compensaciones = {}
 
         for i, g in enumerate(ind):
             sec = g['sec']
@@ -564,13 +565,13 @@ class PlatinumEliteEngine:
                 if salon_info['CAPACIDAD'] < sec.demanda_asignada:
                     penalty += 10000
                     conflicts += 1
-                    conflict_details.append(f"[{sec.cod}] Sobrecupo en {salon} (cap {salon_info['CAPACIDAD']} < demanda {sec.demanda_asignada})")
+                    conflict_details.append(f"[{sec.cod}] Sobrecupo en {salon}")
                     bad_indices.add(i)
                     continue
                 if not (salon in self.mega_salones and sec.es_fusionable) and salon_info['TIPO'] != sec.tipo_salon:
                     penalty += 10000
                     conflicts += 1
-                    conflict_details.append(f"[{sec.cod}] Tipo de salón erróneo (requerido {sec.tipo_salon}, actual {salon_info['TIPO']})")
+                    conflict_details.append(f"[{sec.cod}] Tipo de salón erróneo")
                     bad_indices.add(i)
                     continue
 
@@ -657,13 +658,12 @@ class PlatinumEliteEngine:
                 if carga > prof_obj.carga_max:
                     penalty += 10000
                     conflicts += 1
-                    conflict_details.append(f"Profesor {prof_nombre} sobrecarga de créditos ({carga} > {prof_obj.carga_max})")
+                    conflict_details.append(f"Profesor {prof_nombre} sobrecarga de créditos")
                     for idx_g, g_val in enumerate(ind):
                         if g_val['prof'] == prof_nombre:
                             bad_indices.add(idx_g)
-                elif carga < prof_obj.carga_min and prof_obj.carga_min > 0:
+                elif carga < prof_obj.carga_min:
                     penalty += 1000  # penalización menor por no cumplir mínimo
-                    conflict_details.append(f"Profesor {prof_nombre} no cumple carga mínima ({carga} < {prof_obj.carga_min})")
 
         fitness = 1 / (1 + max(0, penalty)) + soft_score * 1e-6
         return fitness, conflicts, conflict_details, list(bad_indices)
@@ -722,159 +722,6 @@ class PlatinumEliteEngine:
 
         return {'sec': s, 'prof': prof, 'salon': salon, 'patron': patron_elegido, 'ini': h_ini}
 
-    # ==========================================================================
-    # TRAMPA: REPARACIÓN FORZADA (BUSCA FACTIBILIDAD A TODA COSTA)
-    # ==========================================================================
-    def _force_feasible(self, ind):
-        """
-        Intenta reparar un individuo conflictivo reasignando las secciones problemáticas
-        una por una con un algoritmo voraz que prioriza la factibilidad.
-        Si es necesario, permite sobrecarga de profesores (con penalización) o asigna TBA.
-        """
-        # Identificar las secciones conflictivas
-        _, _, conflict_details, bad_indices = self._fitness_detailed(ind)
-        if not bad_indices:
-            return ind  # ya es factible
-        
-        # Crear una copia del individuo
-        nuevo = [copy.deepcopy(g) for g in ind]
-        
-        # Reconstruir ocupaciones sin las secciones conflictivas
-        occ_prof = {}
-        occ_salon = {}
-        carga_prof = {}
-        
-        # Primero, añadir todas las secciones no conflictivas
-        for i, g in enumerate(nuevo):
-            if i in bad_indices:
-                continue
-            sec = g['sec']
-            prof = g['prof']
-            salon = g['salon']
-            patron = g['patron']
-            ini = g['ini']
-            if prof not in ["GRADUADOS", "TBA"]:
-                carga_prof[prof] = carga_prof.get(prof, 0) + sec.creditos
-                for dia, contrib in patron['days'].items():
-                    fin = ini + int(contrib * 50)
-                    occ_prof.setdefault((prof, dia), []).append((ini, fin))
-            if salon != "TBA":
-                for dia, contrib in patron['days'].items():
-                    fin = ini + int(contrib * 50)
-                    occ_salon.setdefault((salon, dia), []).append((ini, fin, sec.demanda_asignada, sec.es_fusionable))
-        
-        # Ahora reasignar las conflictivas una por una
-        for i in bad_indices:
-            g = nuevo[i]
-            sec = g['sec']
-            
-            # Buscar una asignación factible
-            asignado = False
-            
-            # Posibles profesores (todos los candidatos, y TBA como último recurso)
-            candidatos_prof = sec.cands.copy() if sec.cands else []
-            candidatos_prof.append("TBA")
-            # Ordenar: primero los que no excedan carga, luego GRADUADOS, luego TBA
-            def prioridad_prof(p):
-                if p == "TBA":
-                    return 2
-                if p == "GRADUADOS":
-                    return 1
-                prof_obj = self.profesores.get(p)
-                if prof_obj:
-                    # Permitir sobrecarga temporalmente (pero preferimos los que no sobrecargan)
-                    if carga_prof.get(p, 0) + sec.creditos <= prof_obj.carga_max:
-                        return 0
-                    else:
-                        return 0.5  # permitido pero menos prioritario
-                return 3
-            candidatos_prof.sort(key=prioridad_prof)
-            
-            # Patrones posibles
-            patrones = PATRONES.get(sec.creditos, PATRONES[3])
-            random.shuffle(patrones)
-            
-            # Salones posibles (todos los que cumplan capacidad)
-            salones_posibles = [s['CODIGO'] for s in self.salones if s['CAPACIDAD'] >= sec.demanda_asignada]
-            if not salones_posibles:
-                salones_posibles = [s['CODIGO'] for s in self.salones]
-            random.shuffle(salones_posibles)
-            
-            # Búsqueda exhaustiva
-            for prof in candidatos_prof:
-                for patron in patrones:
-                    for ini in self.bloques:
-                        # Verificar restricciones institucionales
-                        invade = False
-                        for dia, contrib in patron['days'].items():
-                            fin = ini + int(contrib * 50)
-                            if dia in ["Ma", "Ju"]:
-                                if max(ini, self.hora_universal[0]) < min(fin, self.hora_universal[1]):
-                                    invade = True
-                                    break
-                            if sec.creditos == 3 and contrib >= 3 and ini < 930:
-                                invade = True
-                                break
-                            if fin > self.limite_operativo[1] or ini < self.limite_operativo[0]:
-                                invade = True
-                                break
-                        if invade:
-                            continue
-                        
-                        for salon in salones_posibles:
-                            # Verificar conflictos
-                            conflicto = False
-                            for dia, contrib in patron['days'].items():
-                                fin = ini + int(contrib * 50)
-                                # Profesor
-                                if prof not in ["GRADUADOS", "TBA"]:
-                                    for (ini_ex, fin_ex) in occ_prof.get((prof, dia), []):
-                                        if max(ini, ini_ex) < min(fin, fin_ex):
-                                            conflicto = True
-                                            break
-                                    if conflicto:
-                                        break
-                                # Salón
-                                for (ini_ex, fin_ex, cupo_ex, fus_ex) in occ_salon.get((salon, dia), []):
-                                    if max(ini, ini_ex) < min(fin, fin_ex):
-                                        # Verificar fusión
-                                        salon_info = next(s for s in self.salones if s['CODIGO'] == salon)
-                                        if salon in self.mega_salones and sec.es_fusionable and fus_ex:
-                                            if sec.demanda_asignada + cupo_ex <= salon_info['CAPACIDAD']:
-                                                continue
-                                        conflicto = True
-                                        break
-                                if conflicto:
-                                    break
-                            
-                            if not conflicto:
-                                # Asignación encontrada
-                                nuevo[i]['prof'] = prof
-                                nuevo[i]['salon'] = salon
-                                nuevo[i]['patron'] = patron
-                                nuevo[i]['ini'] = ini
-                                # Actualizar ocupaciones
-                                if prof not in ["GRADUADOS", "TBA"]:
-                                    carga_prof[prof] = carga_prof.get(prof, 0) + sec.creditos
-                                    for dia, contrib in patron['days'].items():
-                                        fin = ini + int(contrib * 50)
-                                        occ_prof.setdefault((prof, dia), []).append((ini, fin))
-                                if salon != "TBA":
-                                    for dia, contrib in patron['days'].items():
-                                        fin = ini + int(contrib * 50)
-                                        occ_salon.setdefault((salon, dia), []).append((ini, fin, sec.demanda_asignada, sec.es_fusionable))
-                                asignado = True
-                                break
-                        if asignado:
-                            break
-                    if asignado:
-                        break
-            if not asignado:
-                # No se pudo asignar, dejar como estaba (seguirá en conflicto)
-                pass
-        
-        return nuevo
-
     def solve(self, pop_size, generations):
         poblacion = [self._create_smart_individual() for _ in range(pop_size)]
         bar = st.progress(0)
@@ -883,7 +730,8 @@ class PlatinumEliteEngine:
         mejor_ind = None
         mejor_score = -float('inf')
         mejor_conflictos = []
-        mejor_detalles = []
+        mejor_fitness = 0
+        mejor_penalties = 0
 
         for gen in range(generations):
             scored = []
@@ -895,11 +743,12 @@ class PlatinumEliteEngine:
             if scored[0][0] > mejor_score:
                 mejor_score = scored[0][0]
                 mejor_ind = scored[0][1]
-                mejor_conflictos = scored[0][2]
-                mejor_detalles = scored[0][3]
+                mejor_conflictos = scored[0][3]
+                mejor_fitness = scored[0][0]
+                mejor_penalties = scored[0][2]
 
             if gen % 5 == 0 or gen == generations - 1:
-                status_text.markdown(f"**🔄 Optimizando Gen {gen+1}/{generations}** | 🏆 Fitness: `{mejor_score:.6f}` | 🚨 Conflictos: `{scored[0][2]}`")
+                status_text.markdown(f"**🔄 Optimizando Gen {gen+1}/{generations}** | 🏆 Fitness: `{mejor_fitness:.6f}` | 🚨 Conflictos: `{mejor_penalties}`")
                 bar.progress((gen+1)/generations)
 
             elite_count = max(1, int(pop_size * 0.1))
@@ -926,18 +775,23 @@ class PlatinumEliteEngine:
             poblacion = nueva_gen
 
         # Reparación final
-        if mejor_conflictos > 0:
-            status_text.markdown(f"**🛠️ Aplicando Reparación Final a {mejor_conflictos} conflictos...**")
-            mejor_ind = self._force_feasible(mejor_ind)
-            # Volver a evaluar
+        if mejor_penalties > 0:
+            status_text.markdown(f"**🛠️ Aplicando Reparación Final a {mejor_penalties} conflictos...**")
+            for _ in range(50):
+                fit, conflictos, detalles, bad = self._fitness_detailed(mejor_ind)
+                if conflictos == 0:
+                    break
+                for i in bad:
+                    mejor_ind[i] = self._mutate_gene(mejor_ind[i], aggressive_search=True)
+            # Re-evaluar
             fit, conflictos, detalles, bad = self._fitness_detailed(mejor_ind)
-            mejor_conflictos = conflictos
-            mejor_detalles = detalles
+            mejor_penalties = conflictos
+            mejor_conflictos = detalles
             
-        return mejor_ind, mejor_detalles
+        return mejor_ind, mejor_conflictos, mejor_fitness, mejor_penalties
 
 # ==============================================================================
-# 5. UI PRINCIPAL (EXACTAMENTE IGUAL A LA ORIGINAL)
+# 5. UI PRINCIPAL (EXACTAMENTE IGUAL A LA ORIGINAL, PERO CON FITNESS MOSTRADO)
 # ==============================================================================
 def main():
     with st.sidebar:
@@ -978,11 +832,13 @@ def main():
                 engine = PlatinumEliteEngine(df_cursos, df_profes, df_salones, zona)
                 
                 start_time = time.time()
-                mejor, conflict_list = engine.solve(pop, gens)
+                mejor, conflict_list, mejor_fitness, mejor_penalties = engine.solve(pop, gens)
                 elapsed = time.time() - start_time
                 
                 st.session_state.elapsed_time = elapsed
                 st.session_state.conflicts = conflict_list
+                st.session_state.mejor_fitness = mejor_fitness
+                st.session_state.mejor_penalties = mejor_penalties
                 st.session_state.master = pd.DataFrame([{
                     'ID': g['sec'].cod, 
                     'Asignatura': g['sec'].cod.split('-')[0],
@@ -996,7 +852,7 @@ def main():
                 } for g in mejor])
 
     if 'master' in st.session_state:
-        st.success(f"✅ Optimización completada en {st.session_state.elapsed_time:.2f} segundos.")
+        st.success(f"✅ Optimización completada en {st.session_state.elapsed_time:.2f} segundos. Fitness: {st.session_state.mejor_fitness:.6f} | Conflictos duros: {st.session_state.mejor_penalties}")
         
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
         t1, t2, t3 = st.tabs(["💎 PANEL DE CONTROL", "🔍 VISTAS DETALLADAS", "🚨 AUDITORÍA DE CALIDAD"])
@@ -1040,13 +896,14 @@ def main():
         with t3:
             conflictos = st.session_state.conflicts
             if len(conflictos) > 0:
-                st.error(f"⚠️ Se detectaron {len(conflictos)} conflictos o irregularidades. Ajuste iteraciones o revise el Excel.")
-                # Mostrar detalles en un expander
-                with st.expander("Ver detalles de conflictos"):
-                    for txt in conflictos:
-                        st.markdown(f"- `{txt}`")
+                st.error(f"⚠️ Se detectaron {len(conflictos)} conflictos duros. Aumente iteraciones o revise los datos.")
+                # Mostrar primeros 20 para no saturar
+                for txt in conflictos[:20]:
+                    st.markdown(f"- `{txt}`")
+                if len(conflictos) > 20:
+                    st.markdown(f"... y {len(conflictos)-20} más.")
             else:
-                st.success("✅ 100% Asignación Perfecta. Cero Conflictos. Se respetaron todas las métricas de espacio, carga y Hora Universal.")
+                st.success("✅ 100% Asignación Perfecta. Cero Conflictos Duros.")
                 
         st.markdown("</div>", unsafe_allow_html=True)
 
