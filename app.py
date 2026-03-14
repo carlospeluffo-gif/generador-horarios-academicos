@@ -6,6 +6,7 @@ import io
 import time
 import math
 from datetime import time as dtime
+import matplotlib.pyplot as plt  # NUEVO: para la gráfica
 
 # ==============================================================================
 # 1. ESTÉTICA PLATINUM ELITE (IDENTICA)
@@ -373,6 +374,7 @@ class TabuScheduler:
         self.mejor_costo = self._costo_total(self.solucion)
         self.tabu_list = []
         self.tabu_tenure = 20
+        self.historial_costos = []  # NUEVO: para guardar la evolución del mejor costo
 
     def _construir_solucion_inicial(self):
         """Construye una solución asignando cada sección a un horario aleatorio pero respetando capacidades básicas."""
@@ -568,6 +570,9 @@ class TabuScheduler:
                     self.mejor_costo = mejor_costo_vecino
                     self.mejor_solucion = [asign.copy() for asign in self.solucion]
             
+            # NUEVO: guardar el mejor costo actual en el historial
+            self.historial_costos.append(self.mejor_costo)
+            
             if it % 10 == 0 or it == iteraciones - 1:
                 conflictos_aprox = max(0, self.mejor_costo // 10000)  # estimación
                 if status_text:
@@ -636,9 +641,29 @@ def main():
                     'Tipo_Salon': a['seccion'].tipo_salon,
                     'Demanda': a['seccion'].cupo
                 } for a in mejor_sol])
+                
+                # NUEVO: guardar historial de costos
+                st.session_state.historial = scheduler.historial_costos
 
     if 'master' in st.session_state:
         st.success(f"✅ Optimización completada en {st.session_state.elapsed_time:.2f} segundos.")
+        
+        # NUEVO: mostrar gráfica de convergencia (si hay datos)
+        if 'historial' in st.session_state and len(st.session_state.historial) > 0:
+            with st.expander("📈 Ver evolución de la optimización"):
+                fig, ax = plt.subplots(figsize=(10, 4))
+                ax.plot(st.session_state.historial, color='#D4AF37', linewidth=2)
+                ax.set_xlabel("Iteración")
+                ax.set_ylabel("Mejor costo")
+                ax.set_title("Convergencia del algoritmo Tabú")
+                ax.grid(True, alpha=0.3)
+                ax.set_facecolor('#111111')
+                fig.patch.set_facecolor('#111111')
+                ax.tick_params(colors='white')
+                ax.xaxis.label.set_color('white')
+                ax.yaxis.label.set_color('white')
+                ax.title.set_color('white')
+                st.pyplot(fig)
         
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
         t1, t2, t3 = st.tabs(["💎 PANEL DE CONTROL", "🔍 VISTAS DETALLADAS", "🚨 AUDITORÍA DE CALIDAD"])
