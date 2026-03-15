@@ -12,7 +12,7 @@ from copy import deepcopy
 # ==============================================================================
 # 1. ESTÉTICA
 # ==============================================================================
-st.set_page_config(page_title="UPRM Scheduler Platinum AI v13", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="UPRM Scheduler Enterprise AI v14", page_icon="🏛️", layout="wide")
 
 st.markdown("""
 <style>
@@ -117,7 +117,7 @@ st.markdown("""
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
         <p style="color: #888; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
-            UPRM MATHEMATICAL OPTIMIZATION ENGINE v13 (EVOLUTIVO + INTENSIVOS)
+            UPRM MATHEMATICAL OPTIMIZATION ENGINE v14 (ENTERPRISE EDITION)
         </p>
     </div>
     <div class="abstract-icon">∞</div>
@@ -441,7 +441,6 @@ class TabuScheduler:
         occ_prof = {}
         occ_salon = {}
         
-        # INICIALIZACIÓN ABSOLUTA: Todos en 0
         carga_prof = {p: 0.0 for p in self.profesores}
         carga_prof["GRADUADOS"] = 0.0
         carga_prof["TBA"] = 0.0
@@ -471,13 +470,11 @@ class TabuScheduler:
             if prof != "GRADUADOS" and prof in self.profesores:
                 prof_obj = self.profesores[prof]
                 
-                # Validación segura: Si puede ser intensivo, se obliga o penaliza según la preferencia
                 if prof_obj.cursos_intensivos == 0 and es_intensivo:
                     conflicts += 10000
                 elif prof_obj.cursos_intensivos == 1 and puede_ser_intensivo and not es_intensivo:
                     conflicts += 10000
 
-                # RESTRICCIONES SUAVES: Guían el Fitness dinámicamente
                 if prof_obj.pref_horas == 'AM' and ini >= 720: soft_penalty += 30
                 elif prof_obj.pref_horas == 'PM' and ini < 720: soft_penalty += 30
                 
@@ -740,7 +737,7 @@ def main():
     st.markdown(f"### Ω Condiciones de Zona: {zona}")
     c1, c2, c3 = st.columns(3)
     
-    with c1: st.metric("Ventana Operativa", "07:30 AM - 06:30 PM" if zona == "CENTRAL" else "07:00 AM - 06:00 PM")
+    with c1: st.metric("Ventana Operativa", "07:30 AM - 07:00 PM" if zona == "CENTRAL" else "07:00 AM - 07:00 PM")
     with c2: st.metric("Hora Universal", "10:30 AM - 12:30 PM" if zona == "CENTRAL" else "10:00 AM - 12:00 PM")
     with c3: st.markdown(f"""<div class="status-badge">RESTRICCIONES FUERTES ACTIVAS</div>""", unsafe_allow_html=True)
 
@@ -782,6 +779,7 @@ def main():
 
                 st.session_state.cargas_finales = cargas_finales
 
+                # Creación del DataFrame con la validación visual de formato Intensivo
                 st.session_state.master = pd.DataFrame([{
                     'ID': a['seccion'].cod, 
                     'Asignatura': a['seccion'].cod.split('-')[0],
@@ -790,8 +788,10 @@ def main():
                     'Persona': a['profesor'], 
                     'Días': a['patron']['name'], 
                     'Horario': format_horario(a['patron'], a['ini']), 
-                    'Salón': a['salon']
+                    'Salón': a['salon'],
+                    'Formato': '🔥 Intensivo' if any(c >= 3 for c in a['patron']['days'].values()) else '✅ Regular'
                 } for a in mejor_sol])
+                
                 st.session_state.detailed_conflicts = scheduler._obtener_conflictos(mejor_sol)
 
     if 'master' in st.session_state:
@@ -812,19 +812,19 @@ def main():
                 if lista_profes:
                     p = st.selectbox("Seleccionar Profesor", lista_profes)
                     subset = df_master[df_master['Persona'] == p]
-                    st.table(subset[['ID', 'Estudiantes (Cupo)', 'Créditos Reales', 'Días', 'Horario', 'Salón']])
+                    st.table(subset[['ID', 'Estudiantes (Cupo)', 'Créditos Reales', 'Días', 'Horario', 'Salón', 'Formato']])
             with f2:
                 lista_cursos = sorted(df_master['Asignatura'].unique())
                 if lista_cursos:
                     c = st.selectbox("Seleccionar Curso", lista_cursos)
                     subset = df_master[df_master['Asignatura'] == c]
-                    st.table(subset[['ID', 'Estudiantes (Cupo)', 'Persona', 'Días', 'Horario', 'Salón']])
+                    st.table(subset[['ID', 'Estudiantes (Cupo)', 'Persona', 'Días', 'Horario', 'Salón', 'Formato']])
             with f3:
                 lista_salones = sorted(df_master['Salón'].unique())
                 if lista_salones:
                     sl = st.selectbox("Seleccionar Salón", lista_salones)
                     subset = df_master[df_master['Salón'] == sl]
-                    st.table(subset[['ID', 'Asignatura', 'Persona', 'Días', 'Horario']])
+                    st.table(subset[['ID', 'Asignatura', 'Persona', 'Días', 'Horario', 'Formato']])
                 
         with t3:
             conflictos = st.session_state.conflicts
