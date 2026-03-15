@@ -6,7 +6,6 @@ import io
 import time
 import math
 from datetime import time as dtime
-import matplotlib.subplots as plt
 import matplotlib.pyplot as plt
 from copy import deepcopy
 
