@@ -586,20 +586,179 @@ class TabuScheduler:
         
         return conflictos_list
 
-    def _generar_vecinos(self, sol, num_vecinos=5):
-        """Genera vecinos moviendo una asignación conflictiva."""
+    # ================== NUEVAS FUNCIONES INTELIGENTES ==================
+    def _identificar_indices_conflictivos(self, sol):
+        """Devuelve una lista de índices de secciones que tienen algún conflicto duro."""
+        indices_conflictivos = set()
+        occ_prof = {}
+        occ_salon = {}
+        carga_prof = {}
+        
+        for i, asign in enumerate(sol):
+            s = asign['seccion']
+            prof = asign['profesor']
+            salon = asign['salon']
+            patron = asign['patron']
+            ini = asign['ini']
+            
+            if prof == "TBA" or salon == "TBA":
+                indices_conflictivos.add(i)
+                continue
+            if prof != "GRADUADOS" and prof not in s.cands:
+                indices_conflictivos.add(i)
+                continue
+            
+            salon_info = next((sl for sl in self.salones if sl['CODIGO'] == salon), None)
+            if salon_info and salon_info['CAPACIDAD'] < s.cupo:
+                indices_conflictivos.add(i)
+                continue
+            if salon_info and not (salon in self.mega_salones and s.es_fusionable) and salon_info['TIPO'] != s.tipo_salon:
+                indices_conflictivos.add(i)
+                continue
+            
+            if prof != "GRADUADOS":
+                carga_prof[prof] = carga_prof.get(prof, 0) + s.creditos
+            
+            for dia, contrib in patron['days'].items():
+                fin = ini + int(contrib * 50)
+                if dia in ["Ma", "Ju"] and max(ini, self.hora_universal[0]) < min(fin, self.hora_universal[1]):
+                    indices_conflictivos.add(i)
+                if s.creditos == 3 and contrib >= 3 and ini < 930:
+                    indices_conflictivos.add(i)
+                if fin > self.limite_operativo[1] or ini < self.limite_operativo[0]:
+                    indices_conflictivos.add(i)
+                
+                if prof != "GRADUADOS":
+                    clave = (prof, dia)
+                    if clave not in occ_prof:
+                        occ_prof[clave] = []
+                    for (ini_ex, fin_ex) in occ_prof[clave]:
+                        if max(ini, ini_ex) < min(fin, fin_ex):
+                            indices_conflictivos.add(i)
+                            # También marcar la otra sección involucrada (la que ya estaba)
+                            # Para simplificar, marcaremos ambas más tarde recorriendo todo.
+                    occ_prof[clave].append((ini, fin))
+                
+                clave_s = (salon, dia)
+                if clave_s not in occ_salon:
+                    occ_salon[clave_s] = []
+                for (ini_ex, fin_ex, cupo_ex, fus_ex) in occ_salon[clave_s]:
+                    if max(ini, ini_ex) < min(fin, fin_ex):
+                        if salon in self.mega_salones and s.es_fusionable and fus_ex:
+                            if s.cupo + cupo_ex <= salon_info['CAPACIDAD']:
+                                continue
+                        indices_conflictivos.add(i)
+                occ_salon[clave_s].append((ini, fin, s.cupo, s.es_fusionable))
+        
+        # Ahora agregar índices por carga (sobre/sub)
+        for prof, carga in carga_prof.items():
+            prof_obj = self.profesores.get(prof)
+            if prof_obj:
+                if carga > prof_obj.carga_max or carga < prof_obj.carga_min:
+                    # Marcar todas las secciones de ese profesor
+                    for i, asign in enumerate(sol):
+                        if asign['profesor'] == prof:
+                            indices_conflictivos.add(i)
+        
+        return list(indices_conflictivos)
+
+    def _generar_vecinos_inteligentes(self, sol, num_vecinos=5):
+        """Genera vecinos modificando secciones conflictivas con cambios específicos."""
         vecinos = []
-        # Identificar índices con posibles conflictos (aleatorio)
+        indices_conf = self._identificar_indices_conflictivos(sol)
+        if not indices_conf:
+            # Si no hay conflictos, usar método aleatorio original
+            return self._generar_vecinos(sol, num_vecinos)
+        
+        for _ in range(num_vecinos):
+            nuevo = [asign.copy() for asign in sol]
+            idx = random.choice(indices_conf)
+            asign = nuevo[idx]
+            s = asign['seccion']
+            
+            # Elegir un tipo de cambio según el tipo de conflicto (simplificado)
+            opciones = []
+            # Siempre podemos cambiar horario
+            opciones.append('horario')
+            # Si hay candidatos, podemos cambiar profesor
+            if s.cands:
+                opciones.append('profesor')
+            # Siempre podemos cambiar salón (aunque sea el mismo)
+            opciones.append('salon')
+            
+            op = random.choice(opciones)
+            
+            if op == 'profesor' and s.cands:
+                profs = [p for p in s.cands if p in self.profesores or p == "GRADUADOS"]
+                if profs:
+                    nuevo[idx]['profesor'] = random.choice(profs)
+            elif op == 'salon':
+                salones_posibles = [sl['CODIGO'] for sl in self.salones if sl['TIPO'] == s.tipo_salon and sl['CAPACIDAD'] >= s.cupo]
+                if not salones_posibles:
+                    salones_posibles = [sl['CODIGO'] for sl in self.salones if sl['CAPACIDAD'] >= s.cupo]
+                if salones_posibles:
+                    nuevo[idx]['salon'] = random.choice(salones_posibles)
+            elif op == 'horario':
+                nuevo[idx]['patron'] = random.choice(PATRONES.get(s.creditos, PATRONES[3]))
+                # Para horario, elegir uno que cumpla límites (opcional)
+                nuevo[idx]['ini'] = random.choice(self.bloques)
+            
+            vecinos.append(nuevo)
+        return vecinos
+
+    def _reparar_carga(self, sol):
+        """Intenta equilibrar las cargas de profesores moviendo secciones entre ellos."""
+        # Calcular carga actual
+        carga_actual = {}
+        for asign in sol:
+            prof = asign['profesor']
+            if prof != "GRADUADOS":
+                carga_actual[prof] = carga_actual.get(prof, 0) + asign['seccion'].creditos
+        
+        # Identificar profesores con sobrecarga y subcarga
+        sobre = []
+        sub = []
+        for prof, prof_obj in self.profesores.items():
+            carga = carga_actual.get(prof, 0)
+            if carga > prof_obj.carga_max:
+                sobre.append((prof, carga - prof_obj.carga_max))
+            elif carga < prof_obj.carga_min:
+                sub.append((prof, prof_obj.carga_min - carga))
+        
+        if not sobre or not sub:
+            return sol  # No se puede hacer nada
+        
+        # Intentar mover una sección de un profesor con sobrecarga a uno con subcarga
+        # Elegir un profesor sobre y uno sub al azar
+        prof_sobre = random.choice(sobre)[0]
+        prof_sub = random.choice(sub)[0]
+        
+        # Encontrar una sección del prof_sobre que pueda ser impartida por prof_sub
+        indices_sobre = [i for i, asign in enumerate(sol) if asign['profesor'] == prof_sobre]
+        random.shuffle(indices_sobre)
+        for idx in indices_sobre:
+            s = sol[idx]['seccion']
+            if prof_sub in s.cands or prof_sub == "GRADUADOS":
+                # Cambiar profesor
+                nuevo = [asign.copy() for asign in sol]
+                nuevo[idx]['profesor'] = prof_sub
+                # Verificar si mejora el costo (opcional)
+                # Por simplicidad, devolvemos el cambio
+                return nuevo
+        return sol
+
+    def _generar_vecinos(self, sol, num_vecinos=5):
+        """Genera vecinos moviendo una asignación conflictiva (original)."""
+        vecinos = []
         indices = list(range(len(sol)))
         random.shuffle(indices)
         
         for idx in indices[:num_vecinos]:
-            for _ in range(3):  # intentar 3 cambios diferentes
+            for _ in range(3):
                 nuevo = [asign.copy() for asign in sol]
                 asign = nuevo[idx]
                 s = asign['seccion']
                 
-                # Modificar un aspecto aleatorio
                 op = random.choice(['profesor', 'salon', 'horario'])
                 if op == 'profesor' and s.cands:
                     profs = [p for p in s.cands if p in self.profesores or p == "GRADUADOS"]
@@ -622,11 +781,16 @@ class TabuScheduler:
         """Hash simple para la lista tabú."""
         return hash(tuple((a['seccion'].cod, a['profesor'], a['salon'], a['patron']['name'], a['ini']) for a in sol))
 
-    def optimizar(self, iteraciones=500, bar=None, status_text=None):
-        """Búsqueda tabú principal."""
+    def optimizar(self, iteraciones=500, bar=None, status_text=None, use_intelligent=True):
+        """Búsqueda tabú principal con opción de vecinos inteligentes y reparación."""
         self.iteraciones = iteraciones
         for it in range(iteraciones):
-            vecinos = self._generar_vecinos(self.solucion, num_vecinos=5)
+            # Generar vecinos (inteligentes o no)
+            if use_intelligent:
+                vecinos = self._generar_vecinos_inteligentes(self.solucion, num_vecinos=5)
+            else:
+                vecinos = self._generar_vecinos(self.solucion, num_vecinos=5)
+            
             mejor_vecino = None
             mejor_costo_vecino = float('inf')
             
@@ -649,19 +813,27 @@ class TabuScheduler:
                     self.mejor_costo = mejor_costo_vecino
                     self.mejor_solucion = [asign.copy() for asign in self.solucion]
             
-            # Guardar el mejor costo actual en el historial
+            # Reparación de carga cada 10 iteraciones
+            if it % 10 == 0:
+                sol_reparada = self._reparar_carga(self.solucion)
+                costo_reparado = self._costo_total(sol_reparada)
+                if costo_reparado < self.mejor_costo:
+                    self.mejor_costo = costo_reparado
+                    self.mejor_solucion = [asign.copy() for asign in sol_reparada]
+                    self.solucion = sol_reparada  # también actualizar actual
+            
+            # Guardar historial
             self.historial_costos.append(self.mejor_costo)
             
             if it % 10 == 0 or it == iteraciones - 1:
-                # Calcular fitness según fórmula de la tesis
                 fitness_val = 1 / (1 + self.mejor_costo) if self.mejor_costo >= 0 else 1.0
-                conflictos_aprox = self.mejor_costo // 10000  # número de conflictos duros aproximado
+                conflictos_aprox = self.mejor_costo // 10000
                 if status_text:
                     status_text.markdown(f"**🔄 Iteración {it+1}/{iteraciones}** | Mejor costo: {self.mejor_costo} | Fitness: {fitness_val:.6f} | Conflictos duros aprox: {conflictos_aprox}")
                 if bar:
                     bar.progress((it+1)/iteraciones)
         
-        return self.mejor_solucion, self.mejor_costo // 10000  # número de conflictos duros
+        return self.mejor_solucion, self.mejor_costo // 10000
 
 # ==============================================================================
 # 5. UI PRINCIPAL
@@ -706,7 +878,7 @@ def main():
                 start_time = time.time()
                 bar = st.progress(0)
                 status = st.empty()
-                mejor_sol, conflictos = scheduler.optimizar(iteraciones, bar, status)
+                mejor_sol, conflictos = scheduler.optimizar(iteraciones, bar, status, use_intelligent=True)
                 elapsed = time.time() - start_time
                 
                 st.session_state.elapsed_time = elapsed
@@ -723,17 +895,14 @@ def main():
                     'Demanda': a['seccion'].cupo
                 } for a in mejor_sol])
                 
-                # Guardar historial y conflictos detallados
                 st.session_state.historial = scheduler.historial_costos
                 st.session_state.detailed_conflicts = scheduler._obtener_conflictos(mejor_sol)
 
     if 'master' in st.session_state:
         st.success(f"✅ Optimización completada en {st.session_state.elapsed_time:.2f} segundos.")
         
-        # Mostrar gráfica de convergencia (fitness)
         if 'historial' in st.session_state and len(st.session_state.historial) > 0:
             with st.expander("📈 Ver evolución de la optimización"):
-                # Convertir historial de costos a fitness
                 fitness_hist = [1/(1+c) for c in st.session_state.historial]
                 fig, ax = plt.subplots(figsize=(10, 4))
                 ax.plot(fitness_hist, color='#D4AF37', linewidth=2)
@@ -768,7 +937,6 @@ def main():
                     st.table(subset[['ID', 'Creditos', 'Días', 'Horario', 'Salón']])
                     st.metric(f"Carga Total", f"{subset['Creditos'].sum()} Créditos")
                     
-                    # Gráfica de carga por día
                     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
                     carga_dia = {dia: 0 for dia in dias_semana}
                     for _, row in subset.iterrows():
@@ -796,7 +964,6 @@ def main():
                     subset = df_master[df_master['Asignatura'] == c]
                     st.table(subset[['ID', 'Persona', 'Días', 'Horario', 'Salón']])
                     
-                    # Distribución de secciones por día
                     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
                     secciones_dia = {dia: 0 for dia in dias_semana}
                     for _, row in subset.iterrows():
@@ -824,7 +991,6 @@ def main():
                     subset = df_master[df_master['Salón'] == sl]
                     st.table(subset[['ID', 'Asignatura', 'Persona', 'Días', 'Horario']])
                     
-                    # Ocupación por día
                     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
                     ocupacion = {dia: 0 for dia in dias_semana}
                     for _, row in subset.iterrows():
