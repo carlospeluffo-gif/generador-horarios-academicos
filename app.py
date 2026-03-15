@@ -728,7 +728,83 @@ class TabuScheduler:
         return self.mejor_solucion, int(self.mejor_costo // 10000), self.historial_costos
 
 # ==============================================================================
-# 5. UI PRINCIPAL
+# 5. FUNCIÓN PARA GENERAR HEATMAP DE OCUPACIÓN DE SALONES
+# ==============================================================================
+def generar_heatmap_ocupacion(scheduler, solucion):
+    """
+    Genera un heatmap que muestra el porcentaje de salones ocupados
+    por día y franja horaria.
+    """
+    dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
+    # Definir franjas horarias de 30 minutos desde el inicio hasta el final operativo
+    inicio = scheduler.limite_operativo[0]
+    fin = scheduler.limite_operativo[1]
+    horas_del_dia = list(range(inicio, fin + 1, 30))  # minutos desde medianoche
+    
+    matriz = np.zeros((len(dias_semana), len(horas_del_dia)))
+    total_salones = len(scheduler.salones)
+    
+    for asign in solucion:
+        salon = asign['salon']
+        if salon == "TBA":
+            continue
+        patron = asign['patron']
+        ini = asign['ini']
+        
+        for dia, contrib in patron['days'].items():
+            if dia not in dias_semana:
+                continue
+            dia_idx = dias_semana.index(dia)
+            duracion = int(contrib * 50)
+            
+            # Marcar ocupación para cada bloque de 30 minutos
+            for minuto in range(ini, ini + duracion, 30):
+                if minuto in horas_del_dia:
+                    hora_idx = horas_del_dia.index(minuto)
+                    matriz[dia_idx, hora_idx] += 1
+    
+    # Convertir a porcentaje
+    if total_salones > 0:
+        matriz_porcentaje = (matriz / total_salones) * 100
+    else:
+        matriz_porcentaje = matriz
+    
+    # Crear figura con estilo consistente
+    fig, ax = plt.subplots(figsize=(14, 6))
+    im = ax.imshow(matriz_porcentaje, cmap='YlOrRd', aspect='auto', vmin=0, vmax=100)
+    
+    # Configurar ejes
+    ax.set_xticks(range(len(horas_del_dia)))
+    etiquetas_horas = [mins_to_str(h).replace(' AM', '').replace(' PM', '') for h in horas_del_dia]
+    # Mostrar solo algunas etiquetas para no saturar
+    step = max(1, len(etiquetas_horas) // 12)
+    ax.set_xticks(range(0, len(horas_del_dia), step))
+    ax.set_xticklabels(etiquetas_horas[::step], rotation=45, ha='right', color='white')
+    
+    ax.set_yticks(range(len(dias_semana)))
+    ax.set_yticklabels(dias_semana, color='white')
+    
+    # Añadir colorbar
+    cbar = plt.colorbar(im, ax=ax, label='% Ocupación')
+    cbar.ax.yaxis.label.set_color('white')
+    cbar.ax.tick_params(colors='white')
+    
+    ax.set_title('Ocupación de Salones por Franja Horaria', color='white', pad=20)
+    ax.set_xlabel('Hora de Inicio', color='white')
+    ax.set_ylabel('Día', color='white')
+    
+    # Estilo oscuro
+    fig.patch.set_facecolor('#0F0F0F')
+    ax.set_facecolor('#1A1A1A')
+    ax.tick_params(colors='white')
+    for spine in ax.spines.values():
+        spine.set_edgecolor('#D4AF37')
+    
+    plt.tight_layout()
+    return fig
+
+# ==============================================================================
+# 6. UI PRINCIPAL
 # ==============================================================================
 def main():
     with st.sidebar:
@@ -769,6 +845,8 @@ def main():
                 st.session_state.elapsed_time = time.time() - start_time
                 st.session_state.conflicts = conflictos
                 st.session_state.historial = historial
+                st.session_state.scheduler = scheduler          # guardamos para usar después
+                st.session_state.mejor_sol = mejor_sol          # guardamos la solución
                 
                 cargas_finales = {}
                 for asign in mejor_sol:
@@ -865,6 +943,14 @@ def main():
             for spine in ax2.spines.values(): spine.set_edgecolor('#D4AF37')
             ax2.legend()
             st.pyplot(fig2)
+
+            st.markdown("---")
+            st.markdown("### 🗺️ Heatmap de Ocupación de Salones")
+            if 'scheduler' in st.session_state and 'mejor_sol' in st.session_state:
+                fig3 = generar_heatmap_ocupacion(st.session_state.scheduler, st.session_state.mejor_sol)
+                st.pyplot(fig3)
+            else:
+                st.warning("No hay datos suficientes para generar el heatmap.")
             
         st.markdown("</div>", unsafe_allow_html=True)
 
