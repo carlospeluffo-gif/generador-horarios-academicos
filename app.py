@@ -443,7 +443,6 @@ class TabuScheduler:
         occ_prof = {}
         occ_salon = {}
         
-        # INICIALIZACIÓN ABSOLUTA: Todos en 0 (Evita el punto ciego)
         carga_prof = {p: 0.0 for p in self.profesores}
         carga_prof["GRADUADOS"] = 0.0
         carga_prof["TBA"] = 0.0
@@ -472,7 +471,6 @@ class TabuScheduler:
             if prof != "GRADUADOS" and prof in self.profesores:
                 prof_obj = self.profesores[prof]
                 
-                # RESTRICCIÓN FUERTE: Cursos Intensivos
                 if prof_obj.cursos_intensivos == 0 and es_intensivo:
                     conflicts += 10000
                 elif prof_obj.cursos_intensivos == 1 and not es_intensivo:
@@ -516,7 +514,6 @@ class TabuScheduler:
         occ_prof = {}
         occ_salon = {}
         
-        # INICIALIZACIÓN ABSOLUTA: Todos en 0
         carga_prof = {p: 0.0 for p in self.profesores}
         carga_prof["GRADUADOS"] = 0.0
         carga_prof["TBA"] = 0.0
@@ -600,7 +597,6 @@ class TabuScheduler:
         s = sol[idx]['seccion'] if sol[idx] else self.secciones[idx]
         patrones = PATRONES.get(s.creditos, PATRONES[3])
         
-        # Filtro Inteligente: Respetar la restricción de intensivos al crear soluciones
         if prof in self.profesores:
             prof_obj = self.profesores[prof]
             if prof_obj.cursos_intensivos == 0:
@@ -646,7 +642,7 @@ class TabuScheduler:
                             return True
         return False
 
-    def _generar_vecinos(self, sol, num_vecinos=3):
+    def _generar_vecinos(self, sol, num_vecinos=15): # <--- AUMENTADA LA EXPLORACIÓN
         vecinos = []
         indices = list(range(len(sol)))
         random.shuffle(indices)
@@ -682,7 +678,7 @@ class TabuScheduler:
 
     def optimizar(self, iteraciones=200, bar=None, status_text=None):
         for it in range(iteraciones):
-            vecinos = self._generar_vecinos(self.solucion, num_vecinos=3)
+            vecinos = self._generar_vecinos(self.solucion, num_vecinos=15) # <--- AUMENTADA LA EXPLORACIÓN
             mejor_vecino = None; mejor_costo_vecino = float('inf')
             for vecino in vecinos:
                 if self._hash_sol(vecino) in self.tabu_list: continue
@@ -703,9 +699,9 @@ class TabuScheduler:
             
             if it % 10 == 0 or it == iteraciones - 1:
                 if status_text: 
-                    fitness_actual = 1 / (1 + self.mejor_costo)
-                    # AQUÍ ESTÁ LA ACTUALIZACIÓN EN VIVO CON TODO LO SOLICITADO
-                    status_text.markdown(f"**🔄 Iteración {it+1}/{iteraciones}** | Conflictos aprox: {self.mejor_costo // 10000} | Costo Total: {self.mejor_costo:.2f} | Fitness: {fitness_actual:.6f}")
+                    # <--- NUEVA FÓRMULA DE FITNESS NORMALIZADO 
+                    fitness_actual = 10000 / (10000 + self.mejor_costo) 
+                    status_text.markdown(f"**🔄 Iteración {it+1}/{iteraciones}** | Conflictos aprox: {self.mejor_costo // 10000} | Costo Total: {self.mejor_costo:.2f} | Fitness: {fitness_actual:.4f}")
                 if bar: bar.progress((it+1)/iteraciones)
         
         return self.mejor_solucion, self.mejor_costo // 10000, self.historial_costos
@@ -820,14 +816,14 @@ def main():
         with t4:
             st.markdown("### 🧬 Evolución del Algoritmo (Fitness vs Generaciones)")
             
-            # CÁLCULO DE FITNESS PARA LA GRÁFICA
-            fitness_history = [1 / (1 + costo) for costo in st.session_state.historial]
+            # <--- CÁLCULO DE FITNESS NORMALIZADO PARA LA GRÁFICA
+            fitness_history = [10000 / (10000 + costo) for costo in st.session_state.historial]
             
             fig1, ax1 = plt.subplots(figsize=(10, 4))
             ax1.plot(fitness_history, color='#D4AF37', linewidth=2.5)
-            ax1.set_title("Crecimiento de Fitness (1 / 1 + Costo) por Generación", color='white', pad=15)
+            ax1.set_title("Crecimiento de Fitness (Escala 0 a 1) por Generación", color='white', pad=15)
             ax1.set_xlabel("Iteraciones", color='white')
-            ax1.set_ylabel("Fitness", color='white')
+            ax1.set_ylabel("Fitness (1.0 = Perfecto)", color='white')
             fig1.patch.set_facecolor('#0F0F0F')
             ax1.set_facecolor('#1A1A1A')
             ax1.tick_params(colors='white')
