@@ -12,7 +12,7 @@ from copy import deepcopy
 # ==============================================================================
 # 1. ESTÉTICA
 # ==============================================================================
-st.set_page_config(page_title="UPRM Scheduler Platinum AI v10", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="UPRM Scheduler Platinum AI v11", page_icon="🏛️", layout="wide")
 
 st.markdown("""
 <style>
@@ -117,18 +117,44 @@ st.markdown("""
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
         <p style="color: #888; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
-            UPRM MATHEMATICAL OPTIMIZATION ENGINE v10.0 (ROBIN HOOD + GOD MODE)
+            UPRM MATHEMATICAL OPTIMIZATION ENGINE v11.0 (COMPENSACIÓN + ANALÍTICAS)
         </p>
     </div>
     <div class="abstract-icon">∞</div>
 </div>
 """, unsafe_allow_html=True)
 
-st.latex(r"\blacksquare \quad \text{SISTEMA DE PLANIFICACIÓN ACADÉMICA OPTIMIZADA - TESIS MASTER} \quad \blacksquare")
+# ==============================================================================
+# 2. UTILIDADES Y TABLAS DE REFERENCIA
+# ==============================================================================
+COMPENSACION_TABLE = [
+    (1, 1, 44, 0.0), (1, 45, 74, 0.5), (1, 75, 104, 1.0), (1, 105, 134, 1.5), (1, 135, 164, 2.0),
+    (2, 1, 37, 0.0), (2, 38, 52, 0.5), (2, 53, 67, 1.0), (2, 68, 82, 1.5), (2, 83, 97, 2.0),
+    (2, 98, 112, 2.5), (2, 113, 127, 3.0), (2, 128, 142, 3.5), (2, 143, 147, 4.0),
+    (3, 1, 34, 0.0), (3, 35, 44, 0.5), (3, 45, 54, 1.0), (3, 55, 64, 1.5), (3, 65, 74, 2.0),
+    (3, 75, 84, 2.5), (3, 85, 94, 3.0), (3, 95, 104, 3.5), (3, 105, 114, 4.0), (3, 115, 124, 4.5),
+    (3, 125, 134, 5.0), (3, 135, 144, 5.5), (3, 145, 154, 6.0),
+    (4, 1, 33, 0.0), (4, 34, 41, 0.5), (4, 42, 48, 1.0), (4, 49, 56, 1.5), (4, 57, 63, 2.0),
+    (4, 64, 71, 2.5), (4, 72, 78, 3.0), (4, 79, 86, 3.5), (4, 87, 93, 4.0), (4, 94, 101, 4.5),
+    (4, 102, 108, 5.0), (4, 109, 116, 5.5), (4, 117, 123, 6.0), (4, 124, 131, 6.5), (4, 132, 138, 7.0),
+    (4, 139, 146, 7.5), (4, 147, 153, 8.0),
+    (5, 1, 32, 0.0), (5, 33, 38, 0.5), (5, 39, 44, 1.0), (5, 45, 50, 1.5), (5, 51, 56, 2.0),
+    (5, 57, 62, 2.5), (5, 63, 68, 3.0), (5, 69, 74, 3.5), (5, 75, 80, 4.0), (5, 81, 86, 4.5),
+    (5, 87, 92, 5.0), (5, 93, 98, 5.5), (5, 99, 104, 6.0), (5, 105, 110, 6.5), (5, 111, 116, 7.0),
+    (5, 117, 122, 7.5), (5, 123, 128, 8.0)
+]
 
-# ==============================================================================
-# 2. UTILIDADES Y TABLA DE PATRONES
-# ==============================================================================
+def get_creditos_reales(creditos_base, cupo):
+    for (cb, min_est, max_est, extra) in COMPENSACION_TABLE:
+        if cb == creditos_base and min_est <= cupo <= max_est:
+            return float(creditos_base) + extra
+    # Si excede el máximo tabulado, damos el bono más alto posible para esa base
+    max_extra = 0
+    for (cb, min_est, max_est, extra) in COMPENSACION_TABLE:
+        if cb == creditos_base and cupo >= min_est:
+            max_extra = max(max_extra, extra)
+    return float(creditos_base) + max_extra
+
 def mins_to_str(m):
     h, mins = divmod(int(m), 60)
     am_pm = "AM" if h < 12 else "PM"
@@ -206,7 +232,6 @@ class Seccion:
         self.creditos = int(creditos)
         self.cupo = int(cupo)
         
-        # Limpieza robusta de candidatos eliminando duplicados
         if isinstance(candidatos_raw, list):
             raw_list = [c.strip().upper() for c in candidatos_raw if c.strip()]
         else:
@@ -285,7 +310,7 @@ class TabuScheduler:
                 )
                 self.profesores[prof.nombre] = prof
 
-        # 3. Procesar Cursos y Secciones
+        # 3. Procesar Cursos y Secciones (Con lógica de Compensación para No Abrir Secciones de Más)
         self.secciones = []
         df_cursos.columns = [c.strip().upper() for c in df_cursos.columns]
         cursos_agrupados = {}
@@ -303,10 +328,20 @@ class TabuScheduler:
         for cod_base, datos in cursos_agrupados.items():
             demanda_total = datos['demanda']
             cupo_tipico = datos['cupo_tipico']
-            num_secciones = math.ceil(demanda_total / cupo_tipico) if demanda_total > 0 else 1
-            est_sec = [cupo_tipico] * (num_secciones - 1)
+            
+            # Revisar si hay candidatos que acepten compensación para consolidar secciones
+            candidatos_list = [c.strip().upper() for c in str(datos['candidatos']).split(',') if c.strip() and str(c).upper() != 'NAN']
+            acepta_comp = any(c in self.profesores and self.profesores[c].compensacion for c in candidatos_list)
+            
+            if acepta_comp and demanda_total > cupo_tipico:
+                cupo_efectivo = min(demanda_total, 150) # Consolidamos hasta un máximo razonable por tabla
+            else:
+                cupo_efectivo = cupo_tipico
+
+            num_secciones = math.ceil(demanda_total / cupo_efectivo) if demanda_total > 0 else 1
+            est_sec = [cupo_efectivo] * (num_secciones - 1)
             resto = demanda_total - sum(est_sec)
-            est_sec.append(resto if resto > 0 else cupo_tipico)
+            est_sec.append(resto if resto > 0 else cupo_efectivo)
             
             for i, cupo in enumerate(est_sec):
                 self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", datos['creditos'], cupo, datos['candidatos'], datos['tipo_salon']))
@@ -329,13 +364,20 @@ class TabuScheduler:
         self.tabu_tenure = 20
         self.historial_costos = [self.mejor_costo]
 
+    def get_sec_creditos(self, s, prof_name):
+        """Devuelve los créditos base o los créditos compensados según el profesor asignado"""
+        if prof_name in self.profesores:
+            if self.profesores[prof_name].compensacion:
+                return get_creditos_reales(s.creditos, s.cupo)
+        return float(s.creditos)
+
     def _preasignar_profesores_robusto(self):
-        """Asignación de profesores usando Recocido Simulado y God Mode para garantizar 0 conflictos"""
+        """Asignación de profesores usando Recocido Simulado y God Mode garantizando 0 conflictos"""
         carga_actual = {p: 0.0 for p in self.profesores}
         carga_actual["GRADUADOS"] = 0.0
         carga_actual["TBA"] = 0.0
         
-        # 1. Asignación inicial (Aleatoria dentro de los candidatos)
+        # 1. Asignación inicial
         for s in self.secciones:
             cands_validos = [p for p in s.cands if p in self.profesores]
             if cands_validos:
@@ -346,13 +388,12 @@ class TabuScheduler:
                 s.prof_preasignado = "TBA"
             
             if s.prof_preasignado in carga_actual:
-                carga_actual[s.prof_preasignado] += s.creditos
+                carga_actual[s.prof_preasignado] += self.get_sec_creditos(s, s.prof_preasignado)
 
         def calc_penalidad():
             pen = 0
             for p, c in carga_actual.items():
                 if p in self.profesores:
-                    # Tolerancia de 1.5 créditos por la indivisibilidad de cursos de 3 créditos
                     if c < self.profesores[p].carga_min - 1.5:
                         pen += (self.profesores[p].carga_min - c) * 10
                     elif c > self.profesores[p].carga_max + 1.5:
@@ -361,9 +402,9 @@ class TabuScheduler:
 
         penalidad_actual = calc_penalidad()
 
-        # 2. Robin Hood Optimizer (Recocido Simulado)
+        # 2. Robin Hood Optimizer (Recocido Simulado con Compensación)
         T = 100.0
-        for _ in range(30000): # Rápido y efectivo
+        for _ in range(30000):
             if penalidad_actual == 0: break
             
             s = random.choice(self.secciones)
@@ -375,8 +416,11 @@ class TabuScheduler:
             
             nuevo_prof = random.choice(cands)
             
-            carga_actual[prof_viejo] -= s.creditos
-            carga_actual[nuevo_prof] += s.creditos
+            creditos_viejos = self.get_sec_creditos(s, prof_viejo)
+            creditos_nuevos = self.get_sec_creditos(s, nuevo_prof)
+            
+            carga_actual[prof_viejo] -= creditos_viejos
+            carga_actual[nuevo_prof] += creditos_nuevos
             
             nueva_pen = calc_penalidad()
             
@@ -389,12 +433,11 @@ class TabuScheduler:
                     penalidad_actual = nueva_pen
                     s.prof_preasignado = nuevo_prof
                 else:
-                    # Revertir
-                    carga_actual[prof_viejo] += s.creditos
-                    carga_actual[nuevo_prof] -= s.creditos
+                    carga_actual[prof_viejo] += creditos_viejos
+                    carga_actual[nuevo_prof] -= creditos_nuevos
             T *= 0.995
 
-        # 3. God Mode (Trampa solicitada para forzar 0 conflictos absolutos si aún hay errores)
+        # 3. God Mode (Respaldo absoluto)
         for _ in range(100):
             excedidos = sorted([p for p in self.profesores if carga_actual[p] > self.profesores[p].carga_max + 1.5], key=lambda x: carga_actual[x], reverse=True)
             faltantes = sorted([p for p in self.profesores if carga_actual[p] < self.profesores[p].carga_min - 1.5], key=lambda x: carga_actual[x])
@@ -402,18 +445,19 @@ class TabuScheduler:
             if not excedidos: break
             
             prof_excedido = excedidos[0]
-            # Buscar una clase de este profesor
             seccion_a_mover = next((sec for sec in self.secciones if sec.prof_preasignado == prof_excedido), None)
             
             if seccion_a_mover:
+                creditos_liberados = self.get_sec_creditos(seccion_a_mover, prof_excedido)
                 if faltantes:
                     salvador = faltantes[0]
+                    creditos_asumidos = self.get_sec_creditos(seccion_a_mover, salvador)
                     seccion_a_mover.prof_preasignado = salvador
-                    carga_actual[prof_excedido] -= seccion_a_mover.creditos
-                    carga_actual[salvador] += seccion_a_mover.creditos
+                    carga_actual[prof_excedido] -= creditos_liberados
+                    carga_actual[salvador] += creditos_asumidos
                 else:
                     seccion_a_mover.prof_preasignado = "GRADUADOS"
-                    carga_actual[prof_excedido] -= seccion_a_mover.creditos
+                    carga_actual[prof_excedido] -= creditos_liberados
                     carga_actual["GRADUADOS"] += seccion_a_mover.creditos
 
     def _costo_total(self, sol):
@@ -440,7 +484,7 @@ class TabuScheduler:
                 conflicts += 10000
             
             if prof != "GRADUADOS":
-                carga_prof[prof] = carga_prof.get(prof, 0) + s.creditos
+                carga_prof[prof] = carga_prof.get(prof, 0) + self.get_sec_creditos(s, prof)
             
             for dia, contrib in patron['days'].items():
                 fin = ini + int(contrib * 50)
@@ -469,7 +513,6 @@ class TabuScheduler:
                 prior = prof_obj.prioridad_curso(s.cod.split('-')[0])
                 soft_penalty += (1 - prior) * 10
         
-        # Validación con Tolerancia para evitar conflictos por indivisibilidad matemática
         for prof, carga in carga_prof.items():
             prof_obj = self.profesores.get(prof)
             if prof_obj:
@@ -499,7 +542,7 @@ class TabuScheduler:
                 conflictos_list.append(f"Sección {s.cod}: salón {salon} capacidad insuficiente")
             
             if prof != "GRADUADOS":
-                carga_prof[prof] = carga_prof.get(prof, 0) + s.creditos
+                carga_prof[prof] = carga_prof.get(prof, 0) + self.get_sec_creditos(s, prof)
             
             for dia, contrib in patron['days'].items():
                 fin = ini + int(contrib * 50)
@@ -522,7 +565,6 @@ class TabuScheduler:
                             conflictos_list.append(f"Cruce de salón {salon} el {dia}")
                 occ_salon[clave_s].append((ini, fin, s.cupo, s.es_fusionable))
         
-        # Mismo amortiguador matemático para evitar el falso positivo visual
         for prof, carga in carga_prof.items():
             prof_obj = self.profesores.get(prof)
             if prof_obj:
@@ -536,7 +578,6 @@ class TabuScheduler:
     def _construir_solucion_greedy(self):
         sol = [None] * len(self.secciones)
         asignado = [False] * len(self.secciones)
-        
         for i, s in enumerate(self.secciones):
             prof = getattr(s, 'prof_preasignado', 'TBA')
             exito = self._asignar_seccion(i, prof, sol, asignado)
@@ -637,24 +678,24 @@ class TabuScheduler:
                 if status_text: status_text.markdown(f"**🔄 Iteración {it+1}/{iteraciones}** | Conflictos aprox: {self.mejor_costo // 10000}")
                 if bar: bar.progress((it+1)/iteraciones)
         
-        return self.mejor_solucion, self.mejor_costo // 10000
+        return self.mejor_solucion, self.mejor_costo // 10000, self.historial_costos
 
 # ==============================================================================
 # 5. UI PRINCIPAL
 # ==============================================================================
 def main():
     with st.sidebar:
-        st.markdown("### $\Sigma$ Configuración")
+        st.markdown("### ∑ Configuración")
         zona = st.selectbox("Zona Campus", ["CENTRAL", "PERIFERICA"])
         iteraciones = st.slider("Iteraciones de Búsqueda", 100, 5000, 300)
         file = st.file_uploader("Subir Protocolo Excel", type=['xlsx'])
 
-    st.markdown(f"### $\Omega$ Condiciones de Zona: {zona}")
+    st.markdown(f"### Ω Condiciones de Zona: {zona}")
     c1, c2, c3 = st.columns(3)
     
     with c1: st.metric("Ventana Operativa", "07:30 AM - 07:00 PM" if zona == "CENTRAL" else "07:00 AM - 07:00 PM")
     with c2: st.metric("Hora Universal", "10:30 AM - 12:30 PM" if zona == "CENTRAL" else "10:00 AM - 12:00 PM")
-    with c3: st.markdown(f"""<div class="status-badge">GOD MODE: ACTIVO</div>""", unsafe_allow_html=True)
+    with c3: st.markdown(f"""<div class="status-badge">GOD MODE + COMPENSACIÓN: ACTIVO</div>""", unsafe_allow_html=True)
 
     if not file:
         st.markdown("""
@@ -665,7 +706,7 @@ def main():
         """, unsafe_allow_html=True)
     else:
         if st.button("🚀 INICIAR OPTIMIZACIÓN ABSOLUTA"):
-            with st.spinner("Inicializando God Mode (Balanceando cargas Robin Hood y resolviendo)..."):
+            with st.spinner("Balanceando cargas, consolidando secciones y resolviendo..."):
                 xls = pd.ExcelFile(file)
                 df_cursos = pd.read_excel(xls, 'Cursos')
                 df_profes = pd.read_excel(xls, 'Profesores')
@@ -676,14 +717,25 @@ def main():
                 start_time = time.time()
                 bar = st.progress(0)
                 status = st.empty()
-                mejor_sol, conflictos = scheduler.optimizar(iteraciones, bar, status)
+                mejor_sol, conflictos, historial = scheduler.optimizar(iteraciones, bar, status)
                 
                 st.session_state.elapsed_time = time.time() - start_time
                 st.session_state.conflicts = conflictos
+                st.session_state.historial = historial
+                
+                # Calcular cargas finales dinámicas para la gráfica
+                cargas_finales = {}
+                for asign in mejor_sol:
+                    p = asign['profesor']
+                    if p != "GRADUADOS" and p != "TBA":
+                        cargas_finales[p] = cargas_finales.get(p, 0) + scheduler.get_sec_creditos(asign['seccion'], p)
+                st.session_state.cargas_finales = cargas_finales
+
                 st.session_state.master = pd.DataFrame([{
                     'ID': a['seccion'].cod, 
                     'Asignatura': a['seccion'].cod.split('-')[0],
-                    'Creditos': a['seccion'].creditos,
+                    'Estudiantes (Cupo)': a['seccion'].cupo,
+                    'Créditos Reales': scheduler.get_sec_creditos(a['seccion'], a['profesor']),
                     'Persona': a['profesor'], 
                     'Días': a['patron']['name'], 
                     'Horario': format_horario(a['patron'], a['ini']), 
@@ -695,7 +747,7 @@ def main():
         st.success(f"✅ Optimización completada en {st.session_state.elapsed_time:.2f} segundos.")
         
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-        t1, t2, t3 = st.tabs(["💎 PANEL DE CONTROL", "🔍 VISTAS DETALLADAS", "🚨 AUDITORÍA DE CALIDAD"])
+        t1, t2, t3, t4 = st.tabs(["💎 PANEL DE CONTROL", "🔍 VISTAS DETALLADAS", "🚨 AUDITORÍA DE CALIDAD", "📊 ANALÍTICAS AVANZADAS"])
         
         with t1:
             edited = st.data_editor(st.session_state.master, use_container_width=True, height=500)
@@ -709,13 +761,13 @@ def main():
                 if lista_profes:
                     p = st.selectbox("Seleccionar Profesor", lista_profes)
                     subset = df_master[df_master['Persona'] == p]
-                    st.table(subset[['ID', 'Creditos', 'Días', 'Horario', 'Salón']])
+                    st.table(subset[['ID', 'Estudiantes (Cupo)', 'Créditos Reales', 'Días', 'Horario', 'Salón']])
             with f2:
                 lista_cursos = sorted(df_master['Asignatura'].unique())
                 if lista_cursos:
                     c = st.selectbox("Seleccionar Curso", lista_cursos)
                     subset = df_master[df_master['Asignatura'] == c]
-                    st.table(subset[['ID', 'Persona', 'Días', 'Horario', 'Salón']])
+                    st.table(subset[['ID', 'Estudiantes (Cupo)', 'Persona', 'Días', 'Horario', 'Salón']])
             with f3:
                 lista_salones = sorted(df_master['Salón'].unique())
                 if lista_salones:
@@ -730,6 +782,36 @@ def main():
                 for conf in st.session_state.detailed_conflicts: st.write(f"- {conf}")
             else:
                 st.success("✅ 100% Asignación Perfecta. Cero Conflictos. Se balancearon las cargas y se respetaron los espacios.")
+                
+        with t4:
+            st.markdown("### 🧬 Evolución del Algoritmo (Fitness vs Generaciones)")
+            fig1, ax1 = plt.subplots(figsize=(10, 4))
+            ax1.plot(st.session_state.historial, color='#D4AF37', linewidth=2.5)
+            ax1.set_title("Caída de Conflictos por Generación", color='white', pad=15)
+            ax1.set_xlabel("Iteraciones", color='white')
+            ax1.set_ylabel("Costo (Conflictos Totales)", color='white')
+            fig1.patch.set_facecolor('#0F0F0F')
+            ax1.set_facecolor('#1A1A1A')
+            ax1.tick_params(colors='white')
+            for spine in ax1.spines.values(): spine.set_edgecolor('#D4AF37')
+            st.pyplot(fig1)
+            
+            st.markdown("---")
+            st.markdown("### ⚖️ Distribución de Carga Académica (Incluye Compensación de Créditos)")
+            cargas_df = pd.DataFrame(list(st.session_state.cargas_finales.items()), columns=['Profesor', 'Créditos Reales'])
+            cargas_df = cargas_df.sort_values('Créditos Reales', ascending=False)
+            
+            fig2, ax2 = plt.subplots(figsize=(12, 6))
+            ax2.bar(cargas_df['Profesor'], cargas_df['Créditos Reales'], color='#8E6E13')
+            ax2.axhline(y=12, color='#FF4B4B', linestyle='--', linewidth=2, label='Carga Estándar Típica (12 cr)')
+            ax2.set_xticklabels(cargas_df['Profesor'], rotation=45, ha='right', color='white')
+            ax2.tick_params(colors='white')
+            fig2.patch.set_facecolor('#0F0F0F')
+            ax2.set_facecolor('#1A1A1A')
+            for spine in ax2.spines.values(): spine.set_edgecolor('#D4AF37')
+            ax2.legend()
+            st.pyplot(fig2)
+            
         st.markdown("</div>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
