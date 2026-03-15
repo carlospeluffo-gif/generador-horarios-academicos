@@ -799,7 +799,7 @@ def main():
     with st.sidebar:
         st.markdown("### $\Sigma$ Configuración")
         zona = st.selectbox("Zona Campus", ["CENTRAL", "PERIFERICA"])
-        iteraciones = st.slider("Iteraciones de Búsqueda", 100, 1000, 200)
+        iteraciones = st.slider("Iteraciones de Búsqueda", 100, 5000, 200)
         file = st.file_uploader("Subir Protocolo Excel", type=['xlsx'])
 
     st.markdown(f"### $\Omega$ Condiciones de Zona: {zona}")
