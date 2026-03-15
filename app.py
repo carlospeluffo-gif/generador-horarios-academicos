@@ -12,7 +12,7 @@ from copy import deepcopy
 # ==============================================================================
 # 1. ESTÉTICA
 # ==============================================================================
-st.set_page_config(page_title="UPRM Scheduler Platinum AI v12", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="UPRM Scheduler Platinum AI v13", page_icon="🏛️", layout="wide")
 
 st.markdown("""
 <style>
@@ -117,7 +117,7 @@ st.markdown("""
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
         <p style="color: #888; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
-            UPRM MATHEMATICAL OPTIMIZATION ENGINE v12 (FITNESS + INTENSIVOS)
+            UPRM MATHEMATICAL OPTIMIZATION ENGINE v13 (EVOLUTIVO + INTENSIVOS)
         </p>
     </div>
     <div class="abstract-icon">∞</div>
@@ -276,7 +276,7 @@ class Profesor:
         return 0.0
 
 # ==============================================================================
-# 4. MOTOR DE OPTIMIZACIÓN
+# 4. MOTOR DE OPTIMIZACIÓN EVOLUTIVA
 # ==============================================================================
 class TabuScheduler:
     def __init__(self, df_cursos, df_profes, df_salones, zona):
@@ -364,8 +364,6 @@ class TabuScheduler:
         self.solucion = self._construir_solucion_greedy()
         self.mejor_solucion = deepcopy(self.solucion)
         self.mejor_costo = self._costo_total(self.solucion)
-        self.tabu_list = []
-        self.tabu_tenure = 20
         self.historial_costos = [self.mejor_costo]
 
     def get_sec_creditos(self, s, prof_name):
@@ -443,6 +441,7 @@ class TabuScheduler:
         occ_prof = {}
         occ_salon = {}
         
+        # INICIALIZACIÓN ABSOLUTA: Todos en 0
         carga_prof = {p: 0.0 for p in self.profesores}
         carga_prof["GRADUADOS"] = 0.0
         carga_prof["TBA"] = 0.0
@@ -467,18 +466,27 @@ class TabuScheduler:
                 carga_prof[prof] += self.get_sec_creditos(s, prof)
             
             es_intensivo = any(c >= 3 for c in patron['days'].values())
+            puede_ser_intensivo = any(any(c >= 3 for c in p['days'].values()) for p in PATRONES.get(s.creditos, PATRONES[3]))
             
             if prof != "GRADUADOS" and prof in self.profesores:
                 prof_obj = self.profesores[prof]
                 
+                # Validación segura: Si puede ser intensivo, se obliga o penaliza según la preferencia
                 if prof_obj.cursos_intensivos == 0 and es_intensivo:
                     conflicts += 10000
-                elif prof_obj.cursos_intensivos == 1 and not es_intensivo:
+                elif prof_obj.cursos_intensivos == 1 and puede_ser_intensivo and not es_intensivo:
                     conflicts += 10000
 
-                prior = prof_obj.prioridad_curso(s.cod.split('-')[0])
-                soft_penalty += (1 - prior) * 10
-            
+                # RESTRICCIONES SUAVES: Guían el Fitness dinámicamente
+                if prof_obj.pref_horas == 'AM' and ini >= 720: soft_penalty += 30
+                elif prof_obj.pref_horas == 'PM' and ini < 720: soft_penalty += 30
+                
+                if prof_obj.pref_dias:
+                    for dia in patron['days'].keys():
+                        dia_letra = 'W' if dia == 'Mi' else dia[0]
+                        if dia_letra not in prof_obj.pref_dias:
+                            soft_penalty += 15
+
             for dia, contrib in patron['days'].items():
                 fin = ini + int(contrib * 50)
                 if dia in ["Ma", "Ju"] and max(ini, self.hora_universal[0]) < min(fin, self.hora_universal[1]): conflicts += 10000
@@ -536,11 +544,13 @@ class TabuScheduler:
                 carga_prof[prof] += self.get_sec_creditos(s, prof)
                 
             es_intensivo = any(c >= 3 for c in patron['days'].values())
+            puede_ser_intensivo = any(any(c >= 3 for c in p['days'].values()) for p in PATRONES.get(s.creditos, PATRONES[3]))
+
             if prof != "GRADUADOS" and prof in self.profesores:
                 prof_obj = self.profesores[prof]
                 if prof_obj.cursos_intensivos == 0 and es_intensivo:
                     conflictos_list.append(f"Sección {s.cod}: Prof {prof} tiene clase intensiva pero solicitó NO intensivos.")
-                elif prof_obj.cursos_intensivos == 1 and not es_intensivo:
+                elif prof_obj.cursos_intensivos == 1 and puede_ser_intensivo and not es_intensivo:
                     conflictos_list.append(f"Sección {s.cod}: Prof {prof} NO tiene clase intensiva pero solicitó SÍ intensivos.")
             
             for dia, contrib in patron['days'].items():
@@ -597,11 +607,13 @@ class TabuScheduler:
         s = sol[idx]['seccion'] if sol[idx] else self.secciones[idx]
         patrones = PATRONES.get(s.creditos, PATRONES[3])
         
+        puede_ser_intensivo = any(any(c >= 3 for c in p['days'].values()) for p in patrones)
+        
         if prof in self.profesores:
             prof_obj = self.profesores[prof]
             if prof_obj.cursos_intensivos == 0:
                 patrones = [p for p in patrones if not any(c >= 3 for c in p['days'].values())]
-            elif prof_obj.cursos_intensivos == 1:
+            elif prof_obj.cursos_intensivos == 1 and puede_ser_intensivo:
                 patrones_int = [p for p in patrones if any(c >= 3 for c in p['days'].values())]
                 if patrones_int: patrones = patrones_int
                 
@@ -642,69 +654,78 @@ class TabuScheduler:
                             return True
         return False
 
-    def _generar_vecinos(self, sol, num_vecinos=15): # <--- AUMENTADA LA EXPLORACIÓN
-        vecinos = []
-        indices = list(range(len(sol)))
-        random.shuffle(indices)
-        for idx in indices[:num_vecinos]:
-            for _ in range(2):
-                nuevo = deepcopy(sol)
-                s = nuevo[idx]['seccion']
-                op = random.choice(['salon', 'horario']) 
-                if op == 'salon':
-                    sals = [sl['CODIGO'] for sl in self.salones if sl['TIPO'] == s.tipo_salon and sl['CAPACIDAD'] >= s.cupo]
-                    if sals: nuevo[idx]['salon'] = random.choice(sals)
-                elif op == 'horario':
-                    patrones = PATRONES.get(s.creditos, PATRONES[3])
-                    prof = nuevo[idx]['profesor']
-                    
-                    if prof in self.profesores:
-                        prof_obj = self.profesores[prof]
-                        if prof_obj.cursos_intensivos == 0:
-                            patrones = [p for p in patrones if not any(c >= 3 for c in p['days'].values())]
-                        elif prof_obj.cursos_intensivos == 1:
-                            patrones_int = [p for p in patrones if any(c >= 3 for c in p['days'].values())]
-                            if patrones_int: patrones = patrones_int
-                            
-                    if not patrones: patrones = PATRONES.get(s.creditos, PATRONES[3])
-                    
-                    nuevo[idx]['patron'] = random.choice(patrones)
-                    nuevo[idx]['ini'] = random.choice(self.bloques)
-                vecinos.append(nuevo)
-        return vecinos
+    def _mutar_solucion(self, sol):
+        nuevo = deepcopy(sol)
+        idx = random.randint(0, len(nuevo)-1)
+        asign = nuevo[idx]
+        s = asign['seccion']
+        prof = asign['profesor']
+        
+        mejores_opciones = []
+        patrones = PATRONES.get(s.creditos, PATRONES[3])
+        puede_ser_intensivo = any(any(c >= 3 for c in p['days'].values()) for p in patrones)
+        
+        if prof in self.profesores:
+            p_obj = self.profesores[prof]
+            if p_obj.cursos_intensivos == 0:
+                patrones = [p for p in patrones if not any(c >= 3 for c in p['days'].values())]
+            elif p_obj.cursos_intensivos == 1 and puede_ser_intensivo:
+                patrones_int = [p for p in patrones if any(c >= 3 for c in p['days'].values())]
+                if patrones_int: patrones = patrones_int
 
-    def _hash_sol(self, sol):
-        return hash(tuple((a['seccion'].cod, a['profesor'], a['salon'], a['patron']['name'], a['ini']) for a in sol))
+        if not patrones: patrones = PATRONES.get(s.creditos, PATRONES[3])
+
+        for _ in range(15):
+            p_test = random.choice(patrones)
+            ini_test = random.choice(self.bloques)
+            s_test = asign['salon']
+            
+            if random.random() < 0.2:
+                sals = [sl['CODIGO'] for sl in self.salones if sl['TIPO'] == s.tipo_salon and sl['CAPACIDAD'] >= s.cupo]
+                if sals: s_test = random.choice(sals)
+                
+            nuevo[idx]['patron'] = p_test
+            nuevo[idx]['ini'] = ini_test
+            nuevo[idx]['salon'] = s_test
+            
+            costo = self._costo_total(nuevo)
+            mejores_opciones.append((costo, p_test, ini_test, s_test))
+            
+        mejores_opciones.sort(key=lambda x: x[0])
+        mejor_op = mejores_opciones[0]
+        
+        nuevo[idx]['patron'] = mejor_op[1]
+        nuevo[idx]['ini'] = mejor_op[2]
+        nuevo[idx]['salon'] = mejor_op[3]
+        
+        return nuevo, mejor_op[0]
 
     def optimizar(self, iteraciones=200, bar=None, status_text=None):
+        temp_inicial = 5000.0
         for it in range(iteraciones):
-            vecinos = self._generar_vecinos(self.solucion, num_vecinos=15) # <--- AUMENTADA LA EXPLORACIÓN
-            mejor_vecino = None; mejor_costo_vecino = float('inf')
-            for vecino in vecinos:
-                if self._hash_sol(vecino) in self.tabu_list: continue
-                costo = self._costo_total(vecino)
-                if costo < mejor_costo_vecino:
-                    mejor_costo_vecino = costo
-                    mejor_vecino = vecino
+            vecino, costo_vecino = self._mutar_solucion(self.solucion)
             
-            if mejor_vecino is not None:
-                self.solucion = mejor_vecino
-                self.tabu_list.append(self._hash_sol(self.solucion))
-                if len(self.tabu_list) > self.tabu_tenure: self.tabu_list.pop(0)
-                if mejor_costo_vecino < self.mejor_costo:
-                    self.mejor_costo = mejor_costo_vecino
-                    self.mejor_solucion = deepcopy(self.solucion)
-            
+            if costo_vecino <= self.mejor_costo:
+                self.solucion = vecino
+                self.mejor_costo = costo_vecino
+                self.mejor_solucion = deepcopy(self.solucion)
+            else:
+                temp = temp_inicial / (it + 1)
+                try: prob = math.exp((self.mejor_costo - costo_vecino) / temp)
+                except: prob = 0
+                if random.random() < prob:
+                    self.solucion = vecino
+                    
             self.historial_costos.append(self.mejor_costo)
             
             if it % 10 == 0 or it == iteraciones - 1:
                 if status_text: 
-                    # <--- NUEVA FÓRMULA DE FITNESS NORMALIZADO 
-                    fitness_actual = 10000 / (10000 + self.mejor_costo) 
-                    status_text.markdown(f"**🔄 Iteración {it+1}/{iteraciones}** | Conflictos aprox: {self.mejor_costo // 10000} | Costo Total: {self.mejor_costo:.2f} | Fitness: {fitness_actual:.4f}")
+                    fitness_actual = 10000 / (10000 + self.mejor_costo)
+                    duros = int(self.mejor_costo // 10000)
+                    status_text.markdown(f"**🔄 Generación {it+1}/{iteraciones}** | Conflictos Duros: {duros} | Costo Total: {self.mejor_costo:.2f} | Fitness: {fitness_actual:.5f}")
                 if bar: bar.progress((it+1)/iteraciones)
         
-        return self.mejor_solucion, self.mejor_costo // 10000, self.historial_costos
+        return self.mejor_solucion, int(self.mejor_costo // 10000), self.historial_costos
 
 # ==============================================================================
 # 5. UI PRINCIPAL
@@ -811,19 +832,18 @@ def main():
                 st.error(f"⚠️ Aún persisten {conflictos} conflictos. Son choques de salón, horas o restricciones fuertes.")
                 for conf in st.session_state.detailed_conflicts: st.write(f"- {conf}")
             else:
-                st.success("✅ 100% Asignación Perfecta. Cero Conflictos. Se balancearon las cargas y se respetaron los espacios y restricciones de intensivos.")
+                st.success("✅ 100% Asignación Perfecta. Cero Conflictos. Se balancearon las cargas y se respetaron los espacios y preferencias.")
                 
         with t4:
             st.markdown("### 🧬 Evolución del Algoritmo (Fitness vs Generaciones)")
             
-            # <--- CÁLCULO DE FITNESS NORMALIZADO PARA LA GRÁFICA
             fitness_history = [10000 / (10000 + costo) for costo in st.session_state.historial]
             
             fig1, ax1 = plt.subplots(figsize=(10, 4))
             ax1.plot(fitness_history, color='#D4AF37', linewidth=2.5)
-            ax1.set_title("Crecimiento de Fitness (Escala 0 a 1) por Generación", color='white', pad=15)
+            ax1.set_title("Crecimiento de Fitness Evolutivo", color='white', pad=15)
             ax1.set_xlabel("Iteraciones", color='white')
-            ax1.set_ylabel("Fitness (1.0 = Perfecto)", color='white')
+            ax1.set_ylabel("Fitness (1.0 = Ideal)", color='white')
             fig1.patch.set_facecolor('#0F0F0F')
             ax1.set_facecolor('#1A1A1A')
             ax1.tick_params(colors='white')
@@ -831,7 +851,7 @@ def main():
             st.pyplot(fig1)
             
             st.markdown("---")
-            st.markdown("### ⚖️ Distribución de Carga Académica (Incluye Compensación de Créditos)")
+            st.markdown("### ⚖️ Distribución de Carga Académica")
             cargas_df = pd.DataFrame(list(st.session_state.cargas_finales.items()), columns=['Profesor', 'Créditos Reales'])
             cargas_df = cargas_df.sort_values('Créditos Reales', ascending=False)
             
