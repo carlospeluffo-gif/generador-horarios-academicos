@@ -375,23 +375,83 @@ class TabuScheduler:
                 return get_creditos_reales(s.creditos, s.cupo)
         return float(s.creditos)
 
+    # ===== NUEVO MÉTODO DE PREASIGNACIÓN MEJORADO =====
     def _preasignar_profesores_robusto(self):
+        # Inicializar cargas
         carga_actual = {p: 0.0 for p in self.profesores}
         carga_actual["GRADUADOS"] = 0.0
         carga_actual["TBA"] = 0.0
         
+        # Capacidad restante (máxima) por profesor
+        capacidad_restante = {}
+        for p in self.profesores.values():
+            capacidad_restante[p.nombre] = p.carga_max
+        # GRADUADOS y TBA no tienen límite (se asignan después)
+        
+        # 1. Asignar secciones con único candidato (forzosas)
+        secciones_unicas = []
+        secciones_multiple = []
         for s in self.secciones:
-            cands_validos = [p for p in s.cands if p in self.profesores]
-            if cands_validos:
-                s.prof_preasignado = random.choice(cands_validos)
-            elif "GRADUADOS" in s.cands:
-                s.prof_preasignado = "GRADUADOS"
+            cands_validos = [c for c in s.cands if c in self.profesores]
+            if not cands_validos:
+                if "GRADUADOS" in s.cands:
+                    s.prof_preasignado = "GRADUADOS"
+                    carga_actual["GRADUADOS"] += self.get_sec_creditos(s, "GRADUADOS")
+                else:
+                    s.prof_preasignado = "TBA"
+                    carga_actual["TBA"] += self.get_sec_creditos(s, "TBA")
+                continue
+            if len(cands_validos) == 1:
+                secciones_unicas.append(s)
             else:
-                s.prof_preasignado = "TBA"
-            
-            if s.prof_preasignado in carga_actual:
-                carga_actual[s.prof_preasignado] += self.get_sec_creditos(s, s.prof_preasignado)
-
+                secciones_multiple.append(s)
+        
+        # Asignar únicas respetando capacidad (si es posible)
+        for s in secciones_unicas:
+            prof = s.cands[0]  # único candidato
+            creditos = self.get_sec_creditos(s, prof)
+            # Si no hay capacidad, igual se asigna (conflicto)
+            s.prof_preasignado = prof
+            carga_actual[prof] += creditos
+            if prof in capacidad_restante:
+                capacidad_restante[prof] -= creditos
+        
+        # 2. Asignar secciones con múltiples candidatos
+        # Calcular puntaje de preferencia para cada par (sección, profesor)
+        preferencias = {}
+        for s in secciones_multiple:
+            preferencias[s] = {}
+            for prof in s.cands:
+                if prof in self.profesores:
+                    preferencias[s][prof] = self.profesores[prof].prioridad_curso(s.cod)
+                else:
+                    preferencias[s][prof] = 0.0
+        
+        # Ordenar secciones: menos candidatos primero, luego mayor preferencia máxima
+        secciones_multiple.sort(key=lambda s: (len(s.cands), -max(preferencias[s].values())))
+        
+        for s in secciones_multiple:
+            # Buscar candidatos con capacidad restante > 0, ordenados por preferencia descendente
+            candidatos_ordenados = sorted(s.cands, key=lambda p: preferencias[s].get(p, 0), reverse=True)
+            asignado = False
+            for prof in candidatos_ordenados:
+                if prof in capacidad_restante and capacidad_restante[prof] >= self.get_sec_creditos(s, prof):
+                    s.prof_preasignado = prof
+                    creditos = self.get_sec_creditos(s, prof)
+                    carga_actual[prof] += creditos
+                    capacidad_restante[prof] -= creditos
+                    asignado = True
+                    break
+            if not asignado:
+                # Si ningún candidato tiene capacidad, asignar el de mejor preferencia (sobrecarga)
+                prof = candidatos_ordenados[0]
+                s.prof_preasignado = prof
+                creditos = self.get_sec_creditos(s, prof)
+                carga_actual[prof] += creditos
+                if prof in capacidad_restante:
+                    capacidad_restante[prof] -= creditos
+        
+        # 3. Ajuste fino con recocido (mismo que antes)
         def calc_penalidad():
             pen = 0
             for p, c in carga_actual.items():
@@ -403,20 +463,21 @@ class TabuScheduler:
             return pen
 
         penalidad_actual = calc_penalidad()
-
         T = 100.0
         for _ in range(30000):
-            if penalidad_actual == 0: break
+            if penalidad_actual == 0:
+                break
             
             s = random.choice(self.secciones)
             prof_viejo = s.prof_preasignado
-            if prof_viejo not in self.profesores: continue
+            if prof_viejo not in self.profesores:
+                continue
             
             cands = [p for p in s.cands if p in self.profesores and p != prof_viejo]
-            if not cands: continue
+            if not cands:
+                continue
             
             nuevo_prof = random.choice(cands)
-            
             creditos_viejos = self.get_sec_creditos(s, prof_viejo)
             creditos_nuevos = self.get_sec_creditos(s, nuevo_prof)
             
