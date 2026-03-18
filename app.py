@@ -117,7 +117,7 @@ st.markdown("""
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
         <p style="color: #888; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
-            UPRM MATHEMATICAL OPTIMIZATION ENGINE v13 (EVOLUTIVO + INTENSIVOS)
+            UPRM MATHEMATICAL OPTIMIZATION ENGINE v13 (EVOLUTIVO + INTENSIVOS + GRANDES)
         </p>
     </div>
     <div class="abstract-icon">∞</div>
@@ -226,7 +226,7 @@ def exportar_todo(df):
 # 3. MODELO DE DATOS
 # ==============================================================================
 class Seccion:
-    def __init__(self, cod, creditos, cupo, candidatos_raw, tipo_salon, es_ayudantia=False):
+    def __init__(self, cod, creditos, cupo, candidatos_raw, tipo_salon, es_ayudantia=False, es_grande=False):
         self.cod = str(cod)
         self.creditos = int(creditos)
         self.cupo = int(cupo)
@@ -243,6 +243,7 @@ class Seccion:
             self.tipo_salon = 1
             
         self.es_ayudantia = es_ayudantia
+        self.es_grande = es_grande  # NUEVO: indica si es sección grande
         base = self.cod.split('-')[0].upper().replace(" ", "")
         self.es_fusionable = base in ["MATE3171", "MATE3172", "MATE3173"]
         self.prof_preasignado = None  
@@ -322,37 +323,84 @@ class TabuScheduler:
         # 3. Procesar Cursos y Secciones
         self.secciones = []
         df_cursos.columns = [c.strip().upper() for c in df_cursos.columns]
+
+        # NUEVO: Identificar columnas opcionales para secciones grandes
+        tiene_grandes = 'GRANDES' in df_cursos.columns
+        tiene_cuantas = 'CUANTAS_GRANDES' in df_cursos.columns
+
+        # Primero agrupamos los cursos base (sin contar secciones)
         cursos_agrupados = {}
         for _, r in df_cursos.iterrows():
             cod_base = str(r['CODIGO']).strip().upper()
             if cod_base not in cursos_agrupados:
                 cursos_agrupados[cod_base] = {
-                    'creditos': int(r['CREDITOS']), 'demanda': int(r.get('DEMANDA', 0)),
-                    'cupo_tipico': int(r.get('CUPO', '30')), 'candidatos': r.get('CANDIDATOS', ''),
-                    'tipo_salon': int(r.get('TIPO_SALON', 1))
+                    'creditos': int(r['CREDITOS']),
+                    'demanda': int(r.get('DEMANDA', 0)),
+                    'cupo_tipico': int(r.get('CUPO', 30)),
+                    'candidatos': r.get('CANDIDATOS', ''),
+                    'tipo_salon': int(r.get('TIPO_SALON', 1)),
+                    'grandes': int(r['GRANDES']) if tiene_grandes and pd.notnull(r['GRANDES']) else 0,
+                    'cuantas_grandes': int(r['CUANTAS_GRANDES']) if tiene_cuantas and pd.notnull(r['CUANTAS_GRANDES']) else 0
                 }
             else:
+                # Acumular demanda si el mismo código base aparece varias veces (ej. varias filas para distintas secciones)
                 cursos_agrupados[cod_base]['demanda'] += int(r.get('DEMANDA', 0))
+                # Para las otras columnas, asumimos que son iguales para todas las filas del mismo código
+                # Si hay discrepancia, el último valor prevalecerá, pero es responsabilidad del usuario.
 
+        # Ahora para cada curso base, generamos las secciones
         for cod_base, datos in cursos_agrupados.items():
+            creditos = datos['creditos']
             demanda_total = datos['demanda']
             cupo_tipico = datos['cupo_tipico']
-            
-            candidatos_list = [c.strip().upper() for c in str(datos['candidatos']).split(',') if c.strip() and str(c).upper() != 'NAN']
-            acepta_comp = any(c in self.profesores and self.profesores[c].compensacion for c in candidatos_list)
-            
-            if acepta_comp and demanda_total > cupo_tipico:
-                cupo_efectivo = min(demanda_total, 150) 
-            else:
-                cupo_efectivo = cupo_tipico
+            candidatos = datos['candidatos']
+            tipo_salon = datos['tipo_salon']
+            grandes_flag = datos['grandes']
+            cuantas_grandes = datos['cuantas_grandes']
 
-            num_secciones = math.ceil(demanda_total / cupo_efectivo) if demanda_total > 0 else 1
-            est_sec = [cupo_efectivo] * (num_secciones - 1)
-            resto = demanda_total - sum(est_sec)
-            est_sec.append(resto if resto > 0 else cupo_efectivo)
-            
-            for i, cupo in enumerate(est_sec):
-                self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", datos['creditos'], cupo, datos['candidatos'], datos['tipo_salon']))
+            # Calcular si hay profesores con compensación (para posible aumento de cupo)
+            candidatos_list = [c.strip().upper() for c in str(candidatos).split(',') if c.strip() and str(c).upper() != 'NAN']
+            acepta_comp = any(c in self.profesores and self.profesores[c].compensacion for c in candidatos_list)
+
+            # Determinar cupo para secciones normales
+            if acepta_comp and demanda_total > cupo_tipico:
+                cupo_normal = min(demanda_total, 150)
+            else:
+                cupo_normal = cupo_tipico
+
+            # --- Generar secciones grandes si aplica ---
+            num_grandes = 0
+            cupo_grande = 150  # capacidad máxima de salones grandes
+            if grandes_flag and cuantas_grandes > 0:
+                num_grandes = cuantas_grandes
+                # Cada sección grande usará cupo_grande
+                for i in range(num_grandes):
+                    cod_seccion = f"{cod_base}-G{i+1:02d}"  # identificador con G para grandes
+                    # Las secciones grandes heredan el tipo de salón del curso (normalmente 1)
+                    # pero deben poder asignarse a salones tipo 1 (FA,FB,FC) que tienen capacidad 150
+                    self.secciones.append(Seccion(cod_seccion, creditos, cupo_grande, candidatos, tipo_salon, es_grande=True))
+                # Restar la capacidad cubierta por grandes de la demanda total
+                demanda_restante = demanda_total - num_grandes * cupo_grande
+                if demanda_restante < 0:
+                    # Si se excede la demanda, ajustar la última sección grande (pero no debería pasar)
+                    demanda_restante = 0
+            else:
+                demanda_restante = demanda_total
+
+            # --- Generar secciones normales para cubrir la demanda restante ---
+            if demanda_restante > 0:
+                num_secciones_normales = math.ceil(demanda_restante / cupo_normal)
+                # Distribuir la demanda de manera uniforme (última puede ser menor)
+                est_sec = [cupo_normal] * (num_secciones_normales - 1)
+                resto = demanda_restante - sum(est_sec)
+                est_sec.append(resto if resto > 0 else cupo_normal)
+                for i, cupo in enumerate(est_sec):
+                    cod_seccion = f"{cod_base}-{i+1:02d}"
+                    self.secciones.append(Seccion(cod_seccion, creditos, cupo, candidatos, tipo_salon, es_grande=False))
+            elif demanda_restante == 0 and num_grandes == 0:
+                # Si no hay demanda y no se pidieron grandes, crear al menos una sección por defecto? 
+                # El código original creaba una sección con cupo típico. Mantenemos ese comportamiento.
+                self.secciones.append(Seccion(f"{cod_base}-01", creditos, cupo_normal, candidatos, tipo_salon, es_grande=False))
 
         self._preasignar_profesores_robusto()
 
@@ -396,6 +444,9 @@ class TabuScheduler:
         secciones_multiple = []
         for s in self.secciones:
             cands_validos = [c for c in s.cands if c in self.profesores]
+            # NUEVO: Filtrar candidatos que no aceptan grandes si la sección es grande
+            if s.es_grande:
+                cands_validos = [c for c in cands_validos if self.profesores[c].acepta_grandes == 1]
             if not cands_validos:
                 if "GRADUADOS" in s.cands:
                     s.prof_preasignado = "GRADUADOS"
@@ -476,7 +527,10 @@ class TabuScheduler:
             if prof_viejo not in self.profesores:
                 continue
             
+            # NUEVO: Filtrar candidatos que aceptan grandes si es necesario
             cands = [p for p in s.cands if p in self.profesores and p != prof_viejo]
+            if s.es_grande:
+                cands = [p for p in cands if self.profesores[p].acepta_grandes == 1]
             if not cands:
                 continue
             
@@ -582,7 +636,7 @@ class TabuScheduler:
                 if carga > prof_obj.carga_max + 1.5: conflicts += 10000
                 if carga < prof_obj.carga_min - 1.5: conflicts += 10000
         
-        # Penalización suave por consistencia de salón por profesor y tipo
+        # Penalización por consistencia de salón por profesor y tipo (AHORA CON PESO MODERADO)
         salones_por_prof_tipo = {}
         for asign in sol:
             prof = asign['profesor']
@@ -595,7 +649,7 @@ class TabuScheduler:
                 salones_por_prof_tipo[key].add(salon)
         for (prof, tipo), salones in salones_por_prof_tipo.items():
             if len(salones) > 1:
-                soft_penalty += (len(salones) - 1) * 2   # peso muy bajo para no generar conflictos
+                soft_penalty += (len(salones) - 1) * 500   # peso moderado para incentivar sin generar conflictos
         
         return conflicts + soft_penalty
 
@@ -753,6 +807,9 @@ class TabuScheduler:
             if random.random() < 0.1:
                 # Candidatos válidos (profesores reales, distintos al actual)
                 candidatos_validos = [c for c in s.cands if c in self.profesores and c != prof_actual]
+                # NUEVO: Filtrar por acepta_grandes si es sección grande
+                if s.es_grande:
+                    candidatos_validos = [c for c in candidatos_validos if self.profesores[c].acepta_grandes == 1]
                 if candidatos_validos:
                     candidata['profesor'] = random.choice(candidatos_validos)
 
@@ -905,41 +962,43 @@ def generar_heatmap_ocupacion(scheduler, solucion):
 def generar_plantilla():
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        # Hoja Cursos
+        # Hoja Cursos - ahora con columnas GRANDES y CUANTAS_GRANDES
         df_cursos = pd.DataFrame({
-            'CODIGO': ['MATE3171', 'MATE3172'],
-            'CREDITOS': [3, 3],
-            'DEMANDA': [120, 150],
-            'CUPO': [30, 30],
-            'CANDIDATOS': ['PEREZ, GONZALEZ', 'RODRIGUEZ'],
-            'TIPO_SALON': [1, 1]
+            'CODIGO': ['MATE3171', 'MATE3172', 'MATE4145'],
+            'CREDITOS': [3, 3, 4],
+            'DEMANDA': [120, 150, 90],
+            'CUPO': [30, 30, 30],
+            'CANDIDATOS': ['PEREZ, GONZALEZ', 'RODRIGUEZ', 'ANGEL CRUZ DELGADO'],
+            'TIPO_SALON': [1, 1, 1],
+            'GRANDES': [1, 0, 1],          # 1 si se abrirán secciones grandes
+            'CUANTAS_GRANDES': [2, 0, 1]   # número de secciones grandes
         })
         df_cursos.to_excel(writer, sheet_name='Cursos', index=False)
         
-        # Hoja Profesores
+        # Hoja Profesores - ya tiene ACEPTA_GRANDES
         df_profes = pd.DataFrame({
-            'NOMBRE': ['PEREZ', 'GONZALEZ'],
-            'CARGA_MIN': [9, 6],
-            'CARGA_MAX': [15, 12],
-            'PREF_DIAS': ['LMV', 'MJ'],
-            'PREF_HORAS': ['AM', 'PM'],
-            'BLOQUEO_DIAS': ['', ''],
-            'BLOQUEO_HORA_INI': ['', ''],
-            'BLOQUEO_HORA_FIN': ['', ''],
-            'PREF1': ['MATE3171', 'MATE3172'],
-            'PREF2': ['', ''],
-            'PREF3': ['', ''],
-            'COMPENSACION': ['NO', 'SI'],
-            'ACEPTA_GRANDES': [0, 1],
-            'CURSOS_INTENSIVOS': [0, 1]
+            'NOMBRE': ['PEREZ', 'GONZALEZ', 'ANGEL CRUZ DELGADO'],
+            'CARGA_MIN': [9, 6, 12],
+            'CARGA_MAX': [15, 12, 12],
+            'PREF_DIAS': ['LMV', 'MJ', 'LMWJV'],
+            'PREF_HORAS': ['AM', 'PM', ''],
+            'BLOQUEO_DIAS': ['', '', ''],
+            'BLOQUEO_HORA_INI': ['', '', ''],
+            'BLOQUEO_HORA_FIN': ['', '', ''],
+            'PREF1': ['MATE3171', 'MATE3172', 'MATE4145'],
+            'PREF2': ['', '', ''],
+            'PREF3': ['', '', ''],
+            'COMPENSACION': ['NO', 'SI', 'NO'],
+            'ACEPTA_GRANDES': [1, 0, 1],   # 1 si acepta secciones grandes
+            'CURSOS_INTENSIVOS': [0, 1, 0]
         })
         df_profes.to_excel(writer, sheet_name='Profesores', index=False)
         
         # Hoja Salones
         df_salones = pd.DataFrame({
-            'CODIGO': ['S-101', 'S-102'],
-            'CAPACIDAD': [30, 40],
-            'TIPO': [1, 2]
+            'CODIGO': ['S-101', 'S-102', 'FA', 'FB'],
+            'CAPACIDAD': [30, 40, 150, 150],
+            'TIPO': [1, 2, 1, 1]
         })
         df_salones.to_excel(writer, sheet_name='Salones', index=False)
     
@@ -953,7 +1012,7 @@ def main():
     with st.sidebar:
         st.markdown("### ∑ Configuración")
         zona = st.selectbox("Zona Campus", ["CENTRAL", "PERIFERICA"])
-        iteraciones = st.slider("Iteraciones de Búsqueda", 100, 5000, 300)
+        iteraciones = st.slider("Iteraciones de Búsqueda (más = mejor solución)", 100, 5000, 500)
         file = st.file_uploader("Subir Protocolo Excel", type=['xlsx'])
         # Botón de descarga de plantilla
         st.download_button(
@@ -974,7 +1033,7 @@ def main():
         st.markdown("""
             <div class='glass-card' style='text-align: center;'>
                 <h3 style='margin-top:0; color: #D4AF37;'>📥 Sincronización de Datos</h3>
-                <p>Asegúrese de que el archivo Profesores.csv contiene la columna CURSOS_INTENSIVOS.</p>
+                <p>Asegúrese de que el archivo Profesores contiene las columnas CURSOS_INTENSIVOS y ACEPTA_GRANDES. En Cursos, agregue GRANDES y CUANTAS_GRANDES si desea secciones grandes.</p>
             </div>
         """, unsafe_allow_html=True)
     else:
@@ -995,8 +1054,8 @@ def main():
                 st.session_state.elapsed_time = time.time() - start_time
                 st.session_state.conflicts = conflictos
                 st.session_state.historial = historial
-                st.session_state.scheduler = scheduler          # guardamos para usar después
-                st.session_state.mejor_sol = mejor_sol          # guardamos la solución
+                st.session_state.scheduler = scheduler
+                st.session_state.mejor_sol = mejor_sol
                 
                 cargas_finales = {}
                 for asign in mejor_sol:
@@ -1018,7 +1077,8 @@ def main():
                     'Persona': a['profesor'], 
                     'Días': a['patron']['name'], 
                     'Horario': format_horario(a['patron'], a['ini']), 
-                    'Salón': a['salon']
+                    'Salón': a['salon'],
+                    'Grande': 'SÍ' if a['seccion'].es_grande else 'NO'
                 } for a in mejor_sol])
                 st.session_state.detailed_conflicts = scheduler._obtener_conflictos(mejor_sol)
 
@@ -1040,24 +1100,24 @@ def main():
                 if lista_profes:
                     p = st.selectbox("Seleccionar Profesor", lista_profes)
                     subset = df_master[df_master['Persona'] == p]
-                    st.table(subset[['ID', 'Estudiantes (Cupo)', 'Créditos Reales', 'Días', 'Horario', 'Salón']])
+                    st.table(subset[['ID', 'Estudiantes (Cupo)', 'Créditos Reales', 'Días', 'Horario', 'Salón', 'Grande']])
             with f2:
                 lista_cursos = sorted(df_master['Asignatura'].unique())
                 if lista_cursos:
                     c = st.selectbox("Seleccionar Curso", lista_cursos)
                     subset = df_master[df_master['Asignatura'] == c]
-                    st.table(subset[['ID', 'Estudiantes (Cupo)', 'Persona', 'Días', 'Horario', 'Salón']])
+                    st.table(subset[['ID', 'Estudiantes (Cupo)', 'Persona', 'Días', 'Horario', 'Salón', 'Grande']])
             with f3:
                 lista_salones = sorted(df_master['Salón'].unique())
                 if lista_salones:
                     sl = st.selectbox("Seleccionar Salón", lista_salones)
                     subset = df_master[df_master['Salón'] == sl]
-                    st.table(subset[['ID', 'Asignatura', 'Persona', 'Días', 'Horario']])
+                    st.table(subset[['ID', 'Asignatura', 'Persona', 'Días', 'Horario', 'Grande']])
                 
         with t3:
             conflictos = st.session_state.conflicts
             if conflictos > 0:
-                st.error(f"⚠️ Aún persisten {conflictos} conflictos. Son choques de salón, horas o restricciones fuertes.")
+                st.error(f"⚠️ Aún persisten {conflictos} conflictos. Revise los detalles. Si son muchos, aumente las iteraciones o verifique la disponibilidad de salones.")
                 for conf in st.session_state.detailed_conflicts: st.write(f"- {conf}")
             else:
                 st.success("✅ 100% Asignación Perfecta. Cero Conflictos. Se balancearon las cargas y se respetaron los espacios y preferencias.")
