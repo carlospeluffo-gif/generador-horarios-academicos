@@ -364,20 +364,20 @@ class TabuScheduler:
 
             # Determinar cupo para secciones normales
             if acepta_comp and demanda_total > cupo_tipico:
-                cupo_normal = min(demanda_total, 150)
+                cupo_normal = min(demanda_total, 85)
             else:
                 cupo_normal = cupo_tipico
 
             # --- Generar secciones grandes si aplica ---
             num_grandes = 0
-            cupo_grande = 150  # capacidad máxima de salones grandes
+            cupo_grande = 85  # capacidad máxima de salones grandes
             if grandes_flag and cuantas_grandes > 0:
                 num_grandes = cuantas_grandes
                 # Cada sección grande usará cupo_grande
                 for i in range(num_grandes):
                     cod_seccion = f"{cod_base}-G{i+1:02d}"  # identificador con G para grandes
                     # Las secciones grandes heredan el tipo de salón del curso (normalmente 1)
-                    # pero deben poder asignarse a salones tipo 1 (FA,FB,FC) que tienen capacidad 150
+                    # pero deben poder asignarse a salones tipo 1 (FA,FB,FC) que tienen capacidad 85
                     self.secciones.append(Seccion(cod_seccion, creditos, cupo_grande, candidatos, tipo_salon, es_grande=True))
                 # Restar la capacidad cubierta por grandes de la demanda total
                 demanda_restante = demanda_total - num_grandes * cupo_grande
@@ -966,7 +966,7 @@ def generar_plantilla():
         df_cursos = pd.DataFrame({
             'CODIGO': ['MATE3171', 'MATE3172', 'MATE4145'],
             'CREDITOS': [3, 3, 4],
-            'DEMANDA': [120, 150, 90],
+            'DEMANDA': [120, 85, 90],
             'CUPO': [30, 30, 30],
             'CANDIDATOS': ['PEREZ, GONZALEZ', 'RODRIGUEZ', 'ANGEL CRUZ DELGADO'],
             'TIPO_SALON': [1, 1, 1],
@@ -997,7 +997,7 @@ def generar_plantilla():
         # Hoja Salones
         df_salones = pd.DataFrame({
             'CODIGO': ['S-101', 'S-102', 'FA', 'FB'],
-            'CAPACIDAD': [30, 40, 150, 150],
+            'CAPACIDAD': [30, 40, 85, 85],
             'TIPO': [1, 2, 1, 1]
         })
         df_salones.to_excel(writer, sheet_name='Salones', index=False)
