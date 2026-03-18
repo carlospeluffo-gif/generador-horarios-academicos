@@ -18,7 +18,7 @@ CUPO_GRANDE = 85  # Cupo por defecto para secciones grandes (modificable)
 # ==============================================================================
 # 1. ESTÉTICA
 # ==============================================================================
-st.set_page_config(page_title="UPRM Scheduler Platinum AI v13", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="UPRM Scheduler Platinum AI v14", page_icon="🏛️", layout="wide")
 
 st.markdown("""
 <style>
@@ -123,7 +123,7 @@ st.markdown("""
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
         <p style="color: #888; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
-            UPRM MATHEMATICAL OPTIMIZATION ENGINE v13 (EVOLUTIVO + INTENSIVOS + GRANDES)
+            UPRM MATHEMATICAL OPTIMIZATION ENGINE v14 (EVOLUTIVO + INTENSIVOS + GRANDES + REPARACIÓN EXHAUSTIVA)
         </p>
     </div>
     <div class="abstract-icon">∞</div>
@@ -283,7 +283,7 @@ class Profesor:
         return 0.0
 
 # ==============================================================================
-# 4. MOTOR DE OPTIMIZACIÓN EVOLUTIVA
+# 4. MOTOR DE OPTIMIZACIÓN EVOLUTIVA + REPARACIÓN EXHAUSTIVA
 # ==============================================================================
 class TabuScheduler:
     def __init__(self, df_cursos, df_profes, df_salones, zona):
@@ -884,10 +884,12 @@ class TabuScheduler:
         
         return self.mejor_solucion, int(self.mejor_costo // 1000000), self.historial_costos
 
-    # ================== REPARACIÓN POST-OPTIMIZACIÓN ==================
-    def _reparar_solucion(self, sol, max_passes=5):
+    # ================== REPARACIÓN EXHAUSTIVA POST-OPTIMIZACIÓN ==================
+    def _reparar_solucion(self, sol, max_passes=10):
         """
-        Intenta eliminar conflictos duros mediante búsqueda local exhaustiva sobre las secciones conflictivas.
+        Intenta eliminar todos los conflictos duros mediante búsqueda exhaustiva sobre las secciones conflictivas.
+        En cada pase, se recogen todas las secciones con conflictos y se prueba sistemáticamente
+        todas las asignaciones posibles para cada una, verificando que no se generen nuevos conflictos.
         """
         def calcular_cargas(sol):
             cargas = {p: 0.0 for p in self.profesores}
@@ -899,7 +901,7 @@ class TabuScheduler:
                     cargas[p] += self.get_sec_creditos(asign['seccion'], p)
             return cargas
 
-        for _ in range(max_passes):
+        for paso in range(max_passes):
             conflictos = self._obtener_conflictos(sol)
             if not conflictos:
                 break
@@ -907,11 +909,11 @@ class TabuScheduler:
             # Identificar secciones con conflictos
             secciones_conflictivas = set()
             for conf in conflictos:
+                # Buscar código de sección en el mensaje
                 match = re.search(r'Sección (\S+)', conf)
                 if match:
                     secciones_conflictivas.add(match.group(1))
-                # También capturar conflictos de carga que no mencionan sección
-                # Para esos, no podemos actuar directamente, pero el resto de la reparación puede ayudar
+                # También capturar conflictos de carga (no mencionan sección) - para esos no podemos actuar directamente
 
             if not secciones_conflictivas:
                 # Si no hay secciones específicas, no podemos reparar
@@ -920,7 +922,8 @@ class TabuScheduler:
             # Cálculo de cargas actuales
             cargas = calcular_cargas(sol)
 
-            for cod in secciones_conflictivas:
+            # Para cada sección conflictiva, intentar reasignar
+            for cod in list(secciones_conflictivas):
                 idx = next((i for i, a in enumerate(sol) if a['seccion'].cod == cod), None)
                 if idx is None:
                     continue
@@ -932,14 +935,15 @@ class TabuScheduler:
                 ini_viejo = asign['ini']
                 creditos_viejos = self.get_sec_creditos(s, prof_viejo)
 
-                # Generar todas las opciones posibles
-                mejores_opciones = []
-                # Profesores posibles
+                # Generar todas las opciones posibles para esta sección
+                opciones_validas = []
+
+                # Profesores posibles (incluyendo TBA como último recurso)
                 profes_posibles = [p for p in s.cands if p in self.profesores]
                 if s.es_grande:
                     profes_posibles = [p for p in profes_posibles if self.profesores[p].acepta_grandes == 1]
                 if not profes_posibles:
-                    profes_posibles = ["TBA"]  # último recurso
+                    profes_posibles = ["TBA"]
 
                 for prof in profes_posibles:
                     # Patrones permitidos para este profesor
@@ -957,32 +961,33 @@ class TabuScheduler:
                         patrones = PATRONES.get(s.creditos, PATRONES[3])
 
                     for patron in patrones:
-                        for ini in self.bloques:
-                            # Validar restricciones horarias para todos los días
-                            valido = True
-                            for dia, contrib in patron['days'].items():
-                                duracion = contrib * 50
-                                fin = ini + duracion
-                                if fin > self.limite_operativo[1] or ini < self.limite_operativo[0]:
-                                    valido = False
-                                    break
-                                if dia in ["Ma", "Ju"]:
-                                    if max(ini, self.hora_universal[0]) < min(fin, self.hora_universal[1]):
-                                        valido = False
-                                        break
-                                if s.creditos == 3 and contrib >= 3 and ini < 930:
-                                    valido = False
-                                    break
-                            if not valido:
-                                continue
+                        # Horas de inicio posibles para este patrón
+                        # Verificar restricciones horarias para todos los días
+                        inicios_posibles = set(self.bloques)
+                        for dia, contrib in patron['days'].items():
+                            duracion = contrib * 50
+                            # Filtrar por límite operativo
+                            inicios_posibles = [ini for ini in inicios_posibles if ini >= self.limite_operativo[0] and ini + duracion <= self.limite_operativo[1]]
+                            # Hora universal
+                            if dia in ["Ma", "Ju"]:
+                                inicios_posibles = [ini for ini in inicios_posibles if not (max(ini, self.hora_universal[0]) < min(ini+duracion, self.hora_universal[1]))]
+                            # Cursos intensivos de 3 créditos deben empezar después de las 3:30 PM (930 min)
+                            if s.creditos == 3 and contrib >= 3:
+                                inicios_posibles = [ini for ini in inicios_posibles if ini >= 930]
+                            # Convertir a lista para la siguiente iteración
+                            inicios_posibles = list(inicios_posibles)
 
-                            # Salones posibles
-                            salones_posibles = [sl['CODIGO'] for sl in self.salones if sl['TIPO'] == s.tipo_salon and sl['CAPACIDAD'] >= s.cupo]
-                            if not salones_posibles:
-                                salones_posibles = [sl['CODIGO'] for sl in self.salones if sl['CAPACIDAD'] >= s.cupo]
-                            if not salones_posibles:
-                                salones_posibles = ["TBA"]
+                        if not inicios_posibles:
+                            continue
 
+                        # Salones posibles
+                        salones_posibles = [sl['CODIGO'] for sl in self.salones if sl['TIPO'] == s.tipo_salon and sl['CAPACIDAD'] >= s.cupo]
+                        if not salones_posibles:
+                            salones_posibles = [sl['CODIGO'] for sl in self.salones if sl['CAPACIDAD'] >= s.cupo]
+                        if not salones_posibles:
+                            salones_posibles = ["TBA"]
+
+                        for ini in inicios_posibles:
                             for salon in salones_posibles:
                                 # Verificar conflictos de horario con otras secciones
                                 conflicto_horario = False
@@ -1023,6 +1028,7 @@ class TabuScheduler:
                                                 break
                                     if conflicto_horario:
                                         break
+
                                 if conflicto_horario:
                                     continue
 
@@ -1045,25 +1051,19 @@ class TabuScheduler:
 
                                 # Opción válida
                                 nueva_asign = {'seccion': s, 'profesor': prof, 'salon': salon, 'patron': patron, 'ini': ini}
-                                # Calcular costo aproximado (solo para comparar)
-                                # Podríamos calcular el costo total, pero es costoso. Usamos una heurística simple.
-                                costo_est = 0
-                                # Preferimos menos cambios
-                                if prof != prof_viejo:
-                                    costo_est += 10
-                                if salon != salon_viejo:
-                                    costo_est += 5
-                                if patron != patron_viejo:
-                                    costo_est += 3
-                                if ini != ini_viejo:
-                                    costo_est += 2
-                                mejores_opciones.append((costo_est, nueva_asign))
+                                opciones_validas.append(nueva_asign)
 
-                if mejores_opciones:
-                    # Ordenar por costo estimado y tomar el mejor
-                    mejores_opciones.sort(key=lambda x: x[0])
-                    mejor_asign = mejores_opciones[0][1]
-                    # Actualizar solución y cargas
+                if opciones_validas:
+                    # Elegir la opción que minimice cambios respecto a la actual (heurística simple)
+                    # Preferimos mantener profesor si es posible
+                    opciones_validas.sort(key=lambda a: (
+                        0 if a['profesor'] == prof_viejo else 1,
+                        0 if a['salon'] == salon_viejo else 1,
+                        0 if a['patron'] == patron_viejo else 1,
+                        0 if a['ini'] == ini_viejo else 1
+                    ))
+                    mejor_asign = opciones_validas[0]
+                    # Actualizar solución
                     sol[idx] = mejor_asign
                     # Actualizar cargas
                     nuevo_prof = mejor_asign['profesor']
@@ -1191,7 +1191,7 @@ def main():
     with st.sidebar:
         st.markdown("### ∑ Configuración")
         zona = st.selectbox("Zona Campus", ["CENTRAL", "PERIFERICA"])
-        iteraciones = st.slider("Iteraciones de Búsqueda", 100, 5000, 500)
+        iteraciones = st.slider("Iteraciones de Búsqueda Evolutiva", 500, 10000, 2000, step=100)
         file = st.file_uploader("Subir Protocolo Excel", type=['xlsx'])
         st.download_button(
             label="📥 Descargar Plantilla",
@@ -1234,8 +1234,8 @@ def main():
                 
                 # Reparar si quedan conflictos
                 if conflictos > 0:
-                    st.warning("Reparando conflictos residuales...")
-                    mejor_sol = scheduler._reparar_solucion(mejor_sol)
+                    st.warning("Reparando conflictos residuales de forma exhaustiva...")
+                    mejor_sol = scheduler._reparar_solucion(mejor_sol, max_passes=10)
                     # Recalcular conflictos
                     conflictos = scheduler._costo_total(mejor_sol) // 1000000
                 
