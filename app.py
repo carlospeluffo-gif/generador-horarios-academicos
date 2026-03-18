@@ -353,13 +353,16 @@ class TabuScheduler:
 
         self._preasignar_profesores_robusto()
 
-        self.bloques = list(range(420, 1171, 30))
+        # ===== CORRECCIÓN DE LÍMITES HORARIOS =====
         if zona == "CENTRAL":
-            self.hora_universal = (630, 750)
-            self.limite_operativo = (450, 1170)
-        else:
-            self.hora_universal = (600, 720)
-            self.limite_operativo = (420, 1140)
+            self.hora_universal = (630, 750)          # 10:30 - 12:30
+            self.limite_operativo = (450, 1110)       # 07:30 - 18:30
+            # Inicios cada hora desde 7:30 hasta 17:30 (último que permite terminar a las 18:30 con clase de 1h)
+            self.bloques = list(range(450, 1051, 60)) # 450,510,...,1050
+        else:  # PERIFERICA
+            self.hora_universal = (600, 720)          # 10:00 - 12:00
+            self.limite_operativo = (420, 1080)       # 07:00 - 18:00
+            self.bloques = list(range(420, 1021, 60)) # 420,480,...,1020
 
         self.solucion = self._construir_solucion_greedy()
         self.mejor_solucion = deepcopy(self.solucion)
@@ -804,6 +807,53 @@ def generar_heatmap_ocupacion(scheduler, solucion):
     return fig
 
 # ==============================================================================
+# FUNCIÓN PARA GENERAR PLANTILLA EXCEL (NUEVA)
+# ==============================================================================
+def generar_plantilla():
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        # Hoja Cursos
+        df_cursos = pd.DataFrame({
+            'CODIGO': ['MATE3171', 'MATE3172'],
+            'CREDITOS': [3, 3],
+            'DEMANDA': [120, 150],
+            'CUPO': [30, 30],
+            'CANDIDATOS': ['PEREZ, GONZALEZ', 'RODRIGUEZ'],
+            'TIPO_SALON': [1, 1]
+        })
+        df_cursos.to_excel(writer, sheet_name='Cursos', index=False)
+        
+        # Hoja Profesores
+        df_profes = pd.DataFrame({
+            'NOMBRE': ['PEREZ', 'GONZALEZ'],
+            'CARGA_MIN': [9, 6],
+            'CARGA_MAX': [15, 12],
+            'PREF_DIAS': ['LMV', 'MJ'],
+            'PREF_HORAS': ['AM', 'PM'],
+            'BLOQUEO_DIAS': ['', ''],
+            'BLOQUEO_HORA_INI': ['', ''],
+            'BLOQUEO_HORA_FIN': ['', ''],
+            'PREF1': ['MATE3171', 'MATE3172'],
+            'PREF2': ['', ''],
+            'PREF3': ['', ''],
+            'COMPENSACION': ['NO', 'SI'],
+            'ACEPTA_GRANDES': [0, 1],
+            'CURSOS_INTENSIVOS': [0, 1]
+        })
+        df_profes.to_excel(writer, sheet_name='Profesores', index=False)
+        
+        # Hoja Salones
+        df_salones = pd.DataFrame({
+            'CODIGO': ['S-101', 'S-102'],
+            'CAPACIDAD': [30, 40],
+            'TIPO': [1, 2]
+        })
+        df_salones.to_excel(writer, sheet_name='Salones', index=False)
+    
+    output.seek(0)
+    return output.getvalue()
+
+# ==============================================================================
 # 6. UI PRINCIPAL
 # ==============================================================================
 def main():
@@ -812,6 +862,13 @@ def main():
         zona = st.selectbox("Zona Campus", ["CENTRAL", "PERIFERICA"])
         iteraciones = st.slider("Iteraciones de Búsqueda", 100, 5000, 300)
         file = st.file_uploader("Subir Protocolo Excel", type=['xlsx'])
+        # Botón de descarga de plantilla
+        st.download_button(
+            label="📥 Descargar Plantilla",
+            data=generar_plantilla(),
+            file_name="PLANTILLA.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
     st.markdown(f"### Ω Condiciones de Zona: {zona}")
     c1, c2, c3 = st.columns(3)
