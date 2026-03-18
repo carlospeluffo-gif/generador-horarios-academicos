@@ -582,20 +582,20 @@ class TabuScheduler:
                 if carga > prof_obj.carga_max + 1.5: conflicts += 10000
                 if carga < prof_obj.carga_min - 1.5: conflicts += 10000
         
-        # Penalización por consistencia de salón por profesor y tipo
+        # Penalización suave por consistencia de salón por profesor y tipo
         salones_por_prof_tipo = {}
         for asign in sol:
             prof = asign['profesor']
             if prof not in ["GRADUADOS", "TBA"] and prof in self.profesores:
                 salon = asign['salon']
-                tipo = self.salon_tipo.get(salon, 1)  # por si acaso
+                tipo = self.salon_tipo.get(salon, 1)
                 key = (prof, tipo)
                 if key not in salones_por_prof_tipo:
                     salones_por_prof_tipo[key] = set()
                 salones_por_prof_tipo[key].add(salon)
         for (prof, tipo), salones in salones_por_prof_tipo.items():
             if len(salones) > 1:
-                soft_penalty += (len(salones) - 1) * 20  # peso ajustable
+                soft_penalty += (len(salones) - 1) * 2   # peso muy bajo para no generar conflictos
         
         return conflicts + soft_penalty
 
