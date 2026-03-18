@@ -250,8 +250,7 @@ class Seccion:
 class Profesor:
     def __init__(self, nombre, carga_min, carga_max, pref_dias, pref_horas,
                  bloqueo_dias, bloqueo_ini, bloqueo_fin,
-                 preferencias_cursos, compensacion, acepta_grandes, cursos_intensivos=0,
-                 cuantas=''):  # <--- NUEVO PARÁMETRO
+                 preferencias_cursos, compensacion, acepta_grandes, cursos_intensivos=0):
         self.nombre = nombre.upper().strip()
         self.carga_min = float(carga_min) if pd.notnull(carga_min) and carga_min != '' else 0.0
         self.carga_max = float(carga_max) if pd.notnull(carga_max) and carga_max != '' else 12.0
@@ -269,19 +268,6 @@ class Profesor:
             self.cursos_intensivos = int(cursos_intensivos)
         except:
             self.cursos_intensivos = 0
-
-        # --- NUEVO: Procesar columna CUANTAS (formato "X-Y") ---
-        self.cuantas = str(cuantas).strip()
-        self.max_secciones_grandes = 0
-        self.tamano_grande = 0
-        if self.cuantas and '-' in self.cuantas:
-            try:
-                partes = self.cuantas.split('-')
-                self.max_secciones_grandes = int(partes[0])
-                self.tamano_grande = int(partes[1])
-            except:
-                pass  # Si hay error, se ignoran los límites
-        # --------------------------------------------------------
 
     def prioridad_curso(self, curso_cod):
         for idx, pref in enumerate(self.preferencias):
@@ -326,8 +312,7 @@ class TabuScheduler:
                     preferencias_cursos=prefs,
                     compensacion=r.get('COMPENSACION', 'NO'),
                     acepta_grandes=r.get('ACEPTA_GRANDES', 0),
-                    cursos_intensivos=r.get('CURSOS_INTENSIVOS', 0),
-                    cuantas=r.get('CUANTAS', '')   # <--- NUEVO CAMPO
+                    cursos_intensivos=r.get('CURSOS_INTENSIVOS', 0)
                 )
                 self.profesores[prof.nombre] = prof
 
@@ -529,21 +514,6 @@ class TabuScheduler:
             if prof_obj:
                 if carga > prof_obj.carga_max + 1.5: conflicts += 10000
                 if carga < prof_obj.carga_min - 1.5: conflicts += 10000
-
-        # --- NUEVO: Verificar límites de secciones grandes por profesor ---
-        for prof, carga in carga_prof.items():
-            prof_obj = self.profesores.get(prof)
-            if prof_obj and prof_obj.max_secciones_grandes > 0:
-                # Contar cuántas secciones de este profesor tienen cupo >= tamano_grande
-                count_grandes = 0
-                for asign in sol:
-                    if asign['profesor'] == prof:
-                        if asign['seccion'].cupo >= prof_obj.tamano_grande:
-                            count_grandes += 1
-                if count_grandes > prof_obj.max_secciones_grandes:
-                    exceso = count_grandes - prof_obj.max_secciones_grandes
-                    conflicts += exceso * 10000   # Penalización dura
-        # ----------------------------------------------------------------
         
         return conflicts + soft_penalty
 
@@ -611,19 +581,6 @@ class TabuScheduler:
                     conflictos_list.append(f"Profesor {prof} excede carga máxima ({carga} > {prof_obj.carga_max})")
                 if carga < prof_obj.carga_min - 1.5:
                     conflictos_list.append(f"Profesor {prof} no alcanza carga mínima ({carga} < {prof_obj.carga_min})")
-
-        # --- NUEVO: Reportar exceso de secciones grandes (opcional, para auditoría) ---
-        for prof, carga in carga_prof.items():
-            prof_obj = self.profesores.get(prof)
-            if prof_obj and prof_obj.max_secciones_grandes > 0:
-                count_grandes = 0
-                for asign in sol:
-                    if asign['profesor'] == prof:
-                        if asign['seccion'].cupo >= prof_obj.tamano_grande:
-                            count_grandes += 1
-                if count_grandes > prof_obj.max_secciones_grandes:
-                    conflictos_list.append(f"Profesor {prof} tiene {count_grandes} secciones grandes (máx {prof_obj.max_secciones_grandes} de ≥{prof_obj.tamano_grande} estudiantes)")
-        # ----------------------------------------------------------------------------
         
         return conflictos_list
 
