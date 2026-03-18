@@ -723,46 +723,60 @@ class TabuScheduler:
         idx = random.randint(0, len(nuevo)-1)
         asign = nuevo[idx]
         s = asign['seccion']
-        prof = asign['profesor']
-        
-        mejores_opciones = []
-        patrones = PATRONES.get(s.creditos, PATRONES[3])
-        puede_ser_intensivo = any(any(c >= 3 for c in p['days'].values()) for p in patrones)
-        
-        if prof in self.profesores:
-            p_obj = self.profesores[prof]
-            if p_obj.cursos_intensivos == 0:
-                patrones = [p for p in patrones if not any(c >= 3 for c in p['days'].values())]
-            elif p_obj.cursos_intensivos == 1 and puede_ser_intensivo:
-                patrones_int = [p for p in patrones if any(c >= 3 for c in p['days'].values())]
-                if patrones_int: patrones = patrones_int
+        prof_actual = asign['profesor']
 
-        if not patrones: patrones = PATRONES.get(s.creditos, PATRONES[3])
+        mejores_opciones = []
 
         for _ in range(15):
-            p_test = random.choice(patrones)
-            ini_test = random.choice(self.bloques)
-            s_test = asign['salon']
-            
+            # Copia de la asignación actual para probar variantes
+            candidata = asign.copy()
+
+            # --- Posible cambio de profesor (10% de probabilidad) ---
+            if random.random() < 0.1:
+                # Candidatos válidos (profesores reales, distintos al actual)
+                candidatos_validos = [c for c in s.cands if c in self.profesores and c != prof_actual]
+                if candidatos_validos:
+                    candidata['profesor'] = random.choice(candidatos_validos)
+
+            # --- Selección de patrón según el profesor (respeta CURSOS_INTENSIVOS) ---
+            prof = candidata['profesor']
+            patrones = PATRONES.get(s.creditos, PATRONES[3])
+            puede_ser_intensivo = any(any(c >= 3 for c in p['days'].values()) for p in patrones)
+
+            if prof in self.profesores:
+                p_obj = self.profesores[prof]
+                if p_obj.cursos_intensivos == 0:
+                    patrones = [p for p in patrones if not any(c >= 3 for c in p['days'].values())]
+                elif p_obj.cursos_intensivos == 1 and puede_ser_intensivo:
+                    patrones_int = [p for p in patrones if any(c >= 3 for c in p['days'].values())]
+                    if patrones_int:
+                        patrones = patrones_int
+
+            if not patrones:  # fallback
+                patrones = PATRONES.get(s.creditos, PATRONES[3])
+
+            candidata['patron'] = random.choice(patrones)
+
+            # --- Hora de inicio aleatoria ---
+            candidata['ini'] = random.choice(self.bloques)
+
+            # --- Posible cambio de salón (20% de probabilidad) ---
             if random.random() < 0.2:
-                sals = [sl['CODIGO'] for sl in self.salones if sl['TIPO'] == s.tipo_salon and sl['CAPACIDAD'] >= s.cupo]
-                if sals: s_test = random.choice(sals)
-                
-            nuevo[idx]['patron'] = p_test
-            nuevo[idx]['ini'] = ini_test
-            nuevo[idx]['salon'] = s_test
-            
+                sals = [sl['CODIGO'] for sl in self.salones
+                        if sl['TIPO'] == s.tipo_salon and sl['CAPACIDAD'] >= s.cupo]
+                if sals:
+                    candidata['salon'] = random.choice(sals)
+
+            # Evalúa el costo de la solución con este cambio
+            nuevo[idx] = candidata
             costo = self._costo_total(nuevo)
-            mejores_opciones.append((costo, p_test, ini_test, s_test))
-            
+            mejores_opciones.append((costo, candidata))
+
+        # Elige la mejor opción entre las 15 probadas
         mejores_opciones.sort(key=lambda x: x[0])
-        mejor_op = mejores_opciones[0]
-        
-        nuevo[idx]['patron'] = mejor_op[1]
-        nuevo[idx]['ini'] = mejor_op[2]
-        nuevo[idx]['salon'] = mejor_op[3]
-        
-        return nuevo, mejor_op[0]
+        mejor_opcion = mejores_opciones[0]
+        nuevo[idx] = mejor_opcion[1]
+        return nuevo, mejor_opcion[0]
 
     def optimizar(self, iteraciones=200, bar=None, status_text=None):
         temp_inicial = 5000.0
