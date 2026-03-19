@@ -18,7 +18,7 @@ CUPO_GRANDE = 85  # Cupo por defecto para secciones grandes (modificable)
 # ==============================================================================
 # 1. ESTÉTICA
 # ==============================================================================
-st.set_page_config(page_title="UPRM Scheduler Platinum AI v14", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="UPRM Scheduler Platinum AI v15", page_icon="🏛️", layout="wide")
 
 st.markdown("""
 <style>
@@ -123,7 +123,7 @@ st.markdown("""
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
         <p style="color: #888; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
-            UPRM MATHEMATICAL OPTIMIZATION ENGINE v14 (EVOLUTIVO + INTENSIVOS + GRANDES + REPARACIÓN EXHAUSTIVA)
+            UPRM MATHEMATICAL OPTIMIZATION ENGINE v15 (HÍBRIDO + GRANDES + REPARACIÓN)
         </p>
     </div>
     <div class="abstract-icon">∞</div>
@@ -283,7 +283,7 @@ class Profesor:
         return 0.0
 
 # ==============================================================================
-# 4. MOTOR DE OPTIMIZACIÓN EVOLUTIVA + REPARACIÓN EXHAUSTIVA
+# 4. MOTOR DE OPTIMIZACIÓN HÍBRIDO (v13 + v14 + reparación)
 # ==============================================================================
 class TabuScheduler:
     def __init__(self, df_cursos, df_profes, df_salones, zona):
@@ -326,7 +326,7 @@ class TabuScheduler:
                 )
                 self.profesores[prof.nombre] = prof
 
-        # 3. Procesar Cursos y Secciones
+        # 3. Procesar Cursos y Secciones (versión v14 mejorada)
         self.secciones = []
         df_cursos.columns = [c.strip().upper() for c in df_cursos.columns]
 
@@ -414,17 +414,18 @@ class TabuScheduler:
             elif demanda_restante == 0 and num_grandes == 0:
                 self.secciones.append(Seccion(f"{cod_base}-01", creditos, cupo_normal, candidatos, tipo_salon, es_grande=False))
 
+        # Preasignación robusta (versión v13 adaptada)
         self._preasignar_profesores_robusto()
 
-        # Límites horarios según zona
+        # Límites horarios según zona (igual que v13)
         if zona == "CENTRAL":
-            self.hora_universal = (630, 750)
-            self.limite_operativo = (450, 1110)
-            self.bloques = list(range(450, 1051, 60))
-        else:
-            self.hora_universal = (600, 720)
-            self.limite_operativo = (420, 1080)
-            self.bloques = list(range(420, 1021, 60))
+            self.hora_universal = (630, 750)          # 10:30 - 12:30
+            self.limite_operativo = (450, 1110)       # 07:30 - 18:30
+            self.bloques = list(range(450, 1051, 60)) # 450,510,...,1050
+        else:  # PERIFERICA
+            self.hora_universal = (600, 720)          # 10:00 - 12:00
+            self.limite_operativo = (420, 1080)       # 07:00 - 18:00
+            self.bloques = list(range(420, 1021, 60)) # 420,480,...,1020
 
         self.solucion = self._construir_solucion_greedy()
         self.mejor_solucion = deepcopy(self.solucion)
@@ -438,14 +439,17 @@ class TabuScheduler:
         return float(s.creditos)
 
     def _preasignar_profesores_robusto(self):
+        # Inicializar cargas
         carga_actual = {p: 0.0 for p in self.profesores}
         carga_actual["GRADUADOS"] = 0.0
         carga_actual["TBA"] = 0.0
         
+        # Capacidad restante (máxima) por profesor
         capacidad_restante = {}
         for p in self.profesores.values():
             capacidad_restante[p.nombre] = p.carga_max
         
+        # 1. Asignar secciones con único candidato (forzosas)
         secciones_unicas = []
         secciones_multiple = []
         for s in self.secciones:
@@ -465,14 +469,17 @@ class TabuScheduler:
             else:
                 secciones_multiple.append(s)
         
+        # Asignar únicas respetando capacidad (si es posible)
         for s in secciones_unicas:
-            prof = s.cands[0]
+            prof = s.cands[0]  # único candidato
             creditos = self.get_sec_creditos(s, prof)
             s.prof_preasignado = prof
             carga_actual[prof] += creditos
             if prof in capacidad_restante:
                 capacidad_restante[prof] -= creditos
         
+        # 2. Asignar secciones con múltiples candidatos
+        # Calcular puntaje de preferencia para cada par (sección, profesor)
         preferencias = {}
         for s in secciones_multiple:
             preferencias[s] = {}
@@ -482,12 +489,15 @@ class TabuScheduler:
                 else:
                     preferencias[s][prof] = 0.0
         
+        # Ordenar secciones: menos candidatos primero, luego mayor preferencia máxima
         secciones_multiple.sort(key=lambda s: (len(s.cands), -max(preferencias[s].values())))
         
         for s in secciones_multiple:
             candidatos_ordenados = sorted(s.cands, key=lambda p: preferencias[s].get(p, 0), reverse=True)
             asignado = False
             for prof in candidatos_ordenados:
+                if s.es_grande and not self.profesores[prof].acepta_grandes:
+                    continue
                 if prof in capacidad_restante and capacidad_restante[prof] >= self.get_sec_creditos(s, prof):
                     s.prof_preasignado = prof
                     creditos = self.get_sec_creditos(s, prof)
@@ -496,13 +506,18 @@ class TabuScheduler:
                     asignado = True
                     break
             if not asignado:
-                prof = candidatos_ordenados[0]
-                s.prof_preasignado = prof
-                creditos = self.get_sec_creditos(s, prof)
-                carga_actual[prof] += creditos
-                if prof in capacidad_restante:
-                    capacidad_restante[prof] -= creditos
+                # Si ningún candidato tiene capacidad, asignar el de mejor preferencia (sobrecarga)
+                for prof in candidatos_ordenados:
+                    if s.es_grande and not self.profesores[prof].acepta_grandes:
+                        continue
+                    s.prof_preasignado = prof
+                    creditos = self.get_sec_creditos(s, prof)
+                    carga_actual[prof] += creditos
+                    if prof in capacidad_restante:
+                        capacidad_restante[prof] -= creditos
+                    break
         
+        # 3. Ajuste fino con recocido (mismo que v13)
         def calc_penalidad():
             pen = 0
             for p, c in carga_actual.items():
@@ -518,21 +533,27 @@ class TabuScheduler:
         for _ in range(30000):
             if penalidad_actual == 0:
                 break
+            
             s = random.choice(self.secciones)
             prof_viejo = s.prof_preasignado
             if prof_viejo not in self.profesores:
                 continue
+            
             cands = [p for p in s.cands if p in self.profesores and p != prof_viejo]
             if s.es_grande:
                 cands = [p for p in cands if self.profesores[p].acepta_grandes == 1]
             if not cands:
                 continue
+            
             nuevo_prof = random.choice(cands)
             creditos_viejos = self.get_sec_creditos(s, prof_viejo)
             creditos_nuevos = self.get_sec_creditos(s, nuevo_prof)
+            
             carga_actual[prof_viejo] -= creditos_viejos
             carga_actual[nuevo_prof] += creditos_nuevos
+            
             nueva_pen = calc_penalidad()
+            
             if nueva_pen < penalidad_actual:
                 penalidad_actual = nueva_pen
                 s.prof_preasignado = nuevo_prof
@@ -564,14 +585,14 @@ class TabuScheduler:
             ini = asign['ini']
             
             if prof == "TBA" or salon == "TBA":
-                conflicts += 1000000  # Mucho más alto para evitar cualquier TBA
+                conflicts += 10000
                 continue
             
             salon_info = next((sl for sl in self.salones if sl['CODIGO'] == salon), None)
             if salon_info and salon_info['CAPACIDAD'] < s.cupo:
-                conflicts += 1000000
+                conflicts += 10000
             if salon_info and not (salon in self.mega_salones and s.es_fusionable) and salon_info['TIPO'] != s.tipo_salon:
-                conflicts += 1000000
+                conflicts += 10000
             
             if prof in carga_prof:
                 carga_prof[prof] += self.get_sec_creditos(s, prof)
@@ -582,9 +603,9 @@ class TabuScheduler:
             if prof != "GRADUADOS" and prof in self.profesores:
                 prof_obj = self.profesores[prof]
                 if prof_obj.cursos_intensivos == 0 and es_intensivo:
-                    conflicts += 1000000
+                    conflicts += 10000
                 elif prof_obj.cursos_intensivos == 1 and puede_ser_intensivo and not es_intensivo:
-                    conflicts += 1000000
+                    conflicts += 10000
                 if prof_obj.pref_horas == 'AM' and ini >= 720:
                     soft_penalty += 30
                 elif prof_obj.pref_horas == 'PM' and ini < 720:
@@ -598,11 +619,11 @@ class TabuScheduler:
             for dia, contrib in patron['days'].items():
                 fin = ini + int(contrib * 50)
                 if dia in ["Ma", "Ju"] and max(ini, self.hora_universal[0]) < min(fin, self.hora_universal[1]):
-                    conflicts += 1000000
+                    conflicts += 10000
                 if s.creditos == 3 and contrib >= 3 and ini < 930:
-                    conflicts += 1000000
+                    conflicts += 10000
                 if fin > self.limite_operativo[1] or ini < self.limite_operativo[0]:
-                    conflicts += 1000000
+                    conflicts += 10000
                 
                 if prof != "GRADUADOS":
                     clave = (prof, dia)
@@ -610,7 +631,7 @@ class TabuScheduler:
                         occ_prof[clave] = []
                     for (ini_ex, fin_ex) in occ_prof[clave]:
                         if max(ini, ini_ex) < min(fin, fin_ex):
-                            conflicts += 1000000
+                            conflicts += 10000
                     occ_prof[clave].append((ini, fin))
                 
                 clave_s = (salon, dia)
@@ -621,16 +642,16 @@ class TabuScheduler:
                         if salon in self.mega_salones and s.es_fusionable and fus_ex:
                             if s.cupo + cupo_ex <= salon_info['CAPACIDAD']:
                                 continue
-                        conflicts += 1000000
+                        conflicts += 10000
                 occ_salon[clave_s].append((ini, fin, s.cupo, s.es_fusionable))
         
         for prof, carga in carga_prof.items():
             prof_obj = self.profesores.get(prof)
             if prof_obj:
                 if carga > prof_obj.carga_max + 1.5:
-                    conflicts += 1000000
+                    conflicts += 10000
                 if carga < prof_obj.carga_min - 1.5:
-                    conflicts += 1000000
+                    conflicts += 10000
         
         # Penalización suave por usar diferentes salones del mismo tipo (muy baja)
         salones_por_prof_tipo = {}
@@ -645,7 +666,7 @@ class TabuScheduler:
                 salones_por_prof_tipo[key].add(salon)
         for (prof, tipo), salones in salones_por_prof_tipo.items():
             if len(salones) > 1:
-                soft_penalty += (len(salones) - 1) * 10
+                soft_penalty += (len(salones) - 1) * 2   # peso muy bajo
         
         return conflicts + soft_penalty
 
@@ -877,14 +898,14 @@ class TabuScheduler:
             if it % 10 == 0 or it == iteraciones - 1:
                 if status_text:
                     fitness_actual = 10000 / (10000 + self.mejor_costo)
-                    duros = int(self.mejor_costo // 1000000)  # Ajustado por el nuevo peso
+                    duros = int(self.mejor_costo // 10000)
                     status_text.markdown(f"**🔄 Generación {it+1}/{iteraciones}** | Conflictos Duros: {duros} | Costo Total: {self.mejor_costo:.2f} | Fitness: {fitness_actual:.5f}")
                 if bar:
                     bar.progress((it+1)/iteraciones)
         
-        return self.mejor_solucion, int(self.mejor_costo // 1000000), self.historial_costos
+        return self.mejor_solucion, int(self.mejor_costo // 10000), self.historial_costos
 
-    # ================== REPARACIÓN EXHAUSTIVA POST-OPTIMIZACIÓN ==================
+    # ================== REPARACIÓN POST-OPTIMIZACIÓN ==================
     def _reparar_solucion(self, sol, max_passes=10):
         """
         Intenta eliminar todos los conflictos duros mediante búsqueda exhaustiva sobre las secciones conflictivas.
@@ -909,20 +930,16 @@ class TabuScheduler:
             # Identificar secciones con conflictos
             secciones_conflictivas = set()
             for conf in conflictos:
-                # Buscar código de sección en el mensaje
                 match = re.search(r'Sección (\S+)', conf)
                 if match:
                     secciones_conflictivas.add(match.group(1))
-                # También capturar conflictos de carga (no mencionan sección) - para esos no podemos actuar directamente
 
             if not secciones_conflictivas:
-                # Si no hay secciones específicas, no podemos reparar
                 break
 
             # Cálculo de cargas actuales
             cargas = calcular_cargas(sol)
 
-            # Para cada sección conflictiva, intentar reasignar
             for cod in list(secciones_conflictivas):
                 idx = next((i for i, a in enumerate(sol) if a['seccion'].cod == cod), None)
                 if idx is None:
@@ -938,7 +955,7 @@ class TabuScheduler:
                 # Generar todas las opciones posibles para esta sección
                 opciones_validas = []
 
-                # Profesores posibles (incluyendo TBA como último recurso)
+                # Profesores posibles
                 profes_posibles = [p for p in s.cands if p in self.profesores]
                 if s.es_grande:
                     profes_posibles = [p for p in profes_posibles if self.profesores[p].acepta_grandes == 1]
@@ -961,21 +978,17 @@ class TabuScheduler:
                         patrones = PATRONES.get(s.creditos, PATRONES[3])
 
                     for patron in patrones:
-                        # Horas de inicio posibles para este patrón
-                        # Verificar restricciones horarias para todos los días
+                        # Determinar inicios posibles para este patrón
                         inicios_posibles = set(self.bloques)
                         for dia, contrib in patron['days'].items():
                             duracion = contrib * 50
-                            # Filtrar por límite operativo
-                            inicios_posibles = [ini for ini in inicios_posibles if ini >= self.limite_operativo[0] and ini + duracion <= self.limite_operativo[1]]
-                            # Hora universal
+                            inicios_dia = [ini for ini in self.bloques if ini >= self.limite_operativo[0] and ini + duracion <= self.limite_operativo[1]]
                             if dia in ["Ma", "Ju"]:
-                                inicios_posibles = [ini for ini in inicios_posibles if not (max(ini, self.hora_universal[0]) < min(ini+duracion, self.hora_universal[1]))]
-                            # Cursos intensivos de 3 créditos deben empezar después de las 3:30 PM (930 min)
+                                inicios_dia = [ini for ini in inicios_dia if not (max(ini, self.hora_universal[0]) < min(ini+duracion, self.hora_universal[1]))]
                             if s.creditos == 3 and contrib >= 3:
-                                inicios_posibles = [ini for ini in inicios_posibles if ini >= 930]
-                            # Convertir a lista para la siguiente iteración
-                            inicios_posibles = list(inicios_posibles)
+                                inicios_dia = [ini for ini in inicios_dia if ini >= 930]
+                            inicios_posibles = inicios_posibles.intersection(set(inicios_dia))
+                        inicios_posibles = list(inicios_posibles)
 
                         if not inicios_posibles:
                             continue
@@ -1016,7 +1029,6 @@ class TabuScheduler:
                                                     ini2 = otra['ini']
                                                     fin2 = ini2 + int(contrib2 * 50)
                                                     if max(ini, ini2) < min(ini + duracion, fin2):
-                                                        # Verificar fusión
                                                         if salon in self.mega_salones and s.es_fusionable and otra['seccion'].es_fusionable:
                                                             total_cupo = s.cupo + otra['seccion'].cupo
                                                             salon_info = next((sl for sl in self.salones if sl['CODIGO'] == salon), None)
@@ -1054,8 +1066,7 @@ class TabuScheduler:
                                 opciones_validas.append(nueva_asign)
 
                 if opciones_validas:
-                    # Elegir la opción que minimice cambios respecto a la actual (heurística simple)
-                    # Preferimos mantener profesor si es posible
+                    # Elegir la opción que minimice cambios respecto a la actual
                     opciones_validas.sort(key=lambda a: (
                         0 if a['profesor'] == prof_viejo else 1,
                         0 if a['salon'] == salon_viejo else 1,
@@ -1191,7 +1202,7 @@ def main():
     with st.sidebar:
         st.markdown("### ∑ Configuración")
         zona = st.selectbox("Zona Campus", ["CENTRAL", "PERIFERICA"])
-        iteraciones = st.slider("Iteraciones de Búsqueda Evolutiva", 500, 10000, 2000, step=100)
+        iteraciones = st.slider("Iteraciones de Búsqueda Evolutiva", 500, 5000, 1000, step=100)
         file = st.file_uploader("Subir Protocolo Excel", type=['xlsx'])
         st.download_button(
             label="📥 Descargar Plantilla",
@@ -1237,7 +1248,7 @@ def main():
                     st.warning("Reparando conflictos residuales de forma exhaustiva...")
                     mejor_sol = scheduler._reparar_solucion(mejor_sol, max_passes=10)
                     # Recalcular conflictos
-                    conflictos = scheduler._costo_total(mejor_sol) // 1000000
+                    conflictos = scheduler._costo_total(mejor_sol) // 10000
                 
                 st.session_state.elapsed_time = time.time() - start_time
                 st.session_state.conflicts = conflictos
