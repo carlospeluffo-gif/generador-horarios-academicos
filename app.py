@@ -633,8 +633,8 @@ class TabuScheduler:
         for prof, carga in carga_prof.items():
             prof_obj = self.profesores.get(prof)
             if prof_obj:
-                if carga > prof_obj.carga_max + 1.5: conflicts += 10000
-                if carga < prof_obj.carga_min - 1.5: conflicts += 10000
+                if carga > prof_obj.carga_max + 1.5: conflicts += 100000
+                if carga < prof_obj.carga_min - 1.5: conflicts += 100000
         
         # Penalización suave por consistencia de salón por profesor y tipo
         salones_por_prof_tipo = {}
