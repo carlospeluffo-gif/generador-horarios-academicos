@@ -378,7 +378,7 @@ class TabuScheduler:
             acepta_comp = any(c in self.profesores and self.profesores[c].compensacion for c in candidatos_list)
             
             if acepta_comp and demanda_total > cupo_tipico:
-                cupo_efectivo = min(demanda_total, 150) 
+                cupo_efectivo = min(demanda_total, 85) 
             else:
                 cupo_efectivo = cupo_tipico
 
