@@ -369,7 +369,7 @@ class TabuScheduler:
                 )
                 self.profesores[prof.nombre] = prof
 
-        # 3. Procesar Cursos y Secciones (con soporte para cupos explícitos y tolerancia de sobrecupo)
+        # 3. Procesar Cursos y Secciones (con soporte para cupos explícitos y umbral para evitar secciones pequeñas)
         self.secciones = []
         df_cursos.columns = [c.strip().upper() for c in df_cursos.columns]
         cursos_agrupados = {}
@@ -389,50 +389,66 @@ class TabuScheduler:
         for cod_base, datos in cursos_agrupados.items():
             demanda_total = datos['demanda']
             cupo_raw = datos['cupo_raw']
-            # Intentar parsear lista de cupos
-            cupo_parts = [int(p.strip()) for p in cupo_raw.split(',') if p.strip()]
             
-            if len(cupo_parts) == 1:
+            # Procesar cupo_raw para obtener lista de enteros
+            # Si está vacío o solo espacios, usar ["30"]
+            if not cupo_raw:
+                cupo_raw = "30"
+            # Dividir por comas y limpiar espacios
+            partes = [p.strip() for p in cupo_raw.split(',') if p.strip()]
+            if not partes:
+                partes = ["30"]
+            # Convertir a enteros, permitiendo decimales
+            cupos = []
+            for p in partes:
+                try:
+                    cupos.append(int(float(p)))
+                except:
+                    # Si no se puede convertir, usar 30
+                    cupos.append(30)
+            
+            if len(cupos) == 1:
                 # Un solo cupo base
-                cupo_base = cupo_parts[0]
+                cupo_base = cupos[0]
+                # Determinar si algún candidato acepta compensación
                 candidatos_list = [c.strip().upper() for c in str(datos['candidatos']).split(',')
                                    if c.strip() and str(c).upper() != 'NAN']
                 acepta_comp = any(c in self.profesores and self.profesores[c].compensacion for c in candidatos_list)
                 
-                # Si hay compensación y la demanda excede el cupo base, permitir cupo hasta 150 o la demanda
                 if acepta_comp and demanda_total > cupo_base:
-                    cupo_efectivo = min(demanda_total, 150)
-                    if demanda_total <= cupo_efectivo:
-                        # Una sola sección con cupo = demanda_total
-                        self.secciones.append(Seccion(f"{cod_base}-01", datos['creditos'], demanda_total,
-                                                      datos['candidatos'], datos['tipo_salon']))
-                    else:
-                        # Necesita múltiples secciones con cupo efectivo
-                        num_secciones = math.ceil(demanda_total / cupo_efectivo)
-                        est_sec = [cupo_efectivo] * (num_secciones - 1)
-                        resto = demanda_total - sum(est_sec)
-                        est_sec.append(resto if resto > 0 else cupo_efectivo)
-                        for i, cupo in enumerate(est_sec):
-                            self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", datos['creditos'], cupo,
-                                                          datos['candidatos'], datos['tipo_salon']))
+                    cupo_efectivo = min(demanda_total, 150)   # máximo 150 por compensación
                 else:
-                    # Sin compensación: aplicar tolerancia de sobrecupo (20% extra)
-                    # Si la demanda supera el cupo base en hasta un 20%, usar una sola sección con cupo = demanda
-                    if demanda_total <= cupo_base * 1.2:
-                        self.secciones.append(Seccion(f"{cod_base}-01", datos['creditos'], demanda_total,
-                                                      datos['candidatos'], datos['tipo_salon']))
+                    cupo_efectivo = cupo_base
+                
+                # Decidir número de secciones con umbral para evitar secciones pequeñas
+                if demanda_total <= cupo_efectivo:
+                    num_secciones = 1
+                    cupos_secciones = [demanda_total if demanda_total > 0 else cupo_efectivo]
+                else:
+                    # Si la demanda es mayor que el cupo efectivo
+                    # Calcular cuántas secciones completas caben
+                    completas = demanda_total // cupo_efectivo
+                    resto = demanda_total % cupo_efectivo
+                    if resto == 0:
+                        num_secciones = completas
+                        cupos_secciones = [cupo_efectivo] * completas
                     else:
-                        num_secciones = math.ceil(demanda_total / cupo_base)
-                        est_sec = [cupo_base] * (num_secciones - 1)
-                        resto = demanda_total - sum(est_sec)
-                        est_sec.append(resto if resto > 0 else cupo_base)
-                        for i, cupo in enumerate(est_sec):
-                            self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", datos['creditos'], cupo,
-                                                          datos['candidatos'], datos['tipo_salon']))
+                        # Si el resto es pequeño (<= 5), no crear una nueva sección, sino aumentar la última existente
+                        if resto <= 5:
+                            num_secciones = completas
+                            cupos_secciones = [cupo_efectivo] * completas
+                            cupos_secciones[-1] += resto  # añadir el resto a la última sección
+                        else:
+                            num_secciones = completas + 1
+                            cupos_secciones = [cupo_efectivo] * completas + [resto]
+                
+                for i, cupo in enumerate(cupos_secciones):
+                    self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", datos['creditos'], cupo,
+                                                  datos['candidatos'], datos['tipo_salon']))
             else:
                 # Múltiples cupos: primero las secciones especiales, luego las estándar
-                cupo_base = cupo_parts[0]
-                cupos_especiales = cupo_parts[1:]
+                cupo_base = cupos[0]
+                cupos_especiales = cupos[1:]
                 
                 # Crear secciones especiales exactamente con los cupos indicados
                 for cupo in cupos_especiales:
@@ -444,12 +460,10 @@ class TabuScheduler:
                 capacidad_especial = sum(cupos_especiales)
                 if demanda_total > capacidad_especial:
                     restante = demanda_total - capacidad_especial
-                    # Usar tolerancia de sobrecupo también para las secciones estándar
-                    # Si el restante es <= cupo_base * 1.2, una sola sección con cupo = restante
-                    if restante <= cupo_base * 1.2:
-                        self.secciones.append(Seccion(f"{cod_base}-{len(self.secciones)+1:02d}",
-                                                      datos['creditos'], restante,
-                                                      datos['candidatos'], datos['tipo_salon']))
+                    # Aplicar umbral para evitar secciones pequeñas
+                    if restante <= 5 and len(self.secciones) > 0:
+                        # Añadir el resto a la última sección especial
+                        self.secciones[-1].cupo += restante
                     else:
                         num_estandar = math.ceil(restante / cupo_base)
                         for i in range(num_estandar):
