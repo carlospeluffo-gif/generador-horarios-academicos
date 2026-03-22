@@ -367,7 +367,7 @@ class TabuScheduler:
             # Caso 1: profesor con compensación y acepta grandes -> una sola sección
             tiene_prof_grande_comp = any(c in self.profesores and self.profesores[c].compensacion and self.profesores[c].acepta_grandes == 1 for c in candidatos_list)
             if tiene_prof_grande_comp and demanda_total > cupo_tipico:
-                cupo_unico = min(demanda_total, 150)
+                cupo_unico = min(demanda_total, 85)
                 self.secciones.append(Seccion(f"{cod_base}-01", datos['creditos'], cupo_unico, datos['candidatos'], datos['tipo_salon']))
                 continue
 
