@@ -566,9 +566,9 @@ class TabuScheduler:
                 continue
             
             salon_info = next((sl for sl in self.salones if sl['CODIGO'] == salon), None)
-            if salon_info and salon_info['CAPACIDAD'] < s.cupo: conflicts += 10000
+            if salon_info and salon_info['CAPACIDAD'] < s.cupo: conflicts += 100000
             if salon_info and not (salon in self.mega_salones and s.es_fusionable) and salon_info['TIPO'] != s.tipo_salon:
-                conflicts += 10000
+                conflicts += 100000
             
             # Verificar ACEPTA_GRANDES (restricción fuerte)
             if prof in self.profesores:
@@ -586,9 +586,9 @@ class TabuScheduler:
                 prof_obj = self.profesores[prof]
                 
                 if prof_obj.cursos_intensivos == 0 and es_intensivo:
-                    conflicts += 10000
+                    conflicts += 100000
                 elif prof_obj.cursos_intensivos == 1 and puede_ser_intensivo and not es_intensivo:
-                    conflicts += 10000
+                    conflicts += 100000
 
                 if prof_obj.pref_horas == 'AM' and ini >= 720: soft_penalty += 30
                 elif prof_obj.pref_horas == 'PM' and ini < 720: soft_penalty += 30
@@ -604,19 +604,19 @@ class TabuScheduler:
                         if dia in dias_set:
                             fin = ini + int(patron['days'][dia] * 50)
                             if max(ini, start) < min(fin, end):
-                                conflicts += 10000
+                                conflicts += 100000
 
             for dia, contrib in patron['days'].items():
                 fin = ini + int(contrib * 50)
-                if dia in ["Ma", "Ju"] and max(ini, self.hora_universal[0]) < min(fin, self.hora_universal[1]): conflicts += 10000
-                if s.creditos == 3 and contrib >= 3 and ini < 930: conflicts += 10000
-                if fin > self.limite_operativo[1] or ini < self.limite_operativo[0]: conflicts += 10000
+                if dia in ["Ma", "Ju"] and max(ini, self.hora_universal[0]) < min(fin, self.hora_universal[1]): conflicts += 100000
+                if s.creditos == 3 and contrib >= 3 and ini < 930: conflicts += 100000
+                if fin > self.limite_operativo[1] or ini < self.limite_operativo[0]: conflicts += 100000
                 
                 if prof != "GRADUADOS":
                     clave = (prof, dia)
                     if clave not in occ_prof: occ_prof[clave] = []
                     for (ini_ex, fin_ex) in occ_prof[clave]:
-                        if max(ini, ini_ex) < min(fin, fin_ex): conflicts += 10000
+                        if max(ini, ini_ex) < min(fin, fin_ex): conflicts += 100000
                     occ_prof[clave].append((ini, fin))
                 
                 clave_s = (salon, dia)
@@ -625,14 +625,14 @@ class TabuScheduler:
                     if max(ini, ini_ex) < min(fin, fin_ex):
                         if salon in self.mega_salones and s.es_fusionable and fus_ex:
                             if s.cupo + cupo_ex <= salon_info['CAPACIDAD']: continue
-                        conflicts += 10000
+                        conflicts += 100000
                 occ_salon[clave_s].append((ini, fin, s.cupo, s.es_fusionable))
         
         for prof, carga in carga_prof.items():
             prof_obj = self.profesores.get(prof)
             if prof_obj:
-                if carga > prof_obj.carga_max + 1.5: conflicts += 10000
-                if carga < prof_obj.carga_min - 1.5: conflicts += 10000
+                if carga > prof_obj.carga_max + 1.5: conflicts += 100000
+                if carga < prof_obj.carga_min - 1.5: conflicts += 100000
         
         salones_por_prof_tipo = {}
         for asign in sol:
