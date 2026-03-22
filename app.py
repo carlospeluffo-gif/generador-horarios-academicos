@@ -574,7 +574,7 @@ class TabuScheduler:
             if prof in self.profesores:
                 prof_obj = self.profesores[prof]
                 if prof_obj.acepta_grandes == 0 and s.es_grande:
-                    conflicts += 10000
+                    conflicts += 100000
             
             if prof in carga_prof:
                 carga_prof[prof] += self.get_sec_creditos(s, prof)
