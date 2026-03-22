@@ -246,7 +246,7 @@ class Seccion:
         base = self.cod.split('-')[0].upper().replace(" ", "")
         self.es_fusionable = base in ["MATE3171", "MATE3172", "MATE3173"]
         self.prof_preasignado = None  
-        self.es_grande = self.cupo >= 60   # Definición de sección grande (cupo >= 60)
+        self.es_grande = self.cupo >= 85   # Definición de sección grande (cupo >= 85)
 
 class Profesor:
     def __init__(self, nombre, carga_min, carga_max, pref_dias, pref_horas,
