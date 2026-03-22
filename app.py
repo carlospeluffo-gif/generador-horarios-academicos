@@ -369,7 +369,7 @@ class TabuScheduler:
                 )
                 self.profesores[prof.nombre] = prof
 
-        # 3. Procesar Cursos y Secciones
+        # 3. Procesar Cursos y Secciones (con soporte para cupos explícitos y tolerancia de sobrecupo)
         self.secciones = []
         df_cursos.columns = [c.strip().upper() for c in df_cursos.columns]
         cursos_agrupados = {}
@@ -377,8 +377,10 @@ class TabuScheduler:
             cod_base = str(r['CODIGO']).strip().upper()
             if cod_base not in cursos_agrupados:
                 cursos_agrupados[cod_base] = {
-                    'creditos': int(r['CREDITOS']), 'demanda': int(r.get('DEMANDA', 0)),
-                    'cupo_tipico': int(r.get('CUPO', '30')), 'candidatos': r.get('CANDIDATOS', ''),
+                    'creditos': int(r['CREDITOS']),
+                    'demanda': int(r.get('DEMANDA', 0)),
+                    'cupo_raw': str(r.get('CUPO', '30')).strip(),
+                    'candidatos': r.get('CANDIDATOS', ''),
                     'tipo_salon': int(r.get('TIPO_SALON', 1))
                 }
             else:
@@ -386,23 +388,76 @@ class TabuScheduler:
 
         for cod_base, datos in cursos_agrupados.items():
             demanda_total = datos['demanda']
-            cupo_tipico = datos['cupo_tipico']
+            cupo_raw = datos['cupo_raw']
+            # Intentar parsear lista de cupos
+            cupo_parts = [int(p.strip()) for p in cupo_raw.split(',') if p.strip()]
             
-            candidatos_list = [c.strip().upper() for c in str(datos['candidatos']).split(',') if c.strip() and str(c).upper() != 'NAN']
-            acepta_comp = any(c in self.profesores and self.profesores[c].compensacion for c in candidatos_list)
-            
-            if acepta_comp and demanda_total > cupo_tipico:
-                cupo_efectivo = min(demanda_total, 150) 
+            if len(cupo_parts) == 1:
+                # Un solo cupo base
+                cupo_base = cupo_parts[0]
+                candidatos_list = [c.strip().upper() for c in str(datos['candidatos']).split(',')
+                                   if c.strip() and str(c).upper() != 'NAN']
+                acepta_comp = any(c in self.profesores and self.profesores[c].compensacion for c in candidatos_list)
+                
+                # Si hay compensación y la demanda excede el cupo base, permitir cupo hasta 150 o la demanda
+                if acepta_comp and demanda_total > cupo_base:
+                    cupo_efectivo = min(demanda_total, 150)
+                    if demanda_total <= cupo_efectivo:
+                        # Una sola sección con cupo = demanda_total
+                        self.secciones.append(Seccion(f"{cod_base}-01", datos['creditos'], demanda_total,
+                                                      datos['candidatos'], datos['tipo_salon']))
+                    else:
+                        # Necesita múltiples secciones con cupo efectivo
+                        num_secciones = math.ceil(demanda_total / cupo_efectivo)
+                        est_sec = [cupo_efectivo] * (num_secciones - 1)
+                        resto = demanda_total - sum(est_sec)
+                        est_sec.append(resto if resto > 0 else cupo_efectivo)
+                        for i, cupo in enumerate(est_sec):
+                            self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", datos['creditos'], cupo,
+                                                          datos['candidatos'], datos['tipo_salon']))
+                else:
+                    # Sin compensación: aplicar tolerancia de sobrecupo (20% extra)
+                    # Si la demanda supera el cupo base en hasta un 20%, usar una sola sección con cupo = demanda
+                    if demanda_total <= cupo_base * 1.2:
+                        self.secciones.append(Seccion(f"{cod_base}-01", datos['creditos'], demanda_total,
+                                                      datos['candidatos'], datos['tipo_salon']))
+                    else:
+                        num_secciones = math.ceil(demanda_total / cupo_base)
+                        est_sec = [cupo_base] * (num_secciones - 1)
+                        resto = demanda_total - sum(est_sec)
+                        est_sec.append(resto if resto > 0 else cupo_base)
+                        for i, cupo in enumerate(est_sec):
+                            self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", datos['creditos'], cupo,
+                                                          datos['candidatos'], datos['tipo_salon']))
             else:
-                cupo_efectivo = cupo_tipico
-
-            num_secciones = math.ceil(demanda_total / cupo_efectivo) if demanda_total > 0 else 1
-            est_sec = [cupo_efectivo] * (num_secciones - 1)
-            resto = demanda_total - sum(est_sec)
-            est_sec.append(resto if resto > 0 else cupo_efectivo)
-            
-            for i, cupo in enumerate(est_sec):
-                self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", datos['creditos'], cupo, datos['candidatos'], datos['tipo_salon']))
+                # Múltiples cupos: primero las secciones especiales, luego las estándar
+                cupo_base = cupo_parts[0]
+                cupos_especiales = cupo_parts[1:]
+                
+                # Crear secciones especiales exactamente con los cupos indicados
+                for cupo in cupos_especiales:
+                    self.secciones.append(Seccion(f"{cod_base}-{len(self.secciones)+1:02d}",
+                                                  datos['creditos'], cupo,
+                                                  datos['candidatos'], datos['tipo_salon']))
+                
+                # Calcular cuántos estudiantes cubren las especiales
+                capacidad_especial = sum(cupos_especiales)
+                if demanda_total > capacidad_especial:
+                    restante = demanda_total - capacidad_especial
+                    # Usar tolerancia de sobrecupo también para las secciones estándar
+                    # Si el restante es <= cupo_base * 1.2, una sola sección con cupo = restante
+                    if restante <= cupo_base * 1.2:
+                        self.secciones.append(Seccion(f"{cod_base}-{len(self.secciones)+1:02d}",
+                                                      datos['creditos'], restante,
+                                                      datos['candidatos'], datos['tipo_salon']))
+                    else:
+                        num_estandar = math.ceil(restante / cupo_base)
+                        for i in range(num_estandar):
+                            cupo_sec = cupo_base if i < num_estandar - 1 else (restante % cupo_base if restante % cupo_base != 0 else cupo_base)
+                            self.secciones.append(Seccion(f"{cod_base}-{len(self.secciones)+1:02d}",
+                                                          datos['creditos'], cupo_sec,
+                                                          datos['candidatos'], datos['tipo_salon']))
+                # Si la demanda es menor o igual a la capacidad especial, no se crean secciones estándar
 
         self._preasignar_profesores_robusto()
 
@@ -432,13 +487,30 @@ class TabuScheduler:
         carga_actual["GRADUADOS"] = 0.0
         carga_actual["TBA"] = 0.0
         
-        capacidad_restante = {}
-        for p in self.profesores.values():
-            capacidad_restante[p.nombre] = p.carga_max
+        capacidad_restante = {p.nombre: p.carga_max for p in self.profesores.values()}
         
+        # ========== PASO 1: Asignación forzosa de secciones GRANDES a profesores que las aceptan ==========
+        secciones_grandes = [s for s in self.secciones if s.es_grande]
+        secciones_grandes.sort(key=lambda s: len(s.cands))  # menos candidatos primero
+        
+        for s in secciones_grandes:
+            candidatos_que_aceptan = [p for p in s.cands if p in self.profesores and self.profesores[p].acepta_grandes == 1]
+            if candidatos_que_aceptan:
+                mejor_prof = max(candidatos_que_aceptan, key=lambda p: self.profesores[p].prioridad_curso(s.cod))
+                creditos = self.get_sec_creditos(s, mejor_prof)
+                if capacidad_restante[mejor_prof] >= creditos:
+                    s.prof_preasignado = mejor_prof
+                    carga_actual[mejor_prof] += creditos
+                    capacidad_restante[mejor_prof] -= creditos
+                    continue  # ya asignada, pasar a la siguiente grande
+        
+        # ========== PASO 2: Asignación normal (el resto) ==========
         secciones_unicas = []
         secciones_multiple = []
         for s in self.secciones:
+            # Saltar las ya asignadas
+            if s.prof_preasignado is not None:
+                continue
             cands_validos = [c for c in s.cands if c in self.profesores]
             if not cands_validos:
                 if "GRADUADOS" in s.cands:
@@ -453,6 +525,7 @@ class TabuScheduler:
             else:
                 secciones_multiple.append(s)
         
+        # Asignar únicas
         for s in secciones_unicas:
             prof = s.cands[0]
             creditos = self.get_sec_creditos(s, prof)
@@ -461,6 +534,7 @@ class TabuScheduler:
             if prof in capacidad_restante:
                 capacidad_restante[prof] -= creditos
         
+        # Asignar múltiples con prioridad (bonus grande para quienes aceptan grandes)
         preferencias = {}
         for s in secciones_multiple:
             preferencias[s] = {}
@@ -468,7 +542,7 @@ class TabuScheduler:
                 if prof in self.profesores:
                     prioridad_base = self.profesores[prof].prioridad_curso(s.cod)
                     if s.es_grande and self.profesores[prof].acepta_grandes == 1:
-                        prioridad_base += 0.5
+                        prioridad_base += 5.0  # ¡MUCHO más peso!
                     preferencias[s][prof] = prioridad_base
                 else:
                     preferencias[s][prof] = 0.0
@@ -809,21 +883,26 @@ class TabuScheduler:
         asign = nuevo[idx]
         s = asign['seccion']
         prof_actual = asign['profesor']
-
+        
+        es_grande = s.es_grande
         mejores_opciones = []
-
+        
         for _ in range(15):
             candidata = asign.copy()
-
-            if random.random() < 0.1:
+            
+            # Elegir un nuevo profesor con sesgo hacia los que aceptan grandes si es grande
+            if random.random() < 0.3:  # 30% de prob. de cambiar profesor
                 candidatos_validos = [c for c in s.cands if c in self.profesores and c != prof_actual]
+                if es_grande:
+                    # Priorizar los que aceptan grandes
+                    candidatos_validos.sort(key=lambda p: (0 if self.profesores[p].acepta_grandes == 1 else 1, random.random()))
                 if candidatos_validos:
-                    candidata['profesor'] = random.choice(candidatos_validos)
-
+                    candidata['profesor'] = candidatos_validos[0]  # el primero de la lista (mejor prioridad)
+            
             prof = candidata['profesor']
             patrones = PATRONES.get(s.creditos, PATRONES[3])
             puede_ser_intensivo = any(any(c >= 3 for c in p['days'].values()) for p in patrones)
-
+            
             if prof in self.profesores:
                 p_obj = self.profesores[prof]
                 if p_obj.cursos_intensivos == 0:
@@ -832,23 +911,23 @@ class TabuScheduler:
                     patrones_int = [p for p in patrones if any(c >= 3 for c in p['days'].values())]
                     if patrones_int:
                         patrones = patrones_int
-
+            
             if not patrones:
                 patrones = PATRONES.get(s.creditos, PATRONES[3])
-
+            
             candidata['patron'] = random.choice(patrones)
             candidata['ini'] = random.choice(self.bloques)
-
+            
             if random.random() < 0.2:
                 sals = [sl['CODIGO'] for sl in self.salones
                         if sl['TIPO'] == s.tipo_salon and sl['CAPACIDAD'] >= s.cupo]
                 if sals:
                     candidata['salon'] = random.choice(sals)
-
+            
             nuevo[idx] = candidata
             costo = self._costo_total(nuevo)
             mejores_opciones.append((costo, candidata))
-
+        
         mejores_opciones.sort(key=lambda x: x[0])
         mejor_opcion = mejores_opciones[0]
         nuevo[idx] = mejor_opcion[1]
@@ -955,7 +1034,7 @@ def generar_plantilla():
             'CODIGO': ['MATE3171', 'MATE3172'],
             'CREDITOS': [3, 3],
             'DEMANDA': [120, 150],
-            'CUPO': [30, 30],
+            'CUPO': ['30,85', '30,85,85'],  # ejemplos con múltiples cupos
             'CANDIDATOS': ['PEREZ, GONZALEZ', 'RODRIGUEZ'],
             'TIPO_SALON': [1, 1]
         })
