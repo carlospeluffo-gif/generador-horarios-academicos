@@ -874,6 +874,35 @@ class TabuScheduler:
         nuevo[idx] = mejor_opcion[1]
         return nuevo, mejor_opcion[0]
 
+    def optimizar_fijo(self, iteraciones, bar=None, status_text=None):
+        """Ejecuta exactamente 'iteraciones' iteraciones."""
+        temp_inicial = 5000.0
+        self.historial_costos = [self.mejor_costo]
+        for it in range(iteraciones):
+            vecino, costo_vecino = self._mutar_solucion(self.solucion)
+            if costo_vecino <= self.mejor_costo:
+                self.solucion = vecino
+                self.mejor_costo = costo_vecino
+                self.mejor_solucion = deepcopy(self.solucion)
+            else:
+                temp = temp_inicial / (it + 1)
+                try:
+                    prob = math.exp((self.mejor_costo - costo_vecino) / temp)
+                except:
+                    prob = 0
+                if random.random() < prob:
+                    self.solucion = vecino
+            self.historial_costos.append(self.mejor_costo)
+
+            if it % 10 == 0 or it == iteraciones - 1:
+                if status_text:
+                    fitness_actual = 10000 / (10000 + self.mejor_costo)
+                    duros = int(self.mejor_costo // 10000)
+                    status_text.markdown(f"**🔄 Generación {it+1}/{iteraciones}** | Conflictos Duros: {duros} | Costo Total: {self.mejor_costo:.2f} | Fitness: {fitness_actual:.5f}")
+                if bar:
+                    bar.progress((it+1)/iteraciones)
+        return self.mejor_solucion, int(self.mejor_costo // 10000), self.historial_costos
+
     def optimizar_auto(self, max_iter=5000, max_time=300, fitness_target=0.90, patience=15, bar=None, status_text=None):
         """
         Corre el algoritmo hasta que se cumpla alguna condición de parada:
@@ -1027,7 +1056,7 @@ def generar_heatmap_ocupacion(scheduler, solucion):
     return fig
 
 # ==============================================================================
-# FUNCIÓN PARA GENERAR PLANTILLA EXCEL (NUEVA)
+# FUNCIÓN PARA GENERAR PLANTILLA EXCEL
 # ==============================================================================
 def generar_plantilla():
     output = io.BytesIO()
@@ -1080,15 +1109,18 @@ def main():
     with st.sidebar:
         st.markdown("### ∑ Configuración")
         zona = st.selectbox("Zona Campus", ["CENTRAL", "PERIFERICA"])
-        # Eliminamos el slider de iteraciones, ahora es automático
+        modo = st.radio("Modo de optimización", ["Automático (hasta solución óptima)", "Manual (fijar iteraciones)"])
+        if modo == "Manual (fijar iteraciones)":
+            iteraciones = st.slider("Número de iteraciones", 100, 5000, 1000,
+                                    help="Se ejecutarán exactamente esas iteraciones. Puede que la solución final tenga conflictos si son pocas.")
+        else:
+            with st.expander("Configuración avanzada (modo automático)"):
+                max_iter_auto = st.number_input("Máx. iteraciones", 1000, 20000, 5000)
+                max_time_auto = st.number_input("Máx. tiempo (s)", 60, 600, 300)
+                fitness_target = st.slider("Fitness objetivo", 0.80, 1.00, 0.90, step=0.01)
+                patience = st.number_input("Paciencia (generaciones sin mejora)", 5, 50, 15)
         file = st.file_uploader("Subir Protocolo Excel", type=['xlsx'])
-        # Botón de descarga de plantilla
-        st.download_button(
-            label="📥 Descargar Plantilla",
-            data=generar_plantilla(),
-            file_name="PLANTILLA.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+        st.download_button("📥 Descargar Plantilla", data=generar_plantilla(), file_name="PLANTILLA.xlsx")
 
     st.markdown(f"### Ω Condiciones de Zona: {zona}")
     c1, c2, c3 = st.columns(3)
@@ -1101,7 +1133,8 @@ def main():
         st.markdown("""
             <div class='glass-card' style='text-align: center;'>
                 <h3 style='margin-top:0; color: #D4AF37;'>📥 Sincronización de Datos</h3>
-                <p>Asegúrese de que el archivo Profesores.csv contiene las columnas: CURSOS_INTENSIVOS, ACEPTA_GRANDES, BLOQUEO_DIAS, BLOQUEO_HORA_INI, BLOQUEO_HORA_FIN.</p>
+                <p>Asegúrese de que el archivo Excel contiene las hojas: <b>Cursos</b>, <b>Profesores</b>, <b>Salones</b>.<br>
+                Las columnas necesarias incluyen: CURSOS_INTENSIVOS, ACEPTA_GRANDES, BLOQUEO_DIAS, BLOQUEO_HORA_INI, BLOQUEO_HORA_FIN.</p>
             </div>
         """, unsafe_allow_html=True)
     else:
@@ -1117,15 +1150,22 @@ def main():
                 start_time = time.time()
                 bar = st.progress(0)
                 status = st.empty()
-                # Llamar al nuevo método automático
-                mejor_sol, conflictos, historial = scheduler.optimizar_auto(
-                    max_iter=5000,
-                    max_time=300,
-                    fitness_target=0.90,
-                    patience=15,
-                    bar=bar,
-                    status_text=status
-                )
+
+                if modo == "Automático (hasta solución óptima)":
+                    mejor_sol, conflictos, historial = scheduler.optimizar_auto(
+                        max_iter=max_iter_auto,
+                        max_time=max_time_auto,
+                        fitness_target=fitness_target,
+                        patience=patience,
+                        bar=bar,
+                        status_text=status
+                    )
+                else:
+                    mejor_sol, conflictos, historial = scheduler.optimizar_fijo(
+                        iteraciones=iteraciones,
+                        bar=bar,
+                        status_text=status
+                    )
                 
                 st.session_state.elapsed_time = time.time() - start_time
                 st.session_state.conflicts = conflictos
