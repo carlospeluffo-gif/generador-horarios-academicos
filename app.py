@@ -874,32 +874,81 @@ class TabuScheduler:
         nuevo[idx] = mejor_opcion[1]
         return nuevo, mejor_opcion[0]
 
-    def optimizar(self, iteraciones=200, bar=None, status_text=None):
+    def optimizar_auto(self, max_iter=5000, max_time=300, fitness_target=0.90, patience=15, bar=None, status_text=None):
+        """
+        Corre el algoritmo hasta que se cumpla alguna condición de parada:
+        - Se alcanza un fitness >= fitness_target
+        - Se supera max_iter iteraciones
+        - Se excede max_time segundos
+        - Después de alcanzar 0 conflictos, no hay mejora en 'patience' iteraciones consecutivas
+        """
+        start_time = time.time()
+        best_solution = deepcopy(self.solucion)
+        best_cost = self._costo_total(best_solution)
+        self.historial_costos = [best_cost]
+        self.mejor_solucion = best_solution
+        self.mejor_costo = best_cost
+
         temp_inicial = 5000.0
-        for it in range(iteraciones):
+        it = 0
+        no_improve = 0
+        zero_conflicts_reached = (best_cost < 10000)  # ¿Ya hay cero conflictos?
+
+        while it < max_iter and (time.time() - start_time) < max_time:
+            # Realizar un paso de mutación y aceptación
             vecino, costo_vecino = self._mutar_solucion(self.solucion)
-            
-            if costo_vecino <= self.mejor_costo:
+            temp = temp_inicial / (it + 1)
+
+            # Aceptación (similar a simulated annealing)
+            if costo_vecino <= best_cost:
+                # Mejor solución encontrada
                 self.solucion = vecino
-                self.mejor_costo = costo_vecino
-                self.mejor_solucion = deepcopy(self.solucion)
+                if costo_vecino < best_cost:
+                    best_cost = costo_vecino
+                    best_solution = deepcopy(self.solucion)
+                    no_improve = 0
+                    if not zero_conflicts_reached and best_cost < 10000:
+                        zero_conflicts_reached = True
+                        # Reiniciamos contador para empezar a medir paciencia después de alcanzar 0 conflictos
+                        no_improve = 0
+                else:
+                    no_improve += 1
             else:
-                temp = temp_inicial / (it + 1)
-                try: prob = math.exp((self.mejor_costo - costo_vecino) / temp)
-                except: prob = 0
+                # Aceptar solución peor con cierta probabilidad
+                delta = costo_vecino - best_cost
+                prob = math.exp(-delta / temp) if temp > 0 else 0
                 if random.random() < prob:
                     self.solucion = vecino
-                    
-            self.historial_costos.append(self.mejor_costo)
-            
-            if it % 10 == 0 or it == iteraciones - 1:
-                if status_text: 
-                    fitness_actual = 10000 / (10000 + self.mejor_costo)
-                    duros = int(self.mejor_costo // 10000)
-                    status_text.markdown(f"**🔄 Generación {it+1}/{iteraciones}** | Conflictos Duros: {duros} | Costo Total: {self.mejor_costo:.2f} | Fitness: {fitness_actual:.5f}")
-                if bar: bar.progress((it+1)/iteraciones)
-        
-        return self.mejor_solucion, int(self.mejor_costo // 10000), self.historial_costos
+                    # No mejoró el mejor, así que incrementamos no_improve
+                    no_improve += 1
+                else:
+                    # No se aceptó, también se considera como iteración sin mejora
+                    no_improve += 1
+
+            self.historial_costos.append(best_cost)
+
+            # Actualizar UI
+            if it % 10 == 0 or it == max_iter - 1:
+                if status_text:
+                    conflicts = int(best_cost // 10000)
+                    fitness = 10000 / (10000 + best_cost)
+                    elapsed = time.time() - start_time
+                    status_text.markdown(f"**🔄 Generación {it+1}/{max_iter}** | Conflictos Duros: {conflicts} | Costo Total: {best_cost:.2f} | Fitness: {fitness:.5f} | Tiempo: {elapsed:.1f}s")
+                if bar:
+                    bar.progress(min((it+1)/max_iter, 1.0))
+
+            # Verificar condiciones de parada
+            if best_cost < 10000:  # Ya tenemos cero conflictos
+                if (10000 / (10000 + best_cost)) >= fitness_target:
+                    break
+                if no_improve >= patience:
+                    break
+            it += 1
+
+        # Guardar la mejor solución
+        self.mejor_solucion = best_solution
+        self.mejor_costo = best_cost
+        return best_solution, int(best_cost // 10000), self.historial_costos
 
 # ==============================================================================
 # 5. FUNCIÓN PARA GENERAR HEATMAP DE OCUPACIÓN DE SALONES
@@ -1031,7 +1080,7 @@ def main():
     with st.sidebar:
         st.markdown("### ∑ Configuración")
         zona = st.selectbox("Zona Campus", ["CENTRAL", "PERIFERICA"])
-        iteraciones = st.slider("Iteraciones de Búsqueda", 100, 5000, 300)
+        # Eliminamos el slider de iteraciones, ahora es automático
         file = st.file_uploader("Subir Protocolo Excel", type=['xlsx'])
         # Botón de descarga de plantilla
         st.download_button(
@@ -1068,13 +1117,21 @@ def main():
                 start_time = time.time()
                 bar = st.progress(0)
                 status = st.empty()
-                mejor_sol, conflictos, historial = scheduler.optimizar(iteraciones, bar, status)
+                # Llamar al nuevo método automático
+                mejor_sol, conflictos, historial = scheduler.optimizar_auto(
+                    max_iter=5000,
+                    max_time=300,
+                    fitness_target=0.90,
+                    patience=15,
+                    bar=bar,
+                    status_text=status
+                )
                 
                 st.session_state.elapsed_time = time.time() - start_time
                 st.session_state.conflicts = conflictos
                 st.session_state.historial = historial
-                st.session_state.scheduler = scheduler          # guardamos para usar después
-                st.session_state.mejor_sol = mejor_sol          # guardamos la solución
+                st.session_state.scheduler = scheduler
+                st.session_state.mejor_sol = mejor_sol
                 
                 cargas_finales = {}
                 for asign in mejor_sol:
