@@ -259,7 +259,27 @@ class Profesor:
         self.nombre = nombre.upper().strip()
         self.carga_min = float(carga_min) if pd.notnull(carga_min) and carga_min != '' else 0.0
         self.carga_max = float(carga_max) if pd.notnull(carga_max) and carga_max != '' else 12.0
-        self.pref_dias = pref_dias if isinstance(pref_dias, str) else ''
+        
+        # Convertir pref_dias a un set de días en español
+        self.pref_dias_set = set()
+        if pref_dias and isinstance(pref_dias, str):
+            # Mapeo de abreviaturas comunes
+            # Puede venir como "L, M, W, J, V" o "Lu, Ma, Mi, Ju, Vi"
+            # Limpiamos y separamos por comas o espacios
+            pref_dias_clean = pref_dias.replace(',', ' ').upper()
+            for token in pref_dias_clean.split():
+                if token in ('L', 'LU'):
+                    self.pref_dias_set.add('Lu')
+                elif token in ('M', 'MA'):
+                    self.pref_dias_set.add('Ma')
+                elif token in ('W', 'MI'):
+                    self.pref_dias_set.add('Mi')
+                elif token in ('J', 'JU'):
+                    self.pref_dias_set.add('Ju')
+                elif token in ('V', 'VI'):
+                    self.pref_dias_set.add('Vi')
+                elif token in ('LU', 'MA', 'MI', 'JU', 'VI'):
+                    self.pref_dias_set.add(token)
         self.pref_horas = pref_horas if isinstance(pref_horas, str) else 'ANY'
         
         self.preferencias = []
@@ -439,7 +459,7 @@ class TabuScheduler:
             self.limite_operativo = (420, 1080)       # 07:00 - 18:00
             self.bloques = list(range(420, 1021, 60)) # 420,480,...,1020
 
-        # Construir solución inicial factible
+        # Construir solución inicial con reintentos
         self.solucion = self._construir_solucion_inicial_factible()
         self.mejor_solucion = deepcopy(self.solucion)
         self.mejor_costo = self._costo_total(self.solucion)
@@ -510,17 +530,10 @@ class TabuScheduler:
                 elif prof_obj.pref_horas == 'PM' and ini < 720:
                     soft_penalty += 30
                 
-                # Preferencia de días (conversión correcta)
-                if prof_obj.pref_dias:
+                # Preferencia de días usando el set normalizado
+                if prof_obj.pref_dias_set:
                     for dia in patron['days'].keys():
-                        # Convertir día a letra preferida
-                        if dia == "Lu": rep = "L"
-                        elif dia == "Ma": rep = "M"
-                        elif dia == "Mi": rep = "Mi"  # se maneja como dos letras
-                        elif dia == "Ju": rep = "J"
-                        elif dia == "Vi": rep = "V"
-                        else: continue
-                        if rep not in prof_obj.pref_dias and "Mi" not in prof_obj.pref_dias:
+                        if dia not in prof_obj.pref_dias_set:
                             soft_penalty += 15
 
                 # Nuevo: Verificar bloqueos de horario (duros)
@@ -663,142 +676,142 @@ class TabuScheduler:
         
         return conflictos_list
 
-    def _construir_solucion_inicial_factible(self):
-        """Construye una solución inicial que satisface todas las restricciones duras."""
-        # Ordenar secciones: primero las que tienen menos candidatos, luego mayor demanda (más difíciles)
-        secciones_ordenadas = sorted(self.secciones, key=lambda s: (len(s.cands), -s.cupo))
-        sol = [None] * len(self.secciones)
-        asignado = [False] * len(self.secciones)
+    def _construir_solucion_inicial_factible(self, max_attempts=5):
+        """Construye una solución inicial que satisface todas las restricciones duras, con reintentos."""
+        for attempt in range(max_attempts):
+            try:
+                # Orden aleatorio de las secciones para cada intento
+                secciones_ordenadas = list(self.secciones)
+                random.shuffle(secciones_ordenadas)
+                # También se puede ordenar por dificultad, pero intentemos aleatorio primero
+                sol = [None] * len(self.secciones)
+                asignado = [False] * len(self.secciones)
 
-        # Para acelerar, vamos asignando una a una
-        for idx, s in enumerate(secciones_ordenadas):
-            # Obtener lista de profesores candidatos reales
-            cand_profs = [p for p in s.cands if p in self.profesores]
-            if not cand_profs:
-                # Si no hay profesor real, asignar a GRADUADOS o TBA
-                prof = "GRADUADOS" if "GRADUADOS" in s.cands else "TBA"
-            else:
-                # Ordenar profesores por prioridad: primero los que aceptan grandes si la sección es grande,
-                # luego por prioridad de curso.
-                cand_profs.sort(key=lambda p: (
-                    0 if (s.es_grande and self.profesores[p].acepta_grandes == 1) else 1,
-                    -self.profesores[p].prioridad_curso(s.cod)
-                ))
-                prof = cand_profs[0]
+                # Para cada sección en el orden aleatorio
+                for idx, s in enumerate(secciones_ordenadas):
+                    # Obtener lista de profesores candidatos reales
+                    cand_profs = [p for p in s.cands if p in self.profesores]
+                    if not cand_profs:
+                        # Si no hay profesor real, asignar a GRADUADOS o TBA
+                        prof = "GRADUADOS" if "GRADUADOS" in s.cands else "TBA"
+                    else:
+                        # Ordenar profesores por prioridad: primero los que aceptan grandes si la sección es grande,
+                        # luego por prioridad de curso.
+                        cand_profs.sort(key=lambda p: (
+                            0 if (s.es_grande and self.profesores[p].acepta_grandes == 1) else 1,
+                            -self.profesores[p].prioridad_curso(s.cod)
+                        ))
+                        prof = cand_profs[0]
 
-            # Buscar asignación factible (patrón, hora, salón)
-            mejor_asign = None
-            mejor_costo = float('inf')
-            for patron in PATRONES.get(s.creditos, PATRONES[3]):
-                # Filtrar patrón según cursos_intensivos del profesor
-                if prof in self.profesores:
-                    prof_obj = self.profesores[prof]
-                    es_intensivo = any(c >= 3 for c in patron['days'].values())
-                    if prof_obj.cursos_intensivos == 0 and es_intensivo:
-                        continue
-                    if prof_obj.cursos_intensivos == 1 and not es_intensivo:
-                        # Si el profesor quiere intensivos, permitir también no intensivos, pero dar prioridad a intensivos
-                        pass
-                # Para cada día del patrón, determinar las horas posibles
-                # Debemos encontrar una hora que funcione para todos los días del patrón
-                # Elegimos la hora de inicio y verificamos que todos los días tengan la misma hora
-                # (según el modelo, todos los días del patrón comparten la misma hora de inicio)
-                # Buscamos un rango de horas iniciales posibles
-                # Primero, para cada día, calculamos las horas permitidas
-                horas_posibles = set(self.bloques)
-                for dia, contrib in patron['days'].items():
-                    duracion = contrib * 50
-                    # Filtrar por límite operativo
-                    horas_dia = [h for h in self.bloques if h >= self.limite_operativo[0] and h + duracion <= self.limite_operativo[1]]
-                    # Hora universal
-                    if dia in ["Ma", "Ju"]:
-                        horas_dia = [h for h in horas_dia if not (max(h, self.hora_universal[0]) < min(h+duracion, self.hora_universal[1]))]
-                    # Cursos de 3 créditos con contribución >=3 (intensivos) deben empezar después de 3:30 pm
-                    if s.creditos == 3 and contrib >= 3:
-                        horas_dia = [h for h in horas_dia if h >= 930]
-                    horas_posibles = horas_posibles.intersection(set(horas_dia))
-                    if not horas_posibles:
-                        break
-                if not horas_posibles:
-                    continue
-                # Tomamos la hora más temprana (puede cambiarse por alguna heurística)
-                hora = min(horas_posibles)
-
-                # Buscar salones compatibles
-                salones_cand = [sl['CODIGO'] for sl in self.salones
-                                if compatible_tipo(s.tipo_salon, sl['TIPO']) and sl['CAPACIDAD'] >= s.cupo]
-                if not salones_cand:
-                    continue
-
-                # Probar cada salón y verificar conflictos con asignaciones previas
-                for salon in salones_cand:
-                    conflicto = False
-                    # Verificar conflicto con secciones ya asignadas
-                    for j, asign in enumerate(sol):
-                        if asign and asignado[j] and j != idx:
-                            # Conflicto de profesor
-                            if asign['profesor'] == prof:
-                                for dia2, contrib2 in asign['patron']['days'].items():
-                                    if dia2 in patron['days']:
-                                        fin_actual = hora + int(patron['days'][dia2] * 50)
-                                        fin_exist = asign['ini'] + int(contrib2 * 50)
-                                        if max(hora, asign['ini']) < min(fin_actual, fin_exist):
-                                            conflicto = True
-                                            break
-                            if conflicto:
-                                break
-                            # Conflicto de salón
-                            if asign['salon'] == salon:
-                                for dia2, contrib2 in asign['patron']['days'].items():
-                                    if dia2 in patron['days']:
-                                        fin_actual = hora + int(patron['days'][dia2] * 50)
-                                        fin_exist = asign['ini'] + int(contrib2 * 50)
-                                        if max(hora, asign['ini']) < min(fin_actual, fin_exist):
-                                            # Verificar fusión en mega salones
-                                            if salon in self.mega_salones and s.es_fusionable and asign['seccion'].es_fusionable:
-                                                if s.cupo + asign['seccion'].cupo <= self.salon_capacidad.get(salon, 0):
-                                                    continue
-                                            conflicto = True
-                                            break
-                            if conflicto:
-                                break
-                    if not conflicto:
-                        # Calcular costo suave (preferencias) para esta asignación
-                        costo = 0
+                    # Buscar asignación factible (patrón, hora, salón)
+                    mejor_asign = None
+                    mejor_costo = float('inf')
+                    for patron in PATRONES.get(s.creditos, PATRONES[3]):
+                        # Filtrar patrón según cursos_intensivos del profesor
                         if prof in self.profesores:
                             prof_obj = self.profesores[prof]
-                            if prof_obj.pref_horas == 'AM' and hora >= 720:
-                                costo += 30
-                            elif prof_obj.pref_horas == 'PM' and hora < 720:
-                                costo += 30
-                            if prof_obj.pref_dias:
-                                for dia in patron['days'].keys():
-                                    if dia == "Lu": rep = "L"
-                                    elif dia == "Ma": rep = "M"
-                                    elif dia == "Mi": rep = "Mi"
-                                    elif dia == "Ju": rep = "J"
-                                    elif dia == "Vi": rep = "V"
-                                    else: continue
-                                    if rep not in prof_obj.pref_dias and "Mi" not in prof_obj.pref_dias:
-                                        costo += 15
-                        if costo < mejor_costo:
-                            mejor_costo = costo
-                            mejor_asign = {'seccion': s, 'profesor': prof, 'salon': salon, 'patron': patron, 'ini': hora}
-            if mejor_asign is None:
-                # No se encontró ninguna asignación factible para esta sección -> la instancia es infactible
-                raise ValueError(f"No se pudo asignar la sección {s.cod} con los recursos disponibles. Verifique la consistencia de los datos.")
-            sol[idx] = mejor_asign
-            asignado[idx] = True
+                            es_intensivo = any(c >= 3 for c in patron['days'].values())
+                            if prof_obj.cursos_intensivos == 0 and es_intensivo:
+                                continue
+                            if prof_obj.cursos_intensivos == 1 and not es_intensivo:
+                                # Si el profesor quiere intensivos, permitir también no intensivos, pero dar prioridad a intensivos
+                                pass
+                        # Para cada día del patrón, determinar las horas posibles
+                        # Elegimos la hora de inicio y verificamos que todos los días tengan la misma hora
+                        horas_posibles = set(self.bloques)
+                        for dia, contrib in patron['days'].items():
+                            duracion = contrib * 50
+                            # Filtrar por límite operativo
+                            horas_dia = [h for h in self.bloques if h >= self.limite_operativo[0] and h + duracion <= self.limite_operativo[1]]
+                            # Hora universal
+                            if dia in ["Ma", "Ju"]:
+                                horas_dia = [h for h in horas_dia if not (max(h, self.hora_universal[0]) < min(h+duracion, self.hora_universal[1]))]
+                            # Cursos de 3 créditos con contribución >=3 (intensivos) deben empezar después de 3:30 pm
+                            if s.creditos == 3 and contrib >= 3:
+                                horas_dia = [h for h in horas_dia if h >= 930]
+                            horas_posibles = horas_posibles.intersection(set(horas_dia))
+                            if not horas_posibles:
+                                break
+                        if not horas_posibles:
+                            continue
+                        # Tomamos la hora más temprana (puede cambiarse por alguna heurística)
+                        hora = min(horas_posibles)
 
-        # Reordenar las asignaciones según el orden original de self.secciones
-        # Para eso, necesitamos mapear de vuelta al índice original
-        # Como secciones_ordenadas es una lista de objetos, podemos usar un diccionario
-        sol_original = [None] * len(self.secciones)
-        for i, s_ord in enumerate(secciones_ordenadas):
-            # Buscar el índice original de s_ord en self.secciones
-            idx_orig = self.secciones.index(s_ord)
-            sol_original[idx_orig] = sol[i]
-        return sol_original
+                        # Buscar salones compatibles
+                        salones_cand = [sl['CODIGO'] for sl in self.salones
+                                        if compatible_tipo(s.tipo_salon, sl['TIPO']) and sl['CAPACIDAD'] >= s.cupo]
+                        if not salones_cand:
+                            continue
+
+                        # Probar cada salón y verificar conflictos con asignaciones previas
+                        for salon in salones_cand:
+                            conflicto = False
+                            # Verificar conflicto con secciones ya asignadas
+                            for j, asign in enumerate(sol):
+                                if asign and asignado[j] and j != idx:
+                                    # Conflicto de profesor
+                                    if asign['profesor'] == prof:
+                                        for dia2, contrib2 in asign['patron']['days'].items():
+                                            if dia2 in patron['days']:
+                                                fin_actual = hora + int(patron['days'][dia2] * 50)
+                                                fin_exist = asign['ini'] + int(contrib2 * 50)
+                                                if max(hora, asign['ini']) < min(fin_actual, fin_exist):
+                                                    conflicto = True
+                                                    break
+                                    if conflicto:
+                                        break
+                                    # Conflicto de salón
+                                    if asign['salon'] == salon:
+                                        for dia2, contrib2 in asign['patron']['days'].items():
+                                            if dia2 in patron['days']:
+                                                fin_actual = hora + int(patron['days'][dia2] * 50)
+                                                fin_exist = asign['ini'] + int(contrib2 * 50)
+                                                if max(hora, asign['ini']) < min(fin_actual, fin_exist):
+                                                    # Verificar fusión en mega salones
+                                                    if salon in self.mega_salones and s.es_fusionable and asign['seccion'].es_fusionable:
+                                                        if s.cupo + asign['seccion'].cupo <= self.salon_capacidad.get(salon, 0):
+                                                            continue
+                                                    conflicto = True
+                                                    break
+                                    if conflicto:
+                                        break
+                            if not conflicto:
+                                # Calcular costo suave (preferencias) para esta asignación
+                                costo = 0
+                                if prof in self.profesores:
+                                    prof_obj = self.profesores[prof]
+                                    if prof_obj.pref_horas == 'AM' and hora >= 720:
+                                        costo += 30
+                                    elif prof_obj.pref_horas == 'PM' and hora < 720:
+                                        costo += 30
+                                    if prof_obj.pref_dias_set:
+                                        for dia in patron['days'].keys():
+                                            if dia not in prof_obj.pref_dias_set:
+                                                costo += 15
+                                if costo < mejor_costo:
+                                    mejor_costo = costo
+                                    mejor_asign = {'seccion': s, 'profesor': prof, 'salon': salon, 'patron': patron, 'ini': hora}
+                    if mejor_asign is None:
+                        # Depuración: recopilar información para el error
+                        raise ValueError(f"Sección {s.cod} no pudo ser asignada. "
+                                         f"Candidatos: {cand_profs}, "
+                                         f"Patrones disponibles: {[p['name'] for p in PATRONES.get(s.creditos, PATRONES[3])]}, "
+                                         f"Salones compatibles: {len([sl for sl in self.salones if compatible_tipo(s.tipo_salon, sl['TIPO']) and sl['CAPACIDAD'] >= s.cupo])} disponibles.")
+                    sol[idx] = mejor_asign
+                    asignado[idx] = True
+
+                # Reordenar las asignaciones según el orden original de self.secciones
+                sol_original = [None] * len(self.secciones)
+                for i, s_ord in enumerate(secciones_ordenadas):
+                    idx_orig = self.secciones.index(s_ord)
+                    sol_original[idx_orig] = sol[i]
+                return sol_original
+
+            except ValueError as e:
+                if attempt == max_attempts - 1:
+                    raise e
+                # Reintentar con otro orden
+                continue
 
     def _mutar_solucion(self, sol):
         """Realiza un movimiento aleatorio (cambio de profesor, horario o salón) que no introduce conflictos duros."""
@@ -901,15 +914,9 @@ class TabuScheduler:
                         costo += 30
                     elif prof_obj.pref_horas == 'PM' and hora < 720:
                         costo += 30
-                    if prof_obj.pref_dias:
+                    if prof_obj.pref_dias_set:
                         for dia in patron['days'].keys():
-                            if dia == "Lu": rep = "L"
-                            elif dia == "Ma": rep = "M"
-                            elif dia == "Mi": rep = "Mi"
-                            elif dia == "Ju": rep = "J"
-                            elif dia == "Vi": rep = "V"
-                            else: continue
-                            if rep not in prof_obj.pref_dias and "Mi" not in prof_obj.pref_dias:
+                            if dia not in prof_obj.pref_dias_set:
                                 costo += 15
                 mejores_opciones.append((costo, prof, patron, hora, salon))
 
