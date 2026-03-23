@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from copy import deepcopy
 
 # ==============================================================================
-# 1. ESTÉTICA (sin cambios)
+# 1. ESTÉTICA
 # ==============================================================================
 st.set_page_config(page_title="UPRM Scheduler Platinum AI v13", page_icon="🏛️", layout="wide")
 
@@ -259,6 +259,7 @@ class Profesor:
         self.carga_min = float(carga_min) if pd.notnull(carga_min) and carga_min != '' else 0.0
         self.carga_max = float(carga_max) if pd.notnull(carga_max) and carga_max != '' else 12.0
         
+        # Preferencia de días como conjunto
         self.pref_dias_set = set()
         if pref_dias and isinstance(pref_dias, str):
             for token in pref_dias.replace(',', ' ').upper().split():
@@ -288,7 +289,7 @@ class Profesor:
         except:
             self.cursos_intensivos = 0
 
-        self.bloqueos = []
+        self.bloqueos = []  # (dias_set, start, end)
         if bloqueo_dias and isinstance(bloqueo_dias, str) and bloqueo_dias.strip():
             dias_map = {'L': 'Lu', 'M': 'Ma', 'MI': 'Mi', 'J': 'Ju', 'V': 'Vi'}
             dias_limpios = bloqueo_dias.upper().replace(' ', '')
@@ -337,7 +338,7 @@ def compatible_tipo(curso_tipo, salon_tipo):
     return salon_cat != 2
 
 # ==============================================================================
-# 4. MOTOR DE OPTIMIZACIÓN (CONSTRUCCIÓN ORIGINAL + RECOCIDO MEJORADO)
+# 4. MOTOR DE OPTIMIZACIÓN (CORREGIDO)
 # ==============================================================================
 class TabuScheduler:
     def __init__(self, df_cursos, df_profes, df_salones, zona):
@@ -449,6 +450,7 @@ class TabuScheduler:
         return float(s.creditos)
 
     def _preasignar_profesores_robusto(self):
+        # (sin cambios, ya está bien)
         carga_actual = {p: 0.0 for p in self.profesores}
         carga_actual["GRADUADOS"] = 0.0
         carga_actual["TBA"] = 0.0
@@ -832,10 +834,6 @@ class TabuScheduler:
 
     # ----- FUNCIÓN DE BALANCEO DE CARGAS (CORREGIDA) -----
     def _balancear_cargas(self, sol):
-        """
-        Intenta reparar profesores con carga fuera de rango moviendo secciones entre ellos.
-        Retorna la solución modificada y True si hubo algún cambio.
-        """
         # Calcular cargas actuales
         carga = {p: 0.0 for p in self.profesores}
         for asign in sol:
@@ -843,43 +841,34 @@ class TabuScheduler:
             if prof in carga:
                 carga[prof] += self.get_sec_creditos(asign['seccion'], prof)
         
-        # Identificar profesores con problema
         sobrecargados = [p for p in self.profesores if carga[p] > self.profesores[p].carga_max + 1.5]
         subcargados = [p for p in self.profesores if carga[p] < self.profesores[p].carga_min - 1.5]
         if not sobrecargados and not subcargados:
             return sol, False
         
         modificado = False
-        # Para cada sobrecargado, intentar mover una sección a otro profesor
+        # Mover desde sobrecargados
         for p_high in sobrecargados:
-            # Obtener todas las secciones de p_high
             indices_high = [i for i, a in enumerate(sol) if a['profesor'] == p_high]
-            # Ordenar por créditos (más grandes primero)
             indices_high.sort(key=lambda i: self.get_sec_creditos(sol[i]['seccion'], p_high), reverse=True)
             for i in indices_high:
                 asign_orig = sol[i]
                 s = asign_orig['seccion']
-                # Buscar un profesor candidato que pueda tomar esta sección (competencia, capacidad, etc.)
                 candidatos = [p for p in s.cands if p in self.profesores and p != p_high]
-                # Ordenar por prioridad y por si está subcargado
                 candidatos.sort(key=lambda p: (
                     -1 if p in subcargados else 0,
                     -self.profesores[p].prioridad_curso(s.cod)
                 ))
                 for p_low in candidatos:
-                    # Verificar si p_low tiene capacidad para recibir esta sección
                     if carga[p_low] + self.get_sec_creditos(s, p_low) > self.profesores[p_low].carga_max + 1.5:
                         continue
-                    # Intentar reasignar la sección a p_low, verificando conflictos horarios
                     nueva_asign = asign_orig.copy()
                     nueva_asign['profesor'] = p_low
-                    # Verificar que no cause conflictos con otras secciones
                     conflicto = False
                     for j, other in enumerate(sol):
                         if j != i and other:
-                            # Conflicto de profesor
                             if other['profesor'] == p_low:
-                                for dia, contrib in s.patron['days'].items():
+                                for dia, contrib in asign_orig['patron']['days'].items():
                                     for dia2, contrib2 in other['patron']['days'].items():
                                         if dia == dia2:
                                             fin_actual = asign_orig['ini'] + int(contrib * 50)
@@ -887,13 +876,10 @@ class TabuScheduler:
                                             if max(asign_orig['ini'], other['ini']) < min(fin_actual, fin_exist):
                                                 conflicto = True
                                                 break
-                                    if conflicto:
-                                        break
-                            if conflicto:
-                                break
-                            # Conflicto de salón
+                                    if conflicto: break
+                            if conflicto: break
                             if other['salon'] == asign_orig['salon']:
-                                for dia, contrib in s.patron['days'].items():
+                                for dia, contrib in asign_orig['patron']['days'].items():
                                     for dia2, contrib2 in other['patron']['days'].items():
                                         if dia == dia2:
                                             fin_actual = asign_orig['ini'] + int(contrib * 50)
@@ -904,12 +890,9 @@ class TabuScheduler:
                                                         continue
                                                 conflicto = True
                                                 break
-                                    if conflicto:
-                                        break
-                            if conflicto:
-                                break
+                                    if conflicto: break
+                            if conflicto: break
                     if not conflicto:
-                        # Realizar el cambio
                         sol[i] = nueva_asign
                         carga[p_high] -= self.get_sec_creditos(s, p_high)
                         carga[p_low] += self.get_sec_creditos(s, p_low)
@@ -920,32 +903,29 @@ class TabuScheduler:
             if modificado:
                 break
         
-        # Repetir el proceso para subcargados (tomar secciones de otros)
+        # Mover hacia subcargados
         if not modificado:
             for p_low in subcargados:
                 indices_others = [i for i, a in enumerate(sol) if a['profesor'] != p_low and a['profesor'] in self.profesores]
-                # Ordenar por créditos (más grandes primero) para que la subida sea más efectiva
                 indices_others.sort(key=lambda i: self.get_sec_creditos(sol[i]['seccion'], sol[i]['profesor']), reverse=True)
                 for i in indices_others:
                     asign_orig = sol[i]
                     s = asign_orig['seccion']
                     p_high = asign_orig['profesor']
                     if p_high in self.profesores:
-                        # Si mover esta sección a p_low ayuda a subir su carga sin que p_high baje demasiado
                         if carga[p_high] - self.get_sec_creditos(s, p_high) < self.profesores[p_high].carga_min - 1.5:
                             continue
                         if p_low not in s.cands:
                             continue
                         if carga[p_low] + self.get_sec_creditos(s, p_low) > self.profesores[p_low].carga_max + 1.5:
                             continue
-                        # Verificar conflictos horarios
                         nueva_asign = asign_orig.copy()
                         nueva_asign['profesor'] = p_low
                         conflicto = False
                         for j, other in enumerate(sol):
                             if j != i and other:
                                 if other['profesor'] == p_low:
-                                    for dia, contrib in s.patron['days'].items():
+                                    for dia, contrib in asign_orig['patron']['days'].items():
                                         for dia2, contrib2 in other['patron']['days'].items():
                                             if dia == dia2:
                                                 fin_actual = asign_orig['ini'] + int(contrib * 50)
@@ -953,12 +933,10 @@ class TabuScheduler:
                                                 if max(asign_orig['ini'], other['ini']) < min(fin_actual, fin_exist):
                                                     conflicto = True
                                                     break
-                                            if conflicto:
-                                                break
-                                    if conflicto:
-                                        break
+                                            if conflicto: break
+                                    if conflicto: break
                                 if other['salon'] == asign_orig['salon']:
-                                    for dia, contrib in s.patron['days'].items():
+                                    for dia, contrib in asign_orig['patron']['days'].items():
                                         for dia2, contrib2 in other['patron']['days'].items():
                                             if dia == dia2:
                                                 fin_actual = asign_orig['ini'] + int(contrib * 50)
@@ -969,12 +947,9 @@ class TabuScheduler:
                                                             continue
                                                     conflicto = True
                                                     break
-                                            if conflicto:
-                                                break
-                                    if conflicto:
-                                        break
-                            if conflicto:
-                                break
+                                            if conflicto: break
+                                    if conflicto: break
+                            if conflicto: break
                         if not conflicto:
                             sol[i] = nueva_asign
                             carga[p_high] -= self.get_sec_creditos(s, p_high)
@@ -989,8 +964,7 @@ class TabuScheduler:
 
     # ----- MUTACIÓN ASISTIDA POR FACTIBILIDAD (CORREGIDA) -----
     def _mutar_solucion(self, sol):
-        # Elegir aleatoriamente entre cambio simple o intercambio
-        if random.random() < 0.3:   # 30% de probabilidad de intentar un intercambio
+        if random.random() < 0.3:
             return self._mutar_intercambio(sol)
         else:
             return self._mutar_cambio_simple(sol)
@@ -1046,7 +1020,6 @@ class TabuScheduler:
                 continue
             salon = random.choice(salones_cand)
 
-            # Verificar conflictos con otras asignaciones (excepto la actual)
             conflicto = False
             for j, other in enumerate(sol):
                 if j != idx and other:
@@ -1059,10 +1032,9 @@ class TabuScheduler:
                                     if max(hora, other['ini']) < min(fin_actual, fin_exist):
                                         conflicto = True
                                         break
-                            if conflicto:
-                                break
-                    if conflicto:
-                        break
+                                if conflicto: break
+                            if conflicto: break
+                    if conflicto: break
                     if other['salon'] == salon:
                         for dia, contrib in patron['days'].items():
                             for dia2, contrib2 in other['patron']['days'].items():
@@ -1075,10 +1047,9 @@ class TabuScheduler:
                                                 continue
                                         conflicto = True
                                         break
-                                if conflicto:
-                                    break
-                    if conflicto:
-                        break
+                                if conflicto: break
+                            if conflicto: break
+                    if conflicto: break
             if not conflicto:
                 costo = 0
                 if prof in self.profesores:
@@ -1101,10 +1072,6 @@ class TabuScheduler:
         return nuevo, self._costo_total(nuevo)
 
     def _mutar_intercambio(self, sol):
-        """
-        Intercambia los profesores de dos secciones elegidas al azar.
-        Solo si el intercambio no introduce conflictos duros.
-        """
         nuevo = deepcopy(sol)
         indices = list(range(len(nuevo)))
         random.shuffle(indices)
@@ -1118,23 +1085,18 @@ class TabuScheduler:
                 s2 = asign2['seccion']
                 prof1 = asign1['profesor']
                 prof2 = asign2['profesor']
-                # Verificar que ambos profesores sean válidos y estén en las listas de candidatos
                 if prof1 not in s2.cands or prof2 not in s1.cands:
                     continue
-                # Verificar que el intercambio no cause conflictos de horario
-                # Guardar asignaciones originales
-                # Crear nuevas asignaciones intercambiando profesores
                 nueva_asig1 = asign1.copy()
                 nueva_asig1['profesor'] = prof2
                 nueva_asig2 = asign2.copy()
                 nueva_asig2['profesor'] = prof1
-                # Verificar conflictos con el resto de secciones
                 conflicto = False
                 # Verificar nueva_asig1
                 for k, other in enumerate(nuevo):
                     if k != i and other:
                         if other['profesor'] == prof2:
-                            for dia, contrib in s1.patron['days'].items():
+                            for dia, contrib in asign1['patron']['days'].items():
                                 for dia2, contrib2 in other['patron']['days'].items():
                                     if dia == dia2:
                                         fin_actual = asign1['ini'] + int(contrib * 50)
@@ -1142,12 +1104,11 @@ class TabuScheduler:
                                         if max(asign1['ini'], other['ini']) < min(fin_actual, fin_exist):
                                             conflicto = True
                                             break
-                                    if conflicto:
-                                        break
-                            if conflicto:
-                                break
+                                    if conflicto: break
+                                if conflicto: break
+                        if conflicto: break
                         if other['salon'] == asign1['salon'] and k != j:
-                            for dia, contrib in s1.patron['days'].items():
+                            for dia, contrib in asign1['patron']['days'].items():
                                 for dia2, contrib2 in other['patron']['days'].items():
                                     if dia == dia2:
                                         fin_actual = asign1['ini'] + int(contrib * 50)
@@ -1158,18 +1119,15 @@ class TabuScheduler:
                                                     continue
                                             conflicto = True
                                             break
-                                    if conflicto:
-                                        break
-                            if conflicto:
-                                break
-                    if conflicto:
-                        break
+                                    if conflicto: break
+                                if conflicto: break
+                        if conflicto: break
                 if not conflicto:
                     # Verificar nueva_asig2
                     for k, other in enumerate(nuevo):
                         if k != j and other:
                             if other['profesor'] == prof1:
-                                for dia, contrib in s2.patron['days'].items():
+                                for dia, contrib in asign2['patron']['days'].items():
                                     for dia2, contrib2 in other['patron']['days'].items():
                                         if dia == dia2:
                                             fin_actual = asign2['ini'] + int(contrib * 50)
@@ -1177,12 +1135,11 @@ class TabuScheduler:
                                             if max(asign2['ini'], other['ini']) < min(fin_actual, fin_exist):
                                                 conflicto = True
                                                 break
-                                        if conflicto:
-                                            break
-                                if conflicto:
-                                    break
+                                        if conflicto: break
+                                    if conflicto: break
+                            if conflicto: break
                             if other['salon'] == asign2['salon'] and k != i:
-                                for dia, contrib in s2.patron['days'].items():
+                                for dia, contrib in asign2['patron']['days'].items():
                                     for dia2, contrib2 in other['patron']['days'].items():
                                         if dia == dia2:
                                             fin_actual = asign2['ini'] + int(contrib * 50)
@@ -1193,18 +1150,13 @@ class TabuScheduler:
                                                         continue
                                                 conflicto = True
                                                 break
-                                        if conflicto:
-                                            break
-                                if conflicto:
-                                    break
-                        if conflicto:
-                            break
+                                        if conflicto: break
+                                    if conflicto: break
+                            if conflicto: break
                 if not conflicto:
-                    # Realizar el intercambio
                     nuevo[i] = nueva_asig1
                     nuevo[j] = nueva_asig2
                     return nuevo, self._costo_total(nuevo)
-        # Si no se encontró un intercambio válido, devolver la misma solución
         return nuevo, self._costo_total(nuevo)
 
     def optimizar(self, iteraciones=5000, bar=None, status_text=None):
@@ -1224,7 +1176,6 @@ class TabuScheduler:
                     prob = 0
                 if random.random() < prob:
                     self.solucion = vecino
-            # Balancear cargas cada 50 iteraciones
             if it % 50 == 0:
                 self.solucion, _ = self._balancear_cargas(self.solucion)
                 if self._costo_total(self.solucion) < self.mejor_costo:
@@ -1238,7 +1189,6 @@ class TabuScheduler:
                     status_text.markdown(f"**🔄 Generación {it+1}/{iteraciones}** | Conflictos Duros: {duros} | Costo Total: {self.mejor_costo:.2f} | Fitness: {fitness_actual:.5f}")
                 if bar:
                     bar.progress((it+1)/iteraciones)
-        # Al final, aplicar balanceo una vez más
         self.mejor_solucion, _ = self._balancear_cargas(self.mejor_solucion)
         self.mejor_costo = self._costo_total(self.mejor_solucion)
         return self.mejor_solucion, int(self.mejor_costo // 10000), self.historial_costos
