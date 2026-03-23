@@ -117,7 +117,7 @@ st.markdown("""
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
         <p style="color: #888; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
-            UPRM MATHEMATICAL OPTIMIZATION ENGINE v13 (EVOLUTIVO + INTENSIVOS)
+            UPRM MATHEMATICAL OPTIMIZATION ENGINE v13 (EVOLUTIVO + INTENSIVOS + GRANDES + BLOQUEOS)
         </p>
     </div>
     <div class="abstract-icon">∞</div>
@@ -246,6 +246,7 @@ class Seccion:
         base = self.cod.split('-')[0].upper().replace(" ", "")
         self.es_fusionable = base in ["MATE3171", "MATE3172", "MATE3173"]
         self.prof_preasignado = None  
+        self.es_grande = self.cupo >= 60   # Definición de sección grande (cupo >= 60)
 
 class Profesor:
     def __init__(self, nombre, carga_min, carga_max, pref_dias, pref_horas,
@@ -268,6 +269,38 @@ class Profesor:
             self.cursos_intensivos = int(cursos_intensivos)
         except:
             self.cursos_intensivos = 0
+
+        # Procesar bloqueos de horario
+        self.bloqueos = []  # lista de (dias_set, start_min, end_min)
+        if bloqueo_dias and isinstance(bloqueo_dias, str) and bloqueo_dias.strip():
+            # días: por ejemplo "LMV" -> {'Lu','Ma','Mi','Ju','Vi'}? Depende de la entrada.
+            # Normalmente se espera una cadena con las letras de los días en español: L, M, Mi, J, V.
+            # Convertir a un set de días completos.
+            dias_map = {'L': 'Lu', 'M': 'Ma', 'MI': 'Mi', 'J': 'Ju', 'V': 'Vi'}
+            # Manejar posibles múltiples formatos (p.ej. "LMV" o "L,M,V").
+            # Por simplicidad, asumimos que viene como "LMV" o "L M V"
+            dias_limpios = bloqueo_dias.upper().replace(' ', '')
+            if ',' in dias_limpios:
+                dias_limpios = dias_limpios.replace(',', '')
+            dias_set = set()
+            i = 0
+            while i < len(dias_limpios):
+                if dias_limpios[i:i+2] == 'MI':
+                    dias_set.add('Mi')
+                    i += 2
+                else:
+                    letra = dias_limpios[i]
+                    if letra in dias_map:
+                        dias_set.add(dias_map[letra])
+                    i += 1
+            if dias_set:
+                try:
+                    start_min = str_to_mins(bloqueo_ini) if bloqueo_ini and pd.notnull(bloqueo_ini) else None
+                    end_min = str_to_mins(bloqueo_fin) if bloqueo_fin and pd.notnull(bloqueo_fin) else None
+                    if start_min is not None and end_min is not None:
+                        self.bloqueos.append((dias_set, start_min, end_min))
+                except:
+                    pass
 
     def prioridad_curso(self, curso_cod):
         for idx, pref in enumerate(self.preferencias):
@@ -298,6 +331,7 @@ class TabuScheduler:
         
         # Diccionario para obtener tipo de salón rápidamente
         self.salon_tipo = {s['CODIGO']: s['TIPO'] for s in self.salones}
+        self.salon_capacidad = {s['CODIGO']: s['CAPACIDAD'] for s in self.salones}
 
         # 2. Procesar Profesores
         self.profesores = {}
@@ -311,7 +345,9 @@ class TabuScheduler:
                     carga_max=r.get('CARGA_MAX', 15),
                     pref_dias=r.get('PREF_DIAS', ''),
                     pref_horas=r.get('PREF_HORAS', 'ANY'),
-                    bloqueo_dias='', bloqueo_ini='', bloqueo_fin='',
+                    bloqueo_dias=r.get('BLOQUEO_DIAS', ''),
+                    bloqueo_ini=r.get('BLOQUEO_HORA_INI', ''),
+                    bloqueo_fin=r.get('BLOQUEO_HORA_FIN', ''),
                     preferencias_cursos=prefs,
                     compensacion=r.get('COMPENSACION', 'NO'),
                     acepta_grandes=r.get('ACEPTA_GRANDES', 0),
@@ -378,7 +414,6 @@ class TabuScheduler:
                 return get_creditos_reales(s.creditos, s.cupo)
         return float(s.creditos)
 
-    # ===== NUEVO MÉTODO DE PREASIGNACIÓN MEJORADO =====
     def _preasignar_profesores_robusto(self):
         # Inicializar cargas
         carga_actual = {p: 0.0 for p in self.profesores}
@@ -419,14 +454,18 @@ class TabuScheduler:
             if prof in capacidad_restante:
                 capacidad_restante[prof] -= creditos
         
-        # 2. Asignar secciones con múltiples candidatos
+        # 2. Asignar secciones con múltiples candidatos, dando preferencia a grandes para profes que aceptan grandes
         # Calcular puntaje de preferencia para cada par (sección, profesor)
         preferencias = {}
         for s in secciones_multiple:
             preferencias[s] = {}
             for prof in s.cands:
                 if prof in self.profesores:
-                    preferencias[s][prof] = self.profesores[prof].prioridad_curso(s.cod)
+                    # Aumentar la prioridad si la sección es grande y el profesor acepta grandes
+                    prioridad_base = self.profesores[prof].prioridad_curso(s.cod)
+                    if s.es_grande and self.profesores[prof].acepta_grandes == 1:
+                        prioridad_base += 0.5  # incentivo extra
+                    preferencias[s][prof] = prioridad_base
                 else:
                     preferencias[s][prof] = 0.0
         
@@ -529,6 +568,13 @@ class TabuScheduler:
             if salon_info and not (salon in self.mega_salones and s.es_fusionable) and salon_info['TIPO'] != s.tipo_salon:
                 conflicts += 10000
             
+            # Nuevo: verificar ACEPTA_GRANDES
+            if prof in self.profesores:
+                prof_obj = self.profesores[prof]
+                if prof_obj.acepta_grandes == 0 and s.es_grande:
+                    conflicts += 10000  # No acepta grandes pero se le asigna una sección grande
+                # Si acepta grandes, no hay penalización si se le asigna grande o no, pero podemos darle preferencia en otra parte.
+            
             if prof in carga_prof:
                 carga_prof[prof] += self.get_sec_creditos(s, prof)
             
@@ -553,6 +599,14 @@ class TabuScheduler:
                         dia_letra = 'W' if dia == 'Mi' else dia[0]
                         if dia_letra not in prof_obj.pref_dias:
                             soft_penalty += 15
+
+                # Nuevo: Verificar bloqueos de horario (duros)
+                for (dias_set, start, end) in prof_obj.bloqueos:
+                    for dia in patron['days'].keys():
+                        if dia in dias_set:
+                            fin = ini + int(patron['days'][dia] * 50)
+                            if max(ini, start) < min(fin, end):
+                                conflicts += 10000
 
             for dia, contrib in patron['days'].items():
                 fin = ini + int(contrib * 50)
@@ -634,6 +688,18 @@ class TabuScheduler:
                     conflictos_list.append(f"Sección {s.cod}: Prof {prof} tiene clase intensiva pero solicitó NO intensivos.")
                 elif prof_obj.cursos_intensivos == 1 and puede_ser_intensivo and not es_intensivo:
                     conflictos_list.append(f"Sección {s.cod}: Prof {prof} NO tiene clase intensiva pero solicitó SÍ intensivos.")
+                
+                # Verificar ACEPTA_GRANDES
+                if prof_obj.acepta_grandes == 0 and s.es_grande:
+                    conflictos_list.append(f"Sección {s.cod}: Prof {prof} no acepta grandes pero se le asignó sección grande (cupo {s.cupo}).")
+                
+                # Verificar bloqueos
+                for (dias_set, start, end) in prof_obj.bloqueos:
+                    for dia in patron['days'].keys():
+                        if dia in dias_set:
+                            fin = ini + int(patron['days'][dia] * 50)
+                            if max(ini, start) < min(fin, end):
+                                conflictos_list.append(f"Sección {s.cod}: Prof {prof} tiene bloqueo el {dia} de {mins_to_str(start)} a {mins_to_str(end)}.")
             
             for dia, contrib in patron['days'].items():
                 fin = ini + int(contrib * 50)
@@ -716,6 +782,17 @@ class TabuScheduler:
                 
                 for ini in inicios_posibles:
                     for salon in salones_posibles:
+                        # Verificar bloqueos del profesor
+                        if prof in self.profesores:
+                            bloqueado = False
+                            for (dias_set, start, end) in self.profesores[prof].bloqueos:
+                                if dia in dias_set and max(ini, start) < min(ini+duracion, end):
+                                    bloqueado = True
+                                    break
+                            if bloqueado:
+                                continue
+                        
+                        # Verificar otros conflictos
                         conflicto = False
                         for j, asign in enumerate(sol):
                             if asign and asignado[j] and j != idx:
@@ -727,7 +804,8 @@ class TabuScheduler:
                                     for dia2, contrib2 in asign['patron']['days'].items():
                                         if dia == dia2 and max(ini, asign['ini']) < min(ini + duracion, asign['ini'] + int(contrib2 * 50)):
                                             if salon in self.mega_salones and s.es_fusionable and asign['seccion'].es_fusionable:
-                                                if s.cupo + asign['seccion'].cupo <= next(sl['CAPACIDAD'] for sl in self.salones if sl['CODIGO']==salon): continue
+                                                if s.cupo + asign['seccion'].cupo <= self.salon_capacidad.get(salon, 0):
+                                                    continue
                                             conflicto = True; break
                             if conflicto: break
                         if not conflicto:
@@ -974,7 +1052,7 @@ def main():
         st.markdown("""
             <div class='glass-card' style='text-align: center;'>
                 <h3 style='margin-top:0; color: #D4AF37;'>📥 Sincronización de Datos</h3>
-                <p>Asegúrese de que el archivo Profesores.csv contiene la columna CURSOS_INTENSIVOS.</p>
+                <p>Asegúrese de que el archivo Profesores.csv contiene las columnas: CURSOS_INTENSIVOS, ACEPTA_GRANDES, BLOQUEO_DIAS, BLOQUEO_HORA_INI, BLOQUEO_HORA_FIN.</p>
             </div>
         """, unsafe_allow_html=True)
     else:
