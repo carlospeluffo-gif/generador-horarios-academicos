@@ -903,13 +903,13 @@ class TabuScheduler:
                     bar.progress((it+1)/iteraciones)
         return self.mejor_solucion, int(self.mejor_costo // 10000), self.historial_costos
 
-    def optimizar_auto(self, max_iter=5000, max_time=300, fitness_target=0.90, patience=15, bar=None, status_text=None):
+    def optimizar_auto(self, max_iter=20000, max_time=600, fitness_target=0.90, patience=15, bar=None, status_text=None):
         """
         Corre el algoritmo hasta que se cumpla alguna condición de parada:
-        - Se alcanza un fitness >= fitness_target
+        - Se alcanza un fitness >= fitness_target (solo después de tener cero conflictos)
         - Se supera max_iter iteraciones
         - Se excede max_time segundos
-        - Después de alcanzar 0 conflictos, no hay mejora en 'patience' iteraciones consecutivas
+        - Después de alcanzar cero conflictos, no hay mejora en 'patience' iteraciones consecutivas
         """
         start_time = time.time()
         best_solution = deepcopy(self.solucion)
@@ -921,24 +921,25 @@ class TabuScheduler:
         temp_inicial = 5000.0
         it = 0
         no_improve = 0
-        zero_conflicts_reached = (best_cost < 10000)  # ¿Ya hay cero conflictos?
+        zero_conflicts_reached = (best_cost < 10000)
 
         while it < max_iter and (time.time() - start_time) < max_time:
             # Realizar un paso de mutación y aceptación
             vecino, costo_vecino = self._mutar_solucion(self.solucion)
             temp = temp_inicial / (it + 1)
 
-            # Aceptación (similar a simulated annealing)
+            # Aceptación (simulated annealing)
             if costo_vecino <= best_cost:
                 # Mejor solución encontrada
                 self.solucion = vecino
                 if costo_vecino < best_cost:
                     best_cost = costo_vecino
                     best_solution = deepcopy(self.solucion)
-                    no_improve = 0
+                    # Si antes no teníamos cero conflictos y ahora sí, reiniciamos paciencia
                     if not zero_conflicts_reached and best_cost < 10000:
                         zero_conflicts_reached = True
-                        # Reiniciamos contador para empezar a medir paciencia después de alcanzar 0 conflictos
+                        no_improve = 0
+                    else:
                         no_improve = 0
                 else:
                     no_improve += 1
@@ -948,15 +949,13 @@ class TabuScheduler:
                 prob = math.exp(-delta / temp) if temp > 0 else 0
                 if random.random() < prob:
                     self.solucion = vecino
-                    # No mejoró el mejor, así que incrementamos no_improve
                     no_improve += 1
                 else:
-                    # No se aceptó, también se considera como iteración sin mejora
                     no_improve += 1
 
             self.historial_costos.append(best_cost)
 
-            # Actualizar UI
+            # Actualizar UI cada 10 iteraciones o al final
             if it % 10 == 0 or it == max_iter - 1:
                 if status_text:
                     conflicts = int(best_cost // 10000)
@@ -966,13 +965,19 @@ class TabuScheduler:
                 if bar:
                     bar.progress(min((it+1)/max_iter, 1.0))
 
-            # Verificar condiciones de parada
-            if best_cost < 10000:  # Ya tenemos cero conflictos
-                if (10000 / (10000 + best_cost)) >= fitness_target:
+            # Condiciones de parada (solo después de cero conflictos)
+            if zero_conflicts_reached:
+                current_fitness = 10000 / (10000 + best_cost)
+                if current_fitness >= fitness_target:
                     break
                 if no_improve >= patience:
                     break
+
             it += 1
+
+        # Mensaje si no se alcanzó cero conflictos
+        if best_cost >= 10000 and status_text:
+            status_text.markdown(f"⚠️ **No se alcanzó cero conflictos después de {it} iteraciones. Puede que el problema sea infeasible o se necesiten más iteraciones.**")
 
         # Guardar la mejor solución
         self.mejor_solucion = best_solution
@@ -1115,10 +1120,10 @@ def main():
                                     help="Se ejecutarán exactamente esas iteraciones. Puede que la solución final tenga conflictos si son pocas.")
         else:
             with st.expander("Configuración avanzada (modo automático)"):
-                max_iter_auto = st.number_input("Máx. iteraciones", 1000, 20000, 5000)
-                max_time_auto = st.number_input("Máx. tiempo (s)", 60, 600, 300)
+                max_iter_auto = st.number_input("Máx. iteraciones", 1000, 50000, 20000)
+                max_time_auto = st.number_input("Máx. tiempo (s)", 60, 1200, 600)
                 fitness_target = st.slider("Fitness objetivo", 0.80, 1.00, 0.90, step=0.01)
-                patience = st.number_input("Paciencia (generaciones sin mejora)", 5, 50, 15)
+                patience = st.number_input("Paciencia (generaciones sin mejora después de cero conflictos)", 5, 50, 15)
         file = st.file_uploader("Subir Protocolo Excel", type=['xlsx'])
         st.download_button("📥 Descargar Plantilla", data=generar_plantilla(), file_name="PLANTILLA.xlsx")
 
@@ -1233,7 +1238,11 @@ def main():
             conflictos = st.session_state.conflicts
             if conflictos > 0:
                 st.error(f"⚠️ Aún persisten {conflictos} conflictos. Son choques de salón, horas o restricciones fuertes.")
-                for conf in st.session_state.detailed_conflicts: st.write(f"- {conf}")
+                # Si se detuvo por límites, mostrar sugerencia
+                if modo == "Automático (hasta solución óptima)":
+                    st.warning("El algoritmo se detuvo por alcanzar el máximo de iteraciones o tiempo. Intente aumentar estos límites en la configuración avanzada, o revise si los datos son infactibles.")
+                for conf in st.session_state.detailed_conflicts:
+                    st.write(f"- {conf}")
             else:
                 st.success("✅ 100% Asignación Perfecta. Cero Conflictos. Se balancearon las cargas y se respetaron los espacios y preferencias.")
                 
