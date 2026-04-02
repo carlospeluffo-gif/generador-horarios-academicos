@@ -13,7 +13,8 @@ import unicodedata
 # 1. UTILIDADES Y TABLAS DE REFERENCIA
 # ==============================================================================
 def normalize_name(s: str) -> str:
-    """Elimina acentos y convierte a mayúsculas para comparaciones robustas."""
+    """Elimina acentos, convierte a mayúsculas y quita espacios sobrantes."""
+    s = s.strip()
     return unicodedata.normalize('NFKD', s).encode('ASCII', 'ignore').decode().upper()
 
 COMPENSACION_TABLE = [
@@ -122,7 +123,7 @@ class Seccion:
         if isinstance(candidatos_raw, list):
             raw_list = [normalize_name(c) for c in candidatos_raw if c.strip()]
         else:
-            raw_list = [normalize_name(c) for c in str(candidatos_raw).split(',') if c.strip() and str(c).upper() != 'NAN']
+            raw_list = [normalize_name(c.strip()) for c in str(candidatos_raw).split(',') if c.strip() and str(c).upper() != 'NAN']
         self.cands = list(set(raw_list))
         try:
             t = float(tipo_salon)
@@ -323,7 +324,7 @@ class GeneticScheduler:
             self.bloques = list(range(420, 1021, 60))
 
     # --------------------------------------------------------------------------
-    # Preasignación de profesores (mismo que antes, pero con normalización)
+    # Preasignación de profesores
     # --------------------------------------------------------------------------
     def _preasignar_profesores_robusto(self):
         carga_actual = {p: 0.0 for p in self.profesores}
@@ -1121,18 +1122,18 @@ def generar_heatmap_ocupacion(scheduler, solucion):
     etiquetas_horas = [mins_to_str(h).replace(' AM', '').replace(' PM', '') for h in horas_del_dia]
     step = max(1, len(etiquetas_horas) // 12)
     ax.set_xticks(range(0, len(horas_del_dia), step))
-    ax.set_xticklabels(etiquetas_horas[::step], rotation=45, ha='right', color='white')
+    ax.set_xticklabels(etiquetas_horas[::step], rotation=45, ha='right', color='black')
     ax.set_yticks(range(len(dias_semana)))
-    ax.set_yticklabels(dias_semana, color='white')
+    ax.set_yticklabels(dias_semana, color='black')
     cbar = plt.colorbar(im, ax=ax, label='% Ocupación')
-    cbar.ax.yaxis.label.set_color('white')
-    cbar.ax.tick_params(colors='white')
-    ax.set_title('Ocupación de Salones por Franja Horaria', color='white', pad=20)
-    ax.set_xlabel('Hora de Inicio', color='white')
-    ax.set_ylabel('Día', color='white')
-    fig.patch.set_facecolor('#0F0F0F')
-    ax.set_facecolor('#1A1A1A')
-    ax.tick_params(colors='white')
+    cbar.ax.yaxis.label.set_color('black')
+    cbar.ax.tick_params(colors='black')
+    ax.set_title('Ocupación de Salones por Franja Horaria', color='black', pad=20)
+    ax.set_xlabel('Hora de Inicio', color='black')
+    ax.set_ylabel('Día', color='black')
+    fig.patch.set_facecolor('#F5F5F5')
+    ax.set_facecolor('#FFFFFF')
+    ax.tick_params(colors='black')
     for spine in ax.spines.values():
         spine.set_edgecolor('#D4AF37')
     plt.tight_layout()
@@ -1185,12 +1186,116 @@ def generar_plantilla():
     return output.getvalue()
 
 # ==============================================================================
-# 7. UI PRINCIPAL
+# 7. UI PRINCIPAL (fondo blanco, estilo original)
 # ==============================================================================
-def main():
-    st.set_page_config(page_title="UPRM Scheduler Platinum AI v13", page_icon="🏛️", layout="wide")
-    st.markdown(""" ... (el mismo CSS que en el código original) ... """, unsafe_allow_html=True)
+st.set_page_config(page_title="UPRM Scheduler Platinum AI v13", page_icon="🏛️", layout="wide")
 
+st.markdown("""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Source+Code+Pro:wght@300;500&display=swap');
+    
+    .stApp { 
+        background-color: #ffffff;
+        background-image: none;
+        color: #1a1a1a; 
+    }
+
+    .math-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 30px 60px;
+        background: rgba(245, 245, 245, 0.95);
+        border-bottom: 3px solid #D4AF37;
+        margin-bottom: 40px;
+        border-radius: 0 0 30px 30px;
+        box-shadow: 0 10px 50px rgba(0,0,0,0.1);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .math-header::before { content: '∑'; position: absolute; left: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.2); font-family: serif; }
+    .math-header::after { content: '∫'; position: absolute; right: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.2); font-family: serif; }
+
+    .title-box { text-align: center; z-index: 2; }
+
+    .abstract-icon {
+        font-size: 3rem;
+        color: #D4AF37;
+        border: 2px solid #D4AF37;
+        padding: 10px 20px;
+        border-radius: 50% 0% 50% 0%;
+        background: rgba(212, 175, 55, 0.05);
+        box-shadow: 0 0 15px rgba(212, 175, 55, 0.3);
+    }
+
+    h1 { 
+        font-family: 'Playfair Display', serif !important; 
+        color: #8B691B !important; 
+        font-size: 3.2rem !important;
+        margin: 10px 0 !important;
+        text-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
+        letter-spacing: 2px;
+    }
+
+    .glass-card { 
+        background: rgba(250, 250, 250, 0.95); 
+        border-radius: 15px; 
+        padding: 25px; 
+        border: 1px solid rgba(212, 175, 55, 0.5); 
+        backdrop-filter: blur(5px);
+        margin-bottom: 20px; 
+        box-shadow: 0 5px 20px rgba(0,0,0,0.05);
+    }
+
+    .stButton>button { 
+        background: linear-gradient(135deg, #8E6E13 0%, #D4AF37 50%, #8E6E13 100%) !important; 
+        color: white !important; font-weight: bold !important; border-radius: 4px !important; 
+        width: 100%; border: none !important; height: 55px; font-size: 1.1rem;
+        transition: 0.4s;
+    }
+    .stButton>button:hover { transform: scale(1.02); box-shadow: 0 0 25px rgba(212, 175, 55, 0.4); }
+
+    .stDownloadButton>button {
+        background: linear-gradient(135deg, #B8860B 0%, #FFD700 50%, #B8860B 100%) !important;
+        color: #000 !important;
+        font-weight: 800 !important;
+        border: 1px solid #D4AF37 !important;
+    }
+
+    [data-testid="stSidebar"] { background-color: #f8f8f8; border-right: 1px solid #D4AF37; }
+    
+    [data-testid="stSidebar"] h3 {
+        color: #8B691B !important;
+        text-shadow: 0 0 10px rgba(212, 175, 55, 0.2);
+        font-family: 'Playfair Display', serif;
+    }
+
+    .status-badge { 
+        background: rgba(212, 175, 55, 0.1); 
+        border: 1px solid #D4AF37; 
+        color: #8B691B; 
+        padding: 12px; 
+        border-radius: 8px; 
+        text-align: center;
+        font-family: 'Source Code Pro', monospace;
+        font-weight: 500;
+    }
+</style>
+
+<div class="math-header">
+    <div class="abstract-icon">Δx</div>
+    <div class="title-box">
+        <h1>UPRM TIMETABLE SYSTEM</h1>
+        <p style="color: #666; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
+            UPRM MATHEMATICAL OPTIMIZATION ENGINE v13 (EVOLUTIVO + INTENSIVOS + GRANDES + BLOQUEOS)
+        </p>
+    </div>
+    <div class="abstract-icon">∞</div>
+</div>
+""", unsafe_allow_html=True)
+
+def main():
     with st.sidebar:
         st.markdown("### ∑ Configuración")
         zona = st.selectbox("Zona Campus", ["CENTRAL", "PERIFERICA"])
@@ -1320,12 +1425,12 @@ def main():
             fitness_history = [10000 / (10000 + costo) for costo in st.session_state.historial]
             fig1, ax1 = plt.subplots(figsize=(10, 4))
             ax1.plot(fitness_history, color='#D4AF37', linewidth=2.5)
-            ax1.set_title("Crecimiento de Fitness Evolutivo", color='white', pad=15)
-            ax1.set_xlabel("Iteraciones", color='white')
-            ax1.set_ylabel("Fitness (1.0 = Ideal)", color='white')
-            fig1.patch.set_facecolor('#0F0F0F')
-            ax1.set_facecolor('#1A1A1A')
-            ax1.tick_params(colors='white')
+            ax1.set_title("Crecimiento de Fitness Evolutivo", color='black', pad=15)
+            ax1.set_xlabel("Iteraciones", color='black')
+            ax1.set_ylabel("Fitness (1.0 = Ideal)", color='black')
+            fig1.patch.set_facecolor('#F5F5F5')
+            ax1.set_facecolor('#FFFFFF')
+            ax1.tick_params(colors='black')
             for spine in ax1.spines.values(): spine.set_edgecolor('#D4AF37')
             st.pyplot(fig1)
 
@@ -1336,10 +1441,10 @@ def main():
             fig2, ax2 = plt.subplots(figsize=(12, 6))
             ax2.bar(cargas_df['Profesor'], cargas_df['Créditos Reales'], color='#8E6E13')
             ax2.axhline(y=12, color='#FF4B4B', linestyle='--', linewidth=2, label='Carga Estándar Típica (12 cr)')
-            ax2.set_xticklabels(cargas_df['Profesor'], rotation=45, ha='right', color='white')
-            ax2.tick_params(colors='white')
-            fig2.patch.set_facecolor('#0F0F0F')
-            ax2.set_facecolor('#1A1A1A')
+            ax2.set_xticklabels(cargas_df['Profesor'], rotation=45, ha='right', color='black')
+            ax2.tick_params(colors='black')
+            fig2.patch.set_facecolor('#F5F5F5')
+            ax2.set_facecolor('#FFFFFF')
             for spine in ax2.spines.values(): spine.set_edgecolor('#D4AF37')
             ax2.legend()
             st.pyplot(fig2)
