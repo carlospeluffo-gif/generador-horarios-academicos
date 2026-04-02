@@ -334,7 +334,7 @@ def compatible_tipo(curso_tipo, salon_tipo):
     return salon_cat != 2
 
 # ==============================================================================
-# 4. MOTOR DE OPTIMIZACIÓN GENÉTICO (REEMPLAZO COMPLETO PERO CON MISMO COMPORTAMIENTO)
+# 4. MOTOR DE OPTIMIZACIÓN GENÉTICO (CORREGIDO)
 # ==============================================================================
 class GeneticScheduler:
     def __init__(self, df_cursos, df_profes, df_salones, df_graduados, zona):
@@ -1101,10 +1101,9 @@ class GeneticScheduler:
         return sol, modificado
 
     # --------------------------------------------------------------------------
-    # Operadores genéticos: cruce y mutación
+    # Operadores genéticos: cruce y mutación (CORREGIDOS)
     # --------------------------------------------------------------------------
     def _cruzar(self, padre1, padre2):
-        # Cruce uniforme: cada posición (sección) elige de uno de los padres con 50% de probabilidad
         hijo = []
         for i in range(len(padre1)):
             if random.random() < 0.5:
@@ -1113,21 +1112,20 @@ class GeneticScheduler:
                 hijo.append(deepcopy(padre2[i]))
         return hijo
 
-    def _mutar(self, individuo, prob_mutacion=0.05):
-        # Muta cada sección con cierta probabilidad, similar a la mutación original
+    def _mutar(self, individuo, prob_mutacion=0.1):
+        # Mutar cada sección con probabilidad prob_mutacion
         for i in range(len(individuo)):
             if random.random() < prob_mutacion:
                 s = individuo[i]['seccion']
-                # Elegir un nuevo profesor válido (si hay alternativas)
+                # --- Profesor ---
+                nuevo_prof = individuo[i]['profesor']
                 if len(s.cands) > 0:
-                    # Mantener el actual con cierta probabilidad
+                    # Con cierta probabilidad cambiar a otro candidato
                     if random.random() < 0.7:
                         nuevo_prof = random.choice(s.cands)
-                    else:
-                        nuevo_prof = individuo[i]['profesor']
-                else:
-                    nuevo_prof = individuo[i]['profesor']
-                # Elegir un patrón válido
+                # Asegurar que sea string
+                nuevo_prof = str(nuevo_prof)
+                # --- Patrón ---
                 patrones = PATRONES.get(s.creditos, PATRONES[3])
                 # Respetar intensivos
                 if nuevo_prof in self.profesores:
@@ -1142,7 +1140,7 @@ class GeneticScheduler:
                 if not patrones:
                     patrones = PATRONES.get(s.creditos, PATRONES[3])
                 nuevo_patron = random.choice(patrones)
-                # Elegir hora válida
+                # --- Hora de inicio ---
                 horas_posibles = set(self.bloques)
                 for dia, contrib in nuevo_patron['days'].items():
                     duracion = int(contrib * 50)
@@ -1158,10 +1156,11 @@ class GeneticScheduler:
                     nueva_hora = random.choice(list(horas_posibles))
                 else:
                     nueva_hora = individuo[i]['ini']
-                # Elegir salón válido
+                # --- Salón ---
                 salones_cand = [sl['CODIGO'] for sl in self.salones if sl['CAPACIDAD'] >= s.cupo and compatible_tipo(s.tipo_salon, sl['TIPO'])]
                 nuevo_salon = random.choice(salones_cand) if salones_cand else individuo[i]['salon']
-                # Aplicar mutación
+                nuevo_salon = str(nuevo_salon)
+                # Aplicar cambios
                 individuo[i]['profesor'] = nuevo_prof
                 individuo[i]['patron'] = nuevo_patron
                 individuo[i]['ini'] = nueva_hora
@@ -1182,10 +1181,6 @@ class GeneticScheduler:
         # Parámetros del GA
         elite_size = 2
         prob_mutacion = 0.1
-        generaciones = max(1, iteraciones // 10)  # Aprox 1000 generaciones para 10000 iteraciones (ajustable)
-        # Ajustamos para que el número de evaluaciones sea similar al original
-        # Cada generación procesa población_size individuos, así que total evaluaciones = generaciones * population_size
-        # Para que sea comparable, usamos generaciones = iteraciones // (population_size//2)
         generaciones = max(50, iteraciones // (self.population_size//2))
         if generaciones < 1:
             generaciones = 1
@@ -1193,7 +1188,7 @@ class GeneticScheduler:
         for gen in range(generaciones):
             # Evaluar
             costos = [self._costo_total(ind) for ind in self.population]
-            # Elitismo: conservar los mejores
+            # Elitismo
             sorted_indices = np.argsort(costos)
             nueva_poblacion = [deepcopy(self.population[idx]) for idx in sorted_indices[:elite_size]]
 
@@ -1207,13 +1202,13 @@ class GeneticScheduler:
                 hijo = self._cruzar(self.population[winner1], self.population[winner2])
                 # Mutación
                 hijo = self._mutar(hijo, prob_mutacion)
-                # Reparación de conflictos cada pocas generaciones para mantener calidad
+                # Reparación periódica
                 if gen % 10 == 0:
                     hijo = self._resolver_conflictos_total(hijo)
                 nueva_poblacion.append(hijo)
 
             self.population = nueva_poblacion
-            # Evaluar mejor de la generación
+            # Mejor de la generación
             costos = [self._costo_total(ind) for ind in self.population]
             best_idx = np.argmin(costos)
             best_costo_gen = costos[best_idx]
@@ -1224,13 +1219,11 @@ class GeneticScheduler:
             else:
                 self.sin_mejora_counter += 1
 
-            # Balanceo periódico y reparación profunda
+            # Balanceo y reparación profunda periódica
             if gen % 20 == 0:
-                # Aplicar balanceo al mejor individuo
                 self.mejor_solucion, _ = self._balancear_cargas(self.mejor_solucion)
                 self.mejor_solucion = self._resolver_conflictos_total(self.mejor_solucion)
                 self.mejor_costo = self._costo_total(self.mejor_solucion)
-                # Reemplazar al peor de la población con el mejor
                 worst_idx = np.argmax(costos)
                 self.population[worst_idx] = deepcopy(self.mejor_solucion)
 
@@ -1353,7 +1346,7 @@ def generar_plantilla():
     return output.getvalue()
 
 # ==============================================================================
-# 7. UI PRINCIPAL (SIN CAMBIOS, solo se reemplaza TabuScheduler por GeneticScheduler)
+# 7. UI PRINCIPAL (SIN CAMBIOS)
 # ==============================================================================
 def main():
     with st.sidebar:
@@ -1392,7 +1385,6 @@ def main():
                     df_salones = pd.read_excel(xls, 'Salones')
                     df_graduados = pd.read_excel(xls, 'Graduados') if 'Graduados' in xls.sheet_names else None
 
-                    # Aquí se usa el nuevo motor genético
                     scheduler = GeneticScheduler(df_cursos, df_profes, df_salones, df_graduados, zona)
 
                     start_time = time.time()
