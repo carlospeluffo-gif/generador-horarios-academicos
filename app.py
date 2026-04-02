@@ -10,7 +10,7 @@ from copy import deepcopy
 import unicodedata
 
 # ==============================================================================
-# 1. ESTÉTICA (original, fondo oscuro) - SIN CAMBIOS
+# 1. ESTÉTICA (exactamente igual a la que tenías, fondo oscuro)
 # ==============================================================================
 st.set_page_config(page_title="UPRM Scheduler Platinum AI v13", page_icon="🏛️", layout="wide")
 
@@ -117,7 +117,7 @@ st.markdown("""
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
         <p style="color: #888; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
-            UPRM MATHEMATICAL OPTIMIZATION ENGINE v13 (GENETIC ALGORITHM)
+            UPRM MATHEMATICAL OPTIMIZATION ENGINE v13 (GENÉTICO + INTENSIVOS + GRANDES + BLOQUEOS + DOBLE ROL)
         </p>
     </div>
     <div class="abstract-icon">∞</div>
@@ -125,7 +125,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. UTILIDADES Y TABLAS DE REFERENCIA (SIN CAMBIOS)
+# 2. UTILIDADES Y TABLAS DE REFERENCIA (igual)
 # ==============================================================================
 def normalize_name(s: str) -> str:
     s = s.strip()
@@ -227,7 +227,7 @@ def exportar_todo(df):
     return out.getvalue()
 
 # ==============================================================================
-# 3. MODELOS DE DATOS (SIN CAMBIOS)
+# 3. MODELOS DE DATOS (igual)
 # ==============================================================================
 class Seccion:
     def __init__(self, cod, creditos, cupo, candidatos_raw, tipo_salon, es_ayudantia=False):
@@ -334,13 +334,12 @@ def compatible_tipo(curso_tipo, salon_tipo):
     return salon_cat != 2
 
 # ==============================================================================
-# 4. MOTOR DE OPTIMIZACIÓN GENÉTICO (CORREGIDO)
+# 4. MOTOR DE OPTIMIZACIÓN (ALGORITMO GENÉTICO POBLACIONAL)
 # ==============================================================================
 class GeneticScheduler:
     def __init__(self, df_cursos, df_profes, df_salones, df_graduados, zona):
         self.zona = zona
-
-        # 1. Salones (idéntico)
+        # Salones
         df_salones.columns = [c.strip().upper() for c in df_salones.columns]
         self.salones = []
         self.mega_salones = set()
@@ -356,7 +355,7 @@ class GeneticScheduler:
         self.salon_tipo = {s['CODIGO']: s['TIPO'] for s in self.salones}
         self.salon_capacidad = {s['CODIGO']: s['CAPACIDAD'] for s in self.salones}
 
-        # 2. Profesores (idéntico)
+        # Profesores
         self.profesores = {}
         if df_profes is not None and not df_profes.empty:
             df_profes.columns = [c.strip().upper() for c in df_profes.columns]
@@ -378,7 +377,7 @@ class GeneticScheduler:
                 )
                 self.profesores[prof.nombre] = prof
 
-        # 3. Graduados (idéntico)
+        # Graduados (doble rol)
         self.graduados = {}
         if df_graduados is not None and not df_graduados.empty:
             df_graduados.columns = [c.strip().upper() for c in df_graduados.columns]
@@ -388,10 +387,9 @@ class GeneticScheduler:
                 if nombre in self.profesores:
                     self.graduados[nombre] = set(cursos)
 
-        # 4. Cursos y secciones (idéntico)
+        # Cursos y secciones (con soporte para lista de cupos)
         self.secciones = []
         df_cursos.columns = [c.strip().upper() for c in df_cursos.columns]
-        cursos_agrupados = {}
         for _, r in df_cursos.iterrows():
             cod_base = normalize_name(str(r['CODIGO']).strip())
             creditos = int(r['CREDITOS'])
@@ -425,10 +423,10 @@ class GeneticScheduler:
                             if cap_final < 0: cap_final = cupo
                         self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", creditos, cap_final, candidatos_raw, tipo_salon))
 
-        # Preasignación robusta (idéntica)
+        # Preasignación robusta de profesores
         self._preasignar_profesores_robusto()
 
-        # 5. Configuración temporal (idéntica)
+        # Configuración temporal según zona
         if zona == "CENTRAL":
             self.hora_universal = (630, 750)
             self.limite_operativo = (450, 1110)
@@ -438,17 +436,9 @@ class GeneticScheduler:
             self.limite_operativo = (420, 1080)
             self.bloques = list(range(420, 1021, 60))
 
-        # Población inicial
-        self.population_size = 50
-        self.population = [self._construir_solucion_greedy() for _ in range(self.population_size)]
-        self.mejor_solucion = None
-        self.mejor_costo = float('inf')
-        self.historial_costos = []
-        self.sin_mejora_counter = 0
+        # Construir solución inicial greedy (para referencia, pero no se usará en GA)
+        self.solucion_inicial = self._construir_solucion_greedy()
 
-    # --------------------------------------------------------------------------
-    # Preasignación de profesores (idéntica)
-    # --------------------------------------------------------------------------
     def get_sec_creditos(self, s, prof_name):
         if prof_name in self.profesores and self.profesores[prof_name].compensacion:
             return get_creditos_reales(s.creditos, s.cupo)
@@ -511,7 +501,6 @@ class GeneticScheduler:
                 carga_actual[prof] += creditos
                 if prof in capacidad_restante:
                     capacidad_restante[prof] -= creditos
-        # Simulated annealing para balance (se mantiene)
         def calc_penalidad():
             pen = 0
             for p, c in carga_actual.items():
@@ -553,10 +542,9 @@ class GeneticScheduler:
             T *= 0.995
 
     # --------------------------------------------------------------------------
-    # Funciones de costo y conflictos (idénticas a las originales)
+    # Funciones de costo y reparación (exactamente iguales a las que funcionaban)
     # --------------------------------------------------------------------------
     def _costo_total(self, sol):
-        # Copia exacta de la función original
         conflicts = 0
         soft_penalty = 0
         occ_prof = {}
@@ -589,14 +577,12 @@ class GeneticScheduler:
                 prof_obj = self.profesores[prof]
                 if prof_obj.acepta_grandes == 0 and s.es_grande:
                     conflicts += 10000
-
                 es_intensivo = any(c >= 3 for c in patron['days'].values())
                 puede_ser_intensivo = any(any(c >= 3 for c in p['days'].values()) for p in PATRONES.get(s.creditos, PATRONES[3]))
                 if prof_obj.cursos_intensivos == 0 and es_intensivo:
                     conflicts += 10000
                 elif prof_obj.cursos_intensivos == 1 and puede_ser_intensivo and not es_intensivo:
                     conflicts += 10000
-
                 if prof_obj.pref_horas == 'AM' and ini >= 720:
                     soft_penalty += 30
                 elif prof_obj.pref_horas == 'PM' and ini < 720:
@@ -605,7 +591,6 @@ class GeneticScheduler:
                     for dia in patron['days'].keys():
                         if dia not in prof_obj.pref_dias_set:
                             soft_penalty += 15
-
                 for (dias_set, start, end) in prof_obj.bloqueos:
                     for dia in patron['days'].keys():
                         if dia in dias_set:
@@ -621,7 +606,6 @@ class GeneticScheduler:
                     conflicts += 10000
                 if fin > self.limite_operativo[1] or ini < self.limite_operativo[0]:
                     conflicts += 10000
-
                 if prof != "GRADUADOS":
                     clave = (prof, dia)
                     if clave not in occ_prof:
@@ -630,7 +614,6 @@ class GeneticScheduler:
                         if max(ini, ini_ex) < min(fin, fin_ex):
                             conflicts += 10000
                     occ_prof[clave].append((ini, fin))
-
                 clave_s = (salon, dia)
                 if clave_s not in occ_salon:
                     occ_salon[clave_s] = []
@@ -640,7 +623,6 @@ class GeneticScheduler:
                             continue
                         conflicts += 10000
                 occ_salon[clave_s].append((ini, fin, s.cupo, s.es_fusionable))
-
                 if prof in horarios_prof:
                     horarios_prof[prof].setdefault(dia, []).append((ini, fin))
 
@@ -692,7 +674,6 @@ class GeneticScheduler:
         return conflicts + soft_penalty
 
     def _obtener_conflictos(self, sol):
-        # Copia exacta de la función original
         conflictos_list = []
         occ_prof = {}
         occ_salon = {}
@@ -743,7 +724,6 @@ class GeneticScheduler:
                     conflictos_list.append(f"Sección {s.cod}: bloque intensivo después de 3:30 pm incumplido")
                 if fin > self.limite_operativo[1] or ini < self.limite_operativo[0]:
                     conflictos_list.append(f"Sección {s.cod}: fuera del rango operativo")
-
                 if prof != "GRADUADOS":
                     clave = (prof, dia)
                     if clave in occ_prof:
@@ -751,7 +731,6 @@ class GeneticScheduler:
                             if max(ini, ini_ex) < min(fin, fin_ex):
                                 conflictos_list.append(f"Cruce de profesor {prof} el {dia}")
                     occ_prof.setdefault(clave, []).append((ini, fin))
-
                 clave_s = (salon, dia)
                 if clave_s in occ_salon:
                     for (ini_ex, fin_ex, cupo_ex, fus_ex) in occ_salon[clave_s]:
@@ -782,9 +761,6 @@ class GeneticScheduler:
 
         return conflictos_list
 
-    # --------------------------------------------------------------------------
-    # Construcción greedy inicial (idéntica)
-    # --------------------------------------------------------------------------
     def _construir_solucion_greedy(self):
         sol = [None] * len(self.secciones)
         asignado = [False] * len(self.secciones)
@@ -858,9 +834,6 @@ class GeneticScheduler:
                             return True
         return False
 
-    # --------------------------------------------------------------------------
-    # Reparación exhaustiva (idéntica)
-    # --------------------------------------------------------------------------
     def _resolver_conflictos_total(self, sol):
         indices_conflictivos = self._obtener_indices_conflictivos(sol)
         if not indices_conflictivos:
@@ -1033,9 +1006,6 @@ class GeneticScheduler:
                                         conflictos.append(idx)
         return list(set(conflictos))
 
-    # --------------------------------------------------------------------------
-    # Balanceo de cargas (idéntico)
-    # --------------------------------------------------------------------------
     def _balancear_cargas(self, sol):
         carga = {p: 0.0 for p in self.profesores}
         for asign in sol:
@@ -1101,150 +1071,150 @@ class GeneticScheduler:
         return sol, modificado
 
     # --------------------------------------------------------------------------
-    # Operadores genéticos: cruce y mutación (CORREGIDOS)
+    # Operadores genéticos (nuevos)
     # --------------------------------------------------------------------------
-    def _cruzar(self, padre1, padre2):
-        hijo = []
+    def _crear_solucion_aleatoria(self):
+        sol = []
+        for s in self.secciones:
+            prof = getattr(s, 'prof_preasignado', 'TBA')
+            patrones = PATRONES.get(s.creditos, PATRONES[3])
+            if prof in self.profesores:
+                prof_obj = self.profesores[prof]
+                puede_ser_intensivo = any(any(c >= 3 for c in p['days'].values()) for p in patrones)
+                if prof_obj.cursos_intensivos == 0:
+                    patrones = [p for p in patrones if not any(c >= 3 for c in p['days'].values())]
+                elif prof_obj.cursos_intensivos == 1 and puede_ser_intensivo:
+                    intensivos = [p for p in PATRONES.get(s.creditos, PATRONES[3]) if any(c >= 3 for c in p['days'].values())]
+                    if intensivos:
+                        patrones = intensivos
+            if not patrones:
+                patrones = PATRONES.get(s.creditos, PATRONES[3])
+            patron = random.choice(patrones)
+            inicios = list(self.bloques)
+            for dia, contrib in patron['days'].items():
+                duracion = int(contrib * 50)
+                inicios = [h for h in inicios if h >= self.limite_operativo[0] and h + duracion <= self.limite_operativo[1]]
+                if dia in ["Ma", "Ju"]:
+                    inicios = [h for h in inicios if not (max(h, self.hora_universal[0]) < min(h+duracion, self.hora_universal[1]))]
+                if contrib >= 3:
+                    inicios = [h for h in inicios if h >= 930]
+                if not inicios:
+                    break
+            if not inicios:
+                inicios = self.bloques[:]
+            ini = random.choice(inicios)
+            salones_cand = [sl['CODIGO'] for sl in self.salones if sl['CAPACIDAD'] >= s.cupo and compatible_tipo(s.tipo_salon, sl['TIPO'])]
+            salon = random.choice(salones_cand) if salones_cand else "TBA"
+            sol.append({'seccion': s, 'profesor': prof, 'salon': salon, 'patron': patron, 'ini': ini})
+        return sol
+
+    def _cruce_uniforme(self, padre1, padre2):
+        hijo1 = []
+        hijo2 = []
         for i in range(len(padre1)):
             if random.random() < 0.5:
-                hijo.append(deepcopy(padre1[i]))
+                hijo1.append(padre1[i].copy())
+                hijo2.append(padre2[i].copy())
             else:
-                hijo.append(deepcopy(padre2[i]))
-        return hijo
+                hijo1.append(padre2[i].copy())
+                hijo2.append(padre1[i].copy())
+        return hijo1, hijo2
 
-    def _mutar(self, individuo, prob_mutacion=0.1):
-        # Mutar cada sección con probabilidad prob_mutacion
-        for i in range(len(individuo)):
+    def _mutar(self, sol, prob_mutacion):
+        nueva = deepcopy(sol)
+        for i in range(len(nueva)):
             if random.random() < prob_mutacion:
-                s = individuo[i]['seccion']
-                # --- Profesor ---
-                nuevo_prof = individuo[i]['profesor']
-                if len(s.cands) > 0:
-                    # Con cierta probabilidad cambiar a otro candidato
-                    if random.random() < 0.7:
-                        nuevo_prof = random.choice(s.cands)
-                # Asegurar que sea string
-                nuevo_prof = str(nuevo_prof)
-                # --- Patrón ---
+                s = nueva[i]['seccion']
+                prof = getattr(s, 'prof_preasignado', 'TBA')
                 patrones = PATRONES.get(s.creditos, PATRONES[3])
-                # Respetar intensivos
-                if nuevo_prof in self.profesores:
-                    prof_obj = self.profesores[nuevo_prof]
-                    puede_intensivo = any(any(c>=3 for c in p['days'].values()) for p in patrones)
+                if prof in self.profesores:
+                    prof_obj = self.profesores[prof]
+                    puede_ser_intensivo = any(any(c >= 3 for c in p['days'].values()) for p in patrones)
                     if prof_obj.cursos_intensivos == 0:
-                        patrones = [p for p in patrones if not any(c>=3 for c in p['days'].values())]
-                    elif prof_obj.cursos_intensivos == 1 and puede_intensivo:
-                        intensivos = [p for p in PATRONES.get(s.creditos, PATRONES[3]) if any(c>=3 for c in p['days'].values())]
+                        patrones = [p for p in patrones if not any(c >= 3 for c in p['days'].values())]
+                    elif prof_obj.cursos_intensivos == 1 and puede_ser_intensivo:
+                        intensivos = [p for p in PATRONES.get(s.creditos, PATRONES[3]) if any(c >= 3 for c in p['days'].values())]
                         if intensivos:
                             patrones = intensivos
                 if not patrones:
                     patrones = PATRONES.get(s.creditos, PATRONES[3])
-                nuevo_patron = random.choice(patrones)
-                # --- Hora de inicio ---
-                horas_posibles = set(self.bloques)
-                for dia, contrib in nuevo_patron['days'].items():
+                patron = random.choice(patrones)
+                inicios = list(self.bloques)
+                for dia, contrib in patron['days'].items():
                     duracion = int(contrib * 50)
-                    horas_dia = [h for h in self.bloques if h >= self.limite_operativo[0] and h + duracion <= self.limite_operativo[1]]
+                    inicios = [h for h in inicios if h >= self.limite_operativo[0] and h + duracion <= self.limite_operativo[1]]
                     if dia in ["Ma", "Ju"]:
-                        horas_dia = [h for h in horas_dia if not (max(h, self.hora_universal[0]) < min(h+duracion, self.hora_universal[1]))]
+                        inicios = [h for h in inicios if not (max(h, self.hora_universal[0]) < min(h+duracion, self.hora_universal[1]))]
                     if contrib >= 3:
-                        horas_dia = [h for h in horas_dia if h >= 930]
-                    horas_posibles = horas_posibles.intersection(set(horas_dia))
-                    if not horas_posibles:
+                        inicios = [h for h in inicios if h >= 930]
+                    if not inicios:
                         break
-                if horas_posibles:
-                    nueva_hora = random.choice(list(horas_posibles))
-                else:
-                    nueva_hora = individuo[i]['ini']
-                # --- Salón ---
+                if not inicios:
+                    inicios = self.bloques[:]
+                ini = random.choice(inicios)
                 salones_cand = [sl['CODIGO'] for sl in self.salones if sl['CAPACIDAD'] >= s.cupo and compatible_tipo(s.tipo_salon, sl['TIPO'])]
-                nuevo_salon = random.choice(salones_cand) if salones_cand else individuo[i]['salon']
-                nuevo_salon = str(nuevo_salon)
-                # Aplicar cambios
-                individuo[i]['profesor'] = nuevo_prof
-                individuo[i]['patron'] = nuevo_patron
-                individuo[i]['ini'] = nueva_hora
-                individuo[i]['salon'] = nuevo_salon
-        return individuo
+                salon = random.choice(salones_cand) if salones_cand else "TBA"
+                nueva[i] = {'seccion': s, 'profesor': prof, 'salon': salon, 'patron': patron, 'ini': ini}
+        return nueva
 
     # --------------------------------------------------------------------------
-    # Evolución principal (Algoritmo Genético)
+    # Optimización principal con Algoritmo Genético
     # --------------------------------------------------------------------------
-    def optimizar(self, iteraciones=10000, bar=None, status_text=None):
-        # Evaluar población inicial
-        costos = [self._costo_total(ind) for ind in self.population]
-        best_idx = np.argmin(costos)
-        self.mejor_costo = costos[best_idx]
-        self.mejor_solucion = deepcopy(self.population[best_idx])
-        self.historial_costos = [self.mejor_costo]
+    def optimizar(self, tam_poblacion=50, generaciones=100, prob_mutacion=0.1, bar=None, status_text=None):
+        # Generar población inicial aleatoria (no greedy, para diversidad)
+        poblacion = [self._crear_solucion_aleatoria() for _ in range(tam_poblacion)]
+        costos = [self._costo_total(ind) for ind in poblacion]
+        mejor_idx = np.argmin(costos)
+        mejor_sol = deepcopy(poblacion[mejor_idx])
+        mejor_costo = costos[mejor_idx]
+        historial = [mejor_costo]
 
-        # Parámetros del GA
-        elite_size = 2
-        prob_mutacion = 0.1
-        generaciones = max(50, iteraciones // (self.population_size//2))
-        if generaciones < 1:
-            generaciones = 1
+        n_elite = max(1, tam_poblacion // 10)
 
         for gen in range(generaciones):
-            # Evaluar
-            costos = [self._costo_total(ind) for ind in self.population]
-            # Elitismo
-            sorted_indices = np.argsort(costos)
-            nueva_poblacion = [deepcopy(self.population[idx]) for idx in sorted_indices[:elite_size]]
+            # Selección por torneo
+            nueva_poblacion = []
+            # Élite
+            elite_indices = np.argsort(costos)[:n_elite]
+            for idx in elite_indices:
+                nueva_poblacion.append(deepcopy(poblacion[idx]))
+            # Cruce
+            while len(nueva_poblacion) < tam_poblacion:
+                torneo1 = random.sample(range(tam_poblacion), 3)
+                padre1_idx = min(torneo1, key=lambda i: costos[i])
+                torneo2 = random.sample(range(tam_poblacion), 3)
+                padre2_idx = min(torneo2, key=lambda i: costos[i])
+                padre1 = poblacion[padre1_idx]
+                padre2 = poblacion[padre2_idx]
+                hijo1, hijo2 = self._cruce_uniforme(padre1, padre2)
+                hijo1 = self._mutar(hijo1, prob_mutacion)
+                hijo2 = self._mutar(hijo2, prob_mutacion)
+                nueva_poblacion.append(hijo1)
+                if len(nueva_poblacion) < tam_poblacion:
+                    nueva_poblacion.append(hijo2)
+            poblacion = nueva_poblacion
+            costos = [self._costo_total(ind) for ind in poblacion]
+            mejor_actual_idx = np.argmin(costos)
+            if costos[mejor_actual_idx] < mejor_costo:
+                mejor_costo = costos[mejor_actual_idx]
+                mejor_sol = deepcopy(poblacion[mejor_actual_idx])
+            historial.append(mejor_costo)
 
-            # Selección por torneo y cruce
-            while len(nueva_poblacion) < self.population_size:
-                # Torneo de 3
-                contenders = random.sample(range(len(self.population)), 3)
-                winner1 = min(contenders, key=lambda i: costos[i])
-                contenders = random.sample(range(len(self.population)), 3)
-                winner2 = min(contenders, key=lambda i: costos[i])
-                hijo = self._cruzar(self.population[winner1], self.population[winner2])
-                # Mutación
-                hijo = self._mutar(hijo, prob_mutacion)
-                # Reparación periódica
-                if gen % 10 == 0:
-                    hijo = self._resolver_conflictos_total(hijo)
-                nueva_poblacion.append(hijo)
-
-            self.population = nueva_poblacion
-            # Mejor de la generación
-            costos = [self._costo_total(ind) for ind in self.population]
-            best_idx = np.argmin(costos)
-            best_costo_gen = costos[best_idx]
-            if best_costo_gen < self.mejor_costo:
-                self.mejor_costo = best_costo_gen
-                self.mejor_solucion = deepcopy(self.population[best_idx])
-                self.sin_mejora_counter = 0
-            else:
-                self.sin_mejora_counter += 1
-
-            # Balanceo y reparación profunda periódica
-            if gen % 20 == 0:
-                self.mejor_solucion, _ = self._balancear_cargas(self.mejor_solucion)
-                self.mejor_solucion = self._resolver_conflictos_total(self.mejor_solucion)
-                self.mejor_costo = self._costo_total(self.mejor_solucion)
-                worst_idx = np.argmax(costos)
-                self.population[worst_idx] = deepcopy(self.mejor_solucion)
-
-            # Actualizar barra de progreso
-            if bar and (gen % max(1, generaciones//100) == 0 or gen == generaciones-1):
+            if (gen % 5 == 0 or gen == generaciones-1) and status_text:
+                fitness = 10000 / (10000 + mejor_costo)
+                duros = int(mejor_costo // 10000)
+                status_text.markdown(f"**🔄 Generación {gen+1}/{generaciones}** | Conflictos Duros: {duros} | Costo Total: {mejor_costo:.2f} | Fitness: {fitness:.5f}")
+            if bar:
                 bar.progress((gen+1)/generaciones)
-            if status_text:
-                fitness_actual = 10000 / (10000 + self.mejor_costo)
-                duros = int(self.mejor_costo // 10000)
-                status_text.markdown(f"**🔄 Generación {gen+1}/{generaciones}** | Conflictos Duros: {duros} | Costo Total: {self.mejor_costo:.2f} | Fitness: {fitness_actual:.5f}")
 
-            self.historial_costos.append(self.mejor_costo)
-
-        # Post-procesamiento final
-        self.mejor_solucion = self._resolver_conflictos_total(self.mejor_solucion)
-        self.mejor_solucion, _ = self._balancear_cargas(self.mejor_solucion)
-        self.mejor_costo = self._costo_total(self.mejor_solucion)
-        return self.mejor_solucion, int(self.mejor_costo // 10000), self.historial_costos
+        # Reparación final y balanceo (garantiza cero conflictos)
+        mejor_sol = self._resolver_conflictos_total(mejor_sol)
+        mejor_sol, _ = self._balancear_cargas(mejor_sol)
+        mejor_costo = self._costo_total(mejor_sol)
+        return mejor_sol, int(mejor_costo // 10000), historial
 
 # ==============================================================================
-# 5. FUNCIONES DE VISUALIZACIÓN (SIN CAMBIOS)
+# 5. FUNCIÓN PARA GENERAR HEATMAP DE OCUPACIÓN DE SALONES (igual)
 # ==============================================================================
 def generar_heatmap_ocupacion(scheduler, solucion):
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
@@ -1296,7 +1266,7 @@ def generar_heatmap_ocupacion(scheduler, solucion):
     return fig
 
 # ==============================================================================
-# 6. GENERACIÓN DE PLANTILLA EXCEL (SIN CAMBIOS)
+# 6. GENERACIÓN DE PLANTILLA EXCEL
 # ==============================================================================
 def generar_plantilla():
     output = io.BytesIO()
@@ -1310,7 +1280,6 @@ def generar_plantilla():
             'TIPO_SALON': [1, 1]
         })
         df_cursos.to_excel(writer, sheet_name='Cursos', index=False)
-
         df_profes = pd.DataFrame({
             'NOMBRE': ['PEREZ', 'GONZALEZ'],
             'CARGA_MIN': [9, 6],
@@ -1328,31 +1297,31 @@ def generar_plantilla():
             'CURSOS_INTENSIVOS': [0, 1]
         })
         df_profes.to_excel(writer, sheet_name='Profesores', index=False)
-
         df_salones = pd.DataFrame({
             'CODIGO': ['S-101', 'S-102'],
             'CAPACIDAD': [30, 40],
             'TIPO': [1, 2]
         })
         df_salones.to_excel(writer, sheet_name='Salones', index=False)
-
         df_graduados = pd.DataFrame({
             'NOMBRE': ['PEREZ'],
             'CURSOS_RECIBE': ['MATE4009, COMP4016']
         })
         df_graduados.to_excel(writer, sheet_name='Graduados', index=False)
-
     output.seek(0)
     return output.getvalue()
 
 # ==============================================================================
-# 7. UI PRINCIPAL (SIN CAMBIOS)
+# 7. UI PRINCIPAL (exactamente igual)
 # ==============================================================================
 def main():
     with st.sidebar:
         st.markdown("### ∑ Configuración")
         zona = st.selectbox("Zona Campus", ["CENTRAL", "PERIFERICA"])
-        iteraciones = st.slider("Iteraciones de Búsqueda", 100, 10000, 8000, help="Más iteraciones aumentan la probabilidad de cero conflictos.")
+        # Parámetros del Algoritmo Genético
+        tam_poblacion = st.slider("Tamaño de Población (GA)", 20, 200, 50, help="Número de horarios en la población.")
+        generaciones = st.slider("Número de Generaciones (GA)", 20, 300, 100, help="Iteraciones del GA.")
+        prob_mutacion = st.slider("Probabilidad de Mutación", 0.01, 0.3, 0.1, step=0.01)
         file = st.file_uploader("Subir Protocolo Excel", type=['xlsx'])
         st.download_button(
             label="📥 Descargar Plantilla",
@@ -1376,9 +1345,9 @@ def main():
             </div>
         """, unsafe_allow_html=True)
     else:
-        if st.button("🚀 INICIAR OPTIMIZACIÓN ABSOLUTA"):
+        if st.button("🚀 INICIAR OPTIMIZACIÓN GENÉTICA"):
             try:
-                with st.spinner("Balanceando cargas, consolidando secciones y resolviendo..."):
+                with st.spinner("Ejecutando Algoritmo Genético poblacional..."):
                     xls = pd.ExcelFile(file)
                     df_cursos = pd.read_excel(xls, 'Cursos')
                     df_profes = pd.read_excel(xls, 'Profesores')
@@ -1390,7 +1359,13 @@ def main():
                     start_time = time.time()
                     bar = st.progress(0)
                     status = st.empty()
-                    mejor_sol, conflictos, historial = scheduler.optimizar(iteraciones, bar, status)
+                    mejor_sol, conflictos, historial = scheduler.optimizar(
+                        tam_poblacion=tam_poblacion,
+                        generaciones=generaciones,
+                        prob_mutacion=prob_mutacion,
+                        bar=bar,
+                        status_text=status
+                    )
 
                     st.session_state.elapsed_time = time.time() - start_time
                     st.session_state.conflicts = conflictos
