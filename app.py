@@ -136,9 +136,12 @@ st.markdown("""
 # ==============================================================================
 # 2. UTILIDADES Y TABLAS DE REFERENCIA
 # ==============================================================================
-def normalize_name(s: str) -> str:
-    """Elimina acentos, convierte a mayúsculas y quita espacios sobrantes."""
-    s = s.strip()
+def normalize_name(s) -> str:
+    """Elimina acentos, convierte a mayúsculas y quita espacios sobrantes.
+       Acepta cualquier tipo (int, float, None) y lo convierte a string."""
+    if s is None:
+        return ""
+    s = str(s).strip()
     return unicodedata.normalize('NFKD', s).encode('ASCII', 'ignore').decode().upper()
 
 COMPENSACION_TABLE = [
@@ -245,7 +248,7 @@ class Seccion:
         self.creditos = int(creditos)
         self.cupo = int(cupo)
         if isinstance(candidatos_raw, list):
-            raw_list = [normalize_name(c) for c in candidatos_raw if c.strip()]
+            raw_list = [normalize_name(str(c)) for c in candidatos_raw if str(c).strip()]
         else:
             raw_list = [normalize_name(c.strip()) for c in str(candidatos_raw).split(',') if c.strip() and str(c).upper() != 'NAN']
         self.cands = list(set(raw_list))
@@ -394,7 +397,8 @@ class TabuScheduler:
             df_graduados.columns = [c.strip().upper() for c in df_graduados.columns]
             for _, r in df_graduados.iterrows():
                 nombre = normalize_name(str(r['NOMBRE']).strip())
-                cursos = [normalize_name(c) for c in str(r.get('CURSOS_RECIBE', '')).split(',') if c.strip()]
+                cursos_raw = str(r.get('CURSOS_RECIBE', ''))
+                cursos = [normalize_name(c.strip()) for c in cursos_raw.split(',') if c.strip()]
                 if nombre in self.profesores:
                     self.graduados[nombre] = set(cursos)
 
@@ -674,9 +678,7 @@ class TabuScheduler:
                     occ_salon[clave_s] = []
                 for (ini_ex, fin_ex, cupo_ex, fus_ex) in occ_salon[clave_s]:
                     if max(ini, ini_ex) < min(fin, fin_ex):
-                        # FIX: evitar error cuando salon_info es None
-                        cap_salon = salon_info['CAPACIDAD'] if salon_info else 0
-                        if salon in self.mega_salones and s.es_fusionable and fus_ex and s.cupo + cupo_ex <= cap_salon:
+                        if salon in self.mega_salones and s.es_fusionable and fus_ex and s.cupo + cupo_ex <= salon_info['CAPACIDAD']:
                             continue
                         conflicts += 10000
                 occ_salon[clave_s].append((ini, fin, s.cupo, s.es_fusionable))
@@ -804,9 +806,7 @@ class TabuScheduler:
                 if clave_s in occ_salon:
                     for (ini_ex, fin_ex, cupo_ex, fus_ex) in occ_salon[clave_s]:
                         if max(ini, ini_ex) < min(fin, fin_ex):
-                            # FIX: evitar error cuando salon_info es None
-                            cap_salon = salon_info['CAPACIDAD'] if salon_info else 0
-                            if not (salon in self.mega_salones and s.es_fusionable and fus_ex and s.cupo + cupo_ex <= cap_salon):
+                            if not (salon in self.mega_salones and s.es_fusionable and fus_ex and s.cupo + cupo_ex <= salon_info['CAPACIDAD']):
                                 conflictos_list.append(f"Cruce de salón {salon} el {dia}")
                 occ_salon.setdefault(clave_s, []).append((ini, fin, s.cupo, s.es_fusionable))
 
@@ -1075,11 +1075,20 @@ class TabuScheduler:
                 if clave_s in occ_salon:
                     for (ini_ex, fin_ex, cupo_ex, fus_ex) in occ_salon[clave_s]:
                         if max(ini, ini_ex) < min(fin, fin_ex):
-                            # FIX: evitar error cuando salon_info es None
-                            cap_salon = salon_info['CAPACIDAD'] if salon_info else 0
-                            if not (salon in self.mega_salones and s.es_fusionable and fus_ex and s.cupo + cupo_ex <= cap_salon):
+                            if not (salon in self.mega_salones and s.es_fusionable and fus_ex and s.cupo + cupo_ex <= salon_info['CAPACIDAD']):
                                 conflictos.append(idx)
                 occ_salon.setdefault(clave_s, []).append((ini, fin, s.cupo, s.es_fusionable))
+            if prof in self.graduados:
+                cursos_recibidos = self.graduados[prof]
+                for j, otro in enumerate(sol):
+                    if j != idx and otro['seccion'].cod.split('-')[0] in cursos_recibidos:
+                        for dia, contrib in patron['days'].items():
+                            for dia2, contrib2 in otro['patron']['days'].items():
+                                if dia == dia2:
+                                    fin_actual = ini + int(contrib * 50)
+                                    fin_otro = otro['ini'] + int(contrib2 * 50)
+                                    if max(ini, otro['ini']) < min(fin_actual, fin_otro):
+                                        conflictos.append(idx)
         return list(set(conflictos))
 
     # --------------------------------------------------------------------------
