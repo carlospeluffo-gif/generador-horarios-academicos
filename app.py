@@ -10,7 +10,7 @@ from copy import deepcopy
 import unicodedata
 
 # ==============================================================================
-# 1. ESTÉTICA (original, fondo oscuro)
+# 1. ESTÉTICA (TEMA CLARO - FONDO BLANCO)
 # ==============================================================================
 st.set_page_config(page_title="UPRM Scheduler Platinum AI v13", page_icon="🏛️", layout="wide")
 
@@ -19,14 +19,12 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Source+Code+Pro:wght@300;500&display=swap');
     
     .stApp { 
-        background-color: #050505;
+        background-color: #F8F9FA;
         background-image: 
-            linear-gradient(rgba(212, 175, 55, 0.1) 2px, transparent 2px),
-            linear-gradient(90deg, rgba(212, 175, 55, 0.1) 2px, transparent 2px),
-            radial-gradient(circle at 50% 20%, #1a1a1a 0%, #000000 100%);
-        background-size: 80px 80px, 80px 80px, 100% 100%;
-        background-attachment: fixed;
-        color: #e0e0e0; 
+            linear-gradient(rgba(212, 175, 55, 0.08) 2px, transparent 2px),
+            linear-gradient(90deg, rgba(212, 175, 55, 0.08) 2px, transparent 2px);
+        background-size: 80px 80px, 80px 80px;
+        color: #1E1E1E; 
     }
 
     .math-header {
@@ -34,17 +32,17 @@ st.markdown("""
         justify-content: space-between;
         align-items: center;
         padding: 30px 60px;
-        background: rgba(0, 0, 0, 0.85);
+        background: rgba(255, 255, 255, 0.95);
         border-bottom: 3px solid #D4AF37;
         margin-bottom: 40px;
         border-radius: 0 0 30px 30px;
-        box-shadow: 0 10px 50px rgba(212, 175, 55, 0.15);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
         position: relative;
         overflow: hidden;
     }
 
-    .math-header::before { content: '∑'; position: absolute; left: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.05); font-family: serif; }
-    .math-header::after { content: '∫'; position: absolute; right: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.05); font-family: serif; }
+    .math-header::before { content: '∑'; position: absolute; left: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.1); font-family: serif; }
+    .math-header::after { content: '∫'; position: absolute; right: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.1); font-family: serif; }
 
     .title-box { text-align: center; z-index: 2; }
 
@@ -55,26 +53,26 @@ st.markdown("""
         padding: 10px 20px;
         border-radius: 50% 0% 50% 0%;
         background: rgba(212, 175, 55, 0.05);
-        box-shadow: 0 0 15px rgba(212, 175, 55, 0.3);
+        box-shadow: 0 0 15px rgba(212, 175, 55, 0.2);
     }
 
     h1 { 
         font-family: 'Playfair Display', serif !important; 
-        color: #D4AF37 !important; 
+        color: #8E6E13 !important; 
         font-size: 3.2rem !important;
         margin: 10px 0 !important;
-        text-shadow: 0 0 20px rgba(212, 175, 55, 0.5);
+        text-shadow: 0 0 5px rgba(212, 175, 55, 0.3);
         letter-spacing: 2px;
     }
 
     .glass-card { 
-        background: rgba(15, 15, 15, 0.9); 
+        background: rgba(255, 255, 255, 0.95); 
         border-radius: 15px; 
         padding: 25px; 
-        border: 1px solid rgba(212, 175, 55, 0.25); 
-        backdrop-filter: blur(15px); 
+        border: 1px solid rgba(212, 175, 55, 0.4); 
+        backdrop-filter: blur(5px); 
         margin-bottom: 20px; 
-        box-shadow: 0 15px 40px rgba(0,0,0,0.8);
+        box-shadow: 0 10px 25px rgba(0,0,0,0.05);
     }
 
     .stButton>button { 
@@ -83,7 +81,7 @@ st.markdown("""
         width: 100%; border: none !important; height: 55px; font-size: 1.1rem;
         transition: 0.4s;
     }
-    .stButton>button:hover { transform: scale(1.02); box-shadow: 0 0 25px rgba(212, 175, 55, 0.4); }
+    .stButton>button:hover { transform: scale(1.02); box-shadow: 0 0 25px rgba(212, 175, 55, 0.5); }
 
     .stDownloadButton>button {
         background: linear-gradient(135deg, #B8860B 0%, #FFD700 50%, #B8860B 100%) !important;
@@ -92,23 +90,34 @@ st.markdown("""
         border: 1px solid #D4AF37 !important;
     }
 
-    [data-testid="stSidebar"] { background-color: #050505; border-right: 1px solid #D4AF37; }
+    [data-testid="stSidebar"] { background-color: #FFFFFF; border-right: 1px solid #D4AF37; }
     
     [data-testid="stSidebar"] h3 {
-        color: #D4AF37 !important;
-        text-shadow: 0 0 10px rgba(212, 175, 55, 0.4);
+        color: #8E6E13 !important;
+        text-shadow: 0 0 5px rgba(212, 175, 55, 0.3);
         font-family: 'Playfair Display', serif;
     }
 
     .status-badge { 
-        background: rgba(212, 175, 55, 0.1); 
+        background: rgba(212, 175, 55, 0.15); 
         border: 1px solid #D4AF37; 
-        color: #D4AF37; 
+        color: #5C4300; 
         padding: 12px; 
         border-radius: 8px; 
         text-align: center;
         font-family: 'Source Code Pro', monospace;
         font-weight: 500;
+    }
+    
+    /* Ajustes para tablas y textos en tema claro */
+    .stDataFrame, .stTable {
+        background-color: white;
+    }
+    .css-1d391kg, .stMarkdown, p, div, span {
+        color: #1E1E1E;
+    }
+    .stSelectbox label, .stSlider label {
+        color: #1E1E1E;
     }
 </style>
 
@@ -116,7 +125,7 @@ st.markdown("""
     <div class="abstract-icon">Δx</div>
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
-        <p style="color: #888; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
+        <p style="color: #5C5C5C; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
             UPRM MATHEMATICAL OPTIMIZATION ENGINE v13 (EVOLUTIVO + INTENSIVOS + GRANDES + BLOQUEOS + DOBLE ROL)
         </p>
     </div>
@@ -127,9 +136,12 @@ st.markdown("""
 # ==============================================================================
 # 2. UTILIDADES Y TABLAS DE REFERENCIA
 # ==============================================================================
-def normalize_name(s: str) -> str:
-    """Elimina acentos, convierte a mayúsculas y quita espacios sobrantes."""
-    s = s.strip()
+def normalize_name(s) -> str:
+    """Elimina acentos, convierte a mayúsculas y quita espacios sobrantes.
+       Acepta cualquier tipo (int, float, None) y lo convierte a string."""
+    if s is None:
+        return ""
+    s = str(s).strip()
     return unicodedata.normalize('NFKD', s).encode('ASCII', 'ignore').decode().upper()
 
 COMPENSACION_TABLE = [
@@ -236,7 +248,7 @@ class Seccion:
         self.creditos = int(creditos)
         self.cupo = int(cupo)
         if isinstance(candidatos_raw, list):
-            raw_list = [normalize_name(c) for c in candidatos_raw if c.strip()]
+            raw_list = [normalize_name(str(c)) for c in candidatos_raw if str(c).strip()]
         else:
             raw_list = [normalize_name(c.strip()) for c in str(candidatos_raw).split(',') if c.strip() and str(c).upper() != 'NAN']
         self.cands = list(set(raw_list))
@@ -385,11 +397,12 @@ class TabuScheduler:
             df_graduados.columns = [c.strip().upper() for c in df_graduados.columns]
             for _, r in df_graduados.iterrows():
                 nombre = normalize_name(str(r['NOMBRE']).strip())
-                cursos = [normalize_name(c) for c in str(r.get('CURSOS_RECIBE', '')).split(',') if c.strip()]
+                cursos_raw = str(r.get('CURSOS_RECIBE', ''))
+                cursos = [normalize_name(c.strip()) for c in cursos_raw.split(',') if c.strip()]
                 if nombre in self.profesores:
                     self.graduados[nombre] = set(cursos)
 
-        # 4. Cursos y secciones (con soporte para lista de cupos)
+        # 4. Cursos y secciones (con redistribución inteligente de sobrantes)
         self.secciones = []
         df_cursos.columns = [c.strip().upper() for c in df_cursos.columns]
         cursos_agrupados = {}
@@ -419,13 +432,40 @@ class TabuScheduler:
                 if demanda <= 0:
                     self.secciones.append(Seccion(f"{cod_base}-01", creditos, cupo, candidatos_raw, tipo_salon))
                 else:
-                    num_secciones = math.ceil(demanda / cupo)
-                    for i in range(num_secciones):
-                        cap_final = cupo
-                        if i == num_secciones-1:
-                            cap_final = demanda - cupo*(num_secciones-1)
-                            if cap_final < 0: cap_final = cupo
-                        self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", creditos, cap_final, candidatos_raw, tipo_salon))
+                    # --- NUEVA LÓGICA DE REDISTRIBUCIÓN DE SOBRANTES ---
+                    secciones_completas = demanda // cupo
+                    resto = demanda % cupo
+                    
+                    # Umbral: si el resto es menor o igual al 30% del cupo, evitamos sección extra y repartimos
+                    umbral = max(1, int(cupo * 0.3))
+                    
+                    if resto == 0:
+                        # Caso exacto: todas las secciones con cupo completo
+                        num_secciones = secciones_completas
+                        for i in range(num_secciones):
+                            self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", creditos, cupo, candidatos_raw, tipo_salon))
+                    elif secciones_completas == 0:
+                        # Demanda menor que un cupo: una sola sección con la demanda real
+                        self.secciones.append(Seccion(f"{cod_base}-01", creditos, demanda, candidatos_raw, tipo_salon))
+                    elif resto <= umbral:
+                        # Repartir el resto entre las secciones completas (no abrimos sección extra)
+                        num_secciones = secciones_completas
+                        base = cupo
+                        extra_por_seccion = resto // num_secciones
+                        extra_resto = resto % num_secciones
+                        for i in range(num_secciones):
+                            capacidad_final = base + extra_por_seccion + (1 if i < extra_resto else 0)
+                            self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", creditos, capacidad_final, candidatos_raw, tipo_salon))
+                    else:
+                        # Resto grande: se abre una sección adicional con el resto
+                        num_secciones = secciones_completas + 1
+                        for i in range(num_secciones):
+                            if i == num_secciones - 1:
+                                cap_final = resto
+                            else:
+                                cap_final = cupo
+                            self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", creditos, cap_final, candidatos_raw, tipo_salon))
+                    # ----------------------------------------------------
 
         # Preasignación robusta de profesores
         self._preasignar_profesores_robusto()
@@ -701,7 +741,6 @@ class TabuScheduler:
 
     # --------------------------------------------------------------------------
     # Métodos auxiliares para conflictos, construcción, etc.
-    # (se mantienen igual que en la versión original, pero con normalización)
     # --------------------------------------------------------------------------
     def _obtener_conflictos(self, sol):
         conflictos_list = []
@@ -1264,18 +1303,18 @@ def generar_heatmap_ocupacion(scheduler, solucion):
     etiquetas_horas = [mins_to_str(h).replace(' AM', '').replace(' PM', '') for h in horas_del_dia]
     step = max(1, len(etiquetas_horas) // 12)
     ax.set_xticks(range(0, len(horas_del_dia), step))
-    ax.set_xticklabels(etiquetas_horas[::step], rotation=45, ha='right', color='white')
+    ax.set_xticklabels(etiquetas_horas[::step], rotation=45, ha='right', color='black')
     ax.set_yticks(range(len(dias_semana)))
-    ax.set_yticklabels(dias_semana, color='white')
+    ax.set_yticklabels(dias_semana, color='black')
     cbar = plt.colorbar(im, ax=ax, label='% Ocupación')
-    cbar.ax.yaxis.label.set_color('white')
-    cbar.ax.tick_params(colors='white')
-    ax.set_title('Ocupación de Salones por Franja Horaria', color='white', pad=20)
-    ax.set_xlabel('Hora de Inicio', color='white')
-    ax.set_ylabel('Día', color='white')
-    fig.patch.set_facecolor('#0F0F0F')
-    ax.set_facecolor('#1A1A1A')
-    ax.tick_params(colors='white')
+    cbar.ax.yaxis.label.set_color('black')
+    cbar.ax.tick_params(colors='black')
+    ax.set_title('Ocupación de Salones por Franja Horaria', color='black', pad=20)
+    ax.set_xlabel('Hora de Inicio', color='black')
+    ax.set_ylabel('Día', color='black')
+    fig.patch.set_facecolor('#F8F9FA')
+    ax.set_facecolor('#F0F0F0')
+    ax.tick_params(colors='black')
     for spine in ax.spines.values():
         spine.set_edgecolor('#D4AF37')
     plt.tight_layout()
@@ -1456,12 +1495,12 @@ def main():
             fitness_history = [10000 / (10000 + costo) for costo in st.session_state.historial]
             fig1, ax1 = plt.subplots(figsize=(10, 4))
             ax1.plot(fitness_history, color='#D4AF37', linewidth=2.5)
-            ax1.set_title("Crecimiento de Fitness Evolutivo", color='white', pad=15)
-            ax1.set_xlabel("Iteraciones", color='white')
-            ax1.set_ylabel("Fitness (1.0 = Ideal)", color='white')
-            fig1.patch.set_facecolor('#0F0F0F')
-            ax1.set_facecolor('#1A1A1A')
-            ax1.tick_params(colors='white')
+            ax1.set_title("Crecimiento de Fitness Evolutivo", color='black', pad=15)
+            ax1.set_xlabel("Iteraciones", color='black')
+            ax1.set_ylabel("Fitness (1.0 = Ideal)", color='black')
+            fig1.patch.set_facecolor('#F8F9FA')
+            ax1.set_facecolor('#F0F0F0')
+            ax1.tick_params(colors='black')
             for spine in ax1.spines.values(): spine.set_edgecolor('#D4AF37')
             st.pyplot(fig1)
 
@@ -1472,10 +1511,10 @@ def main():
             fig2, ax2 = plt.subplots(figsize=(12, 6))
             ax2.bar(cargas_df['Profesor'], cargas_df['Créditos Reales'], color='#8E6E13')
             ax2.axhline(y=12, color='#FF4B4B', linestyle='--', linewidth=2, label='Carga Estándar Típica (12 cr)')
-            ax2.set_xticklabels(cargas_df['Profesor'], rotation=45, ha='right', color='white')
-            ax2.tick_params(colors='white')
-            fig2.patch.set_facecolor('#0F0F0F')
-            ax2.set_facecolor('#1A1A1A')
+            ax2.set_xticklabels(cargas_df['Profesor'], rotation=45, ha='right', color='black')
+            ax2.tick_params(colors='black')
+            fig2.patch.set_facecolor('#F8F9FA')
+            ax2.set_facecolor('#F0F0F0')
             for spine in ax2.spines.values(): spine.set_edgecolor('#D4AF37')
             ax2.legend()
             st.pyplot(fig2)
