@@ -10,7 +10,7 @@ from copy import deepcopy
 import unicodedata
 
 # ==============================================================================
-# 1. ESTÉTICA (MODIFICADO: FONDO BLANCO Y TEXTOS OSCUROS)
+# 1. ESTÉTICA (FONDO BLANCO, TEXTOS OSCUROS, MANTENIENDO EL ESTILO PLATINUM)
 # ==============================================================================
 st.set_page_config(page_title="UPRM Scheduler Platinum AI v13", page_icon="🏛️", layout="wide")
 
@@ -133,10 +133,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. UTILIDADES Y TABLAS DE REFERENCIA (SIN CAMBIOS)
+# 2. UTILIDADES Y TABLAS DE REFERENCIA (IDÉNTICO AL ORIGINAL)
 # ==============================================================================
 def normalize_name(s: str) -> str:
-    """Elimina acentos, convierte a mayúsculas y quita espacios sobrantes."""
     s = s.strip()
     return unicodedata.normalize('NFKD', s).encode('ASCII', 'ignore').decode().upper()
 
@@ -343,7 +342,8 @@ def compatible_tipo(curso_tipo, salon_tipo):
     return salon_cat != 2
 
 # ==============================================================================
-# 4. MOTOR DE OPTIMIZACIÓN (TABU / SIMULATED ANNEALING CON MEJORAS)
+# 4. MOTOR DE OPTIMIZACIÓN (IDÉNTICO AL CÓDIGO 1, CON LA ÚNICA MODIFICACIÓN
+#    EN LA CREACIÓN DE SECCIONES PARA DISTRIBUIR REMANENTES PEQUEÑOS)
 # ==============================================================================
 class TabuScheduler:
     def __init__(self, df_cursos, df_profes, df_salones, df_graduados, zona):
@@ -397,7 +397,7 @@ class TabuScheduler:
                 if nombre in self.profesores:
                     self.graduados[nombre] = set(cursos)
 
-        # 4. Cursos y secciones (con lógica mejorada de creación de secciones)
+        # 4. Cursos y secciones (con la nueva lógica de distribución equitativa del remanente)
         self.secciones = []
         df_cursos.columns = [c.strip().upper() for c in df_cursos.columns]
         cursos_agrupados = {}
@@ -430,16 +430,18 @@ class TabuScheduler:
                     # NUEVA LÓGICA: evitar sección extra por remanente pequeño
                     secciones_completas = demanda // cupo
                     remanente = demanda % cupo
-                    # Si el remanente es <= 50% del cupo, distribuimos en las secciones existentes
+                    # Si el remanente es > 0 y <= mitad del cupo, distribuimos equitativamente entre las secciones completas
                     if remanente > 0 and remanente <= cupo // 2:
                         num_secciones = secciones_completas
-                        # Crear las secciones con cupo base, luego distribuir el remanente
+                        # Crear las secciones con cupo base
                         for i in range(num_secciones):
                             self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", creditos, cupo, candidatos_raw, tipo_salon))
-                        # Distribuir el remanente sumándolo a una de las secciones (la última)
-                        if remanente > 0:
-                            idx_ultima = len(self.secciones) - 1
-                            self.secciones[idx_ultima].cupo += remanente
+                        # Distribuir el remanente sumando 1 estudiante a cada sección (de forma cíclica)
+                        idx = 0
+                        while remanente > 0:
+                            self.secciones[idx].cupo += 1
+                            remanente -= 1
+                            idx = (idx + 1) % num_secciones
                     else:
                         # Caso normal: crear todas las secciones necesarias (incluyendo la de remanente)
                         num_secciones = secciones_completas + (1 if remanente > 0 else 0)
@@ -723,7 +725,7 @@ class TabuScheduler:
 
     # --------------------------------------------------------------------------
     # Métodos auxiliares para conflictos, construcción, etc.
-    # (se mantienen igual que en la versión original, pero con normalización)
+    # (se mantienen igual que en la versión original)
     # --------------------------------------------------------------------------
     def _obtener_conflictos(self, sol):
         conflictos_list = []
@@ -1252,7 +1254,7 @@ class TabuScheduler:
         return self.mejor_solucion, int(self.mejor_costo // 10000), self.historial_costos
 
 # ==============================================================================
-# 5. FUNCIONES DE VISUALIZACIÓN (SIN CAMBIOS)
+# 5. FUNCIONES DE VISUALIZACIÓN
 # ==============================================================================
 def generar_heatmap_ocupacion(scheduler, solucion):
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
@@ -1304,7 +1306,7 @@ def generar_heatmap_ocupacion(scheduler, solucion):
     return fig
 
 # ==============================================================================
-# 6. GENERACIÓN DE PLANTILLA EXCEL (SIN CAMBIOS)
+# 6. GENERACIÓN DE PLANTILLA EXCEL
 # ==============================================================================
 def generar_plantilla():
     output = io.BytesIO()
@@ -1354,7 +1356,7 @@ def generar_plantilla():
     return output.getvalue()
 
 # ==============================================================================
-# 7. UI PRINCIPAL (SIN CAMBIOS, SOLO AJUSTES DE COLOR)
+# 7. UI PRINCIPAL
 # ==============================================================================
 def main():
     with st.sidebar:
