@@ -10,23 +10,23 @@ from copy import deepcopy
 import unicodedata
 
 # ==============================================================================
-# 1. ESTÉTICA (FONDO BLANCO, TEXTOS OSCUROS)
+# 1. ESTÉTICA (original, fondo oscuro)
 # ==============================================================================
-st.set_page_config(page_title="UPRM Scheduler Platinum AI v14", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="UPRM Scheduler Platinum AI v13", page_icon="🏛️", layout="wide")
 
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Source+Code+Pro:wght@300;500&display=swap');
     
     .stApp { 
-        background-color: #ffffff;
+        background-color: #050505;
         background-image: 
-            linear-gradient(rgba(212, 175, 55, 0.15) 2px, transparent 2px),
-            linear-gradient(90deg, rgba(212, 175, 55, 0.15) 2px, transparent 2px),
-            radial-gradient(circle at 50% 20%, #f8f8f8 0%, #ffffff 100%);
+            linear-gradient(rgba(212, 175, 55, 0.1) 2px, transparent 2px),
+            linear-gradient(90deg, rgba(212, 175, 55, 0.1) 2px, transparent 2px),
+            radial-gradient(circle at 50% 20%, #1a1a1a 0%, #000000 100%);
         background-size: 80px 80px, 80px 80px, 100% 100%;
         background-attachment: fixed;
-        color: #1e1e1e; 
+        color: #e0e0e0; 
     }
 
     .math-header {
@@ -34,17 +34,17 @@ st.markdown("""
         justify-content: space-between;
         align-items: center;
         padding: 30px 60px;
-        background: rgba(255, 255, 255, 0.95);
+        background: rgba(0, 0, 0, 0.85);
         border-bottom: 3px solid #D4AF37;
         margin-bottom: 40px;
         border-radius: 0 0 30px 30px;
-        box-shadow: 0 10px 50px rgba(0,0,0,0.1);
+        box-shadow: 0 10px 50px rgba(212, 175, 55, 0.15);
         position: relative;
         overflow: hidden;
     }
 
-    .math-header::before { content: '∑'; position: absolute; left: 5%; font-size: 8rem; color: rgba(0, 40, 80, 0.2); font-family: serif; }
-    .math-header::after { content: '∫'; position: absolute; right: 5%; font-size: 8rem; color: rgba(0, 40, 80, 0.2); font-family: serif; }
+    .math-header::before { content: '∑'; position: absolute; left: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.05); font-family: serif; }
+    .math-header::after { content: '∫'; position: absolute; right: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.05); font-family: serif; }
 
     .title-box { text-align: center; z-index: 2; }
 
@@ -60,21 +60,21 @@ st.markdown("""
 
     h1 { 
         font-family: 'Playfair Display', serif !important; 
-        color: #8E6E13 !important; 
+        color: #D4AF37 !important; 
         font-size: 3.2rem !important;
         margin: 10px 0 !important;
-        text-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
+        text-shadow: 0 0 20px rgba(212, 175, 55, 0.5);
         letter-spacing: 2px;
     }
 
     .glass-card { 
-        background: rgba(245, 245, 245, 0.95); 
+        background: rgba(15, 15, 15, 0.9); 
         border-radius: 15px; 
         padding: 25px; 
-        border: 1px solid rgba(212, 175, 55, 0.5); 
-        backdrop-filter: blur(5px); 
+        border: 1px solid rgba(212, 175, 55, 0.25); 
+        backdrop-filter: blur(15px); 
         margin-bottom: 20px; 
-        box-shadow: 0 15px 40px rgba(0,0,0,0.1);
+        box-shadow: 0 15px 40px rgba(0,0,0,0.8);
     }
 
     .stButton>button { 
@@ -92,30 +92,23 @@ st.markdown("""
         border: 1px solid #D4AF37 !important;
     }
 
-    [data-testid="stSidebar"] { background-color: #fafafa; border-right: 1px solid #D4AF37; }
+    [data-testid="stSidebar"] { background-color: #050505; border-right: 1px solid #D4AF37; }
     
     [data-testid="stSidebar"] h3 {
-        color: #8E6E13 !important;
-        text-shadow: 0 0 5px rgba(212, 175, 55, 0.3);
+        color: #D4AF37 !important;
+        text-shadow: 0 0 10px rgba(212, 175, 55, 0.4);
         font-family: 'Playfair Display', serif;
     }
 
     .status-badge { 
-        background: rgba(212, 175, 55, 0.15); 
+        background: rgba(212, 175, 55, 0.1); 
         border: 1px solid #D4AF37; 
-        color: #5a4a0e; 
+        color: #D4AF37; 
         padding: 12px; 
         border-radius: 8px; 
         text-align: center;
         font-family: 'Source Code Pro', monospace;
         font-weight: 500;
-    }
-    
-    .stMarkdown, .stTable, .stDataFrame {
-        color: #1e1e1e;
-    }
-    .stSelectbox label, .stSlider label {
-        color: #1e1e1e !important;
     }
 </style>
 
@@ -123,8 +116,8 @@ st.markdown("""
     <div class="abstract-icon">Δx</div>
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
-        <p style="color: #444; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
-            UPRM MATHEMATICAL OPTIMIZATION ENGINE v14 (AG + SA + GENÉTICO + MIN SECCIONES + DOBLE ROL)
+        <p style="color: #888; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
+            UPRM MATHEMATICAL OPTIMIZATION ENGINE v13 (EVOLUTIVO + INTENSIVOS + GRANDES + BLOQUEOS + DOBLE ROL)
         </p>
     </div>
     <div class="abstract-icon">∞</div>
@@ -167,11 +160,7 @@ def get_creditos_reales(creditos_base, cupo):
     return float(creditos_base) + max_extra
 
 def mins_to_str(m):
-    try:
-        m = int(m)
-    except (ValueError, TypeError):
-        m = 0
-    h, mins = divmod(m, 60)
+    h, mins = divmod(int(m), 60)
     am_pm = "AM" if h < 12 else "PM"
     h_disp = h if h <= 12 else h - 12
     if h_disp == 0: h_disp = 12
@@ -222,15 +211,8 @@ PATRONES = {
 
 def format_horario(patron, h_ini):
     parts = []
-    try:
-        h_ini = int(h_ini)
-    except (ValueError, TypeError):
-        h_ini = 0
     for dia, contrib in patron['days'].items():
-        try:
-            mins_duracion = int(float(contrib) * 50)
-        except (ValueError, TypeError):
-            mins_duracion = 50
+        mins_duracion = int(contrib * 50)
         h_fin = h_ini + mins_duracion
         parts.append(f"{dia}: {mins_to_str(h_ini)}-{mins_to_str(h_fin)}")
     return " | ".join(parts)
@@ -251,18 +233,12 @@ def exportar_todo(df):
 class Seccion:
     def __init__(self, cod, creditos, cupo, candidatos_raw, tipo_salon, es_ayudantia=False):
         self.cod = str(cod)
-        try:
-            self.creditos = int(float(str(creditos)))
-        except:
-            self.creditos = 3
-        try:
-            self.cupo = int(float(str(cupo)))
-        except:
-            self.cupo = 30
+        self.creditos = int(creditos)
+        self.cupo = int(cupo)
         if isinstance(candidatos_raw, list):
-            raw_list = [normalize_name(str(c)) for c in candidatos_raw if c and str(c).strip()]
+            raw_list = [normalize_name(c) for c in candidatos_raw if c.strip()]
         else:
-            raw_list = [normalize_name(str(c).strip()) for c in str(candidatos_raw).split(',') if c and str(c).strip() and str(c).upper().strip() != 'NAN']
+            raw_list = [normalize_name(c.strip()) for c in str(candidatos_raw).split(',') if c.strip() and str(c).upper() != 'NAN']
         self.cands = list(set(raw_list))
         try:
             t = float(tipo_salon)
@@ -414,20 +390,13 @@ class TabuScheduler:
                     self.graduados[nombre] = set(cursos)
 
         # 4. Cursos y secciones (con soporte para lista de cupos)
-        # MEJORA: Minimizar secciones innecesarias redistribuyendo estudiantes sobrantes
         self.secciones = []
         df_cursos.columns = [c.strip().upper() for c in df_cursos.columns]
         cursos_agrupados = {}
         for _, r in df_cursos.iterrows():
             cod_base = normalize_name(str(r['CODIGO']).strip())
-            try:
-                creditos = int(float(str(r['CREDITOS']).strip()))
-            except:
-                creditos = 3
-            try:
-                demanda = int(float(str(r.get('DEMANDA', 0)).strip()))
-            except:
-                demanda = 0
+            creditos = int(r['CREDITOS'])
+            demanda = int(r.get('DEMANDA', 0))
             cupo_tipico = str(r.get('CUPO', '30'))
             candidatos_raw = r.get('CANDIDATOS', '')
             tipo_salon = r.get('TIPO_SALON', 1)
@@ -441,47 +410,22 @@ class TabuScheduler:
                 tipo_salon = 1
 
             # Procesar lista de cupos si está separada por comas
-            if ',' in str(cupo_tipico):
-                capacidades = []
-                for c in str(cupo_tipico).split(','):
-                    try:
-                        capacidades.append(int(float(c.strip())))
-                    except:
-                        pass
+            if ',' in cupo_tipico:
+                capacidades = [int(c.strip()) for c in cupo_tipico.split(',') if c.strip().isdigit()]
                 for cap in capacidades:
-                    num_sec = len(self.secciones) + 1
-                    codigo_seccion = str(cod_base) + "-" + str(num_sec).zfill(2)
-                    self.secciones.append(Seccion(codigo_seccion, creditos, cap, candidatos_raw, tipo_salon))
+                    self.secciones.append(Seccion(f"{cod_base}-{len(self.secciones)+1:02d}", creditos, cap, candidatos_raw, tipo_salon))
             else:
-                try:
-                    cupo = int(float(str(cupo_tipico).strip()))
-                except:
-                    cupo = 30
-                if demanda <= 0 or cupo <= 0:
-                    self.secciones.append(Seccion(str(cod_base) + "-01", creditos, max(1, cupo), candidatos_raw, tipo_salon))
+                cupo = int(cupo_tipico)
+                if demanda <= 0:
+                    self.secciones.append(Seccion(f"{cod_base}-01", creditos, cupo, candidatos_raw, tipo_salon))
                 else:
-                    # MEJORA: Crear MINIMO de secciones redistribuyendo estudiantes sobrantes
-                    num_secciones_base = max(1, demanda // max(1, cupo))
-                    sobrantes = demanda % cupo
-
-                    if sobrantes == 0:
-                        for i in range(num_secciones_base):
-                            codigo_seccion = str(cod_base) + "-" + str(i + 1).zfill(2)
-                            self.secciones.append(Seccion(codigo_seccion, creditos, cupo, candidatos_raw, tipo_salon))
-                    elif sobrantes < max(5, int(cupo * 0.2)):
-                        capacidad_base = demanda // num_secciones_base
-                        extra = demanda - capacidad_base * num_secciones_base
-                        for i in range(num_secciones_base):
-                            cap_seccion = capacidad_base + (1 if i < extra else 0)
-                            codigo_seccion = str(cod_base) + "-" + str(i + 1).zfill(2)
-                            self.secciones.append(Seccion(codigo_seccion, creditos, cap_seccion, candidatos_raw, tipo_salon))
-                    else:
-                        num_secciones = num_secciones_base + 1
-                        for i in range(num_secciones_base):
-                            codigo_seccion = str(cod_base) + "-" + str(i + 1).zfill(2)
-                            self.secciones.append(Seccion(codigo_seccion, creditos, cupo, candidatos_raw, tipo_salon))
-                        codigo_seccion = str(cod_base) + "-" + str(num_secciones).zfill(2)
-                        self.secciones.append(Seccion(codigo_seccion, creditos, sobrantes, candidatos_raw, tipo_salon))
+                    num_secciones = math.ceil(demanda / cupo)
+                    for i in range(num_secciones):
+                        cap_final = cupo
+                        if i == num_secciones-1:
+                            cap_final = demanda - cupo*(num_secciones-1)
+                            if cap_final < 0: cap_final = cupo
+                        self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", creditos, cap_final, candidatos_raw, tipo_salon))
 
         # Preasignación robusta de profesores
         self._preasignar_profesores_robusto()
@@ -624,8 +568,6 @@ class TabuScheduler:
         horarios_prof = {p: {} for p in self.profesores}
         horarios_prof["GRADUADOS"] = {}
         horarios_prof["TBA"] = {}
-        # Para doble rol: tracking de conflictos Rf10
-        conflictos_doble_rol = []
 
         for i, asign in enumerate(sol):
             s = asign['seccion']
@@ -633,11 +575,6 @@ class TabuScheduler:
             salon = asign['salon']
             patron = asign['patron']
             ini = asign['ini']
-            # Convertir ini a entero si es string
-            try:
-                ini = int(ini)
-            except (ValueError, TypeError):
-                ini = 0
 
             if prof == "TBA" or salon == "TBA":
                 conflicts += 10000
@@ -714,12 +651,11 @@ class TabuScheduler:
             if prof in carga_prof:
                 carga_prof[prof] += self.get_sec_creditos(s, prof)
 
-            # Doble rol (Rf10) - MEJORA: Validación más robusta
+            # Doble rol (Rf10)
             if prof in self.graduados:
                 cursos_recibidos = self.graduados[prof]
                 for j, otro in enumerate(sol):
                     if j != i and otro['seccion'].cod.split('-')[0] in cursos_recibidos:
-                        # Verificar solapamiento de horarios en cualquier día
                         for dia, contrib in patron['days'].items():
                             for dia2, contrib2 in otro['patron']['days'].items():
                                 if dia == dia2:
@@ -727,8 +663,6 @@ class TabuScheduler:
                                     fin_otro = otro['ini'] + int(contrib2 * 50)
                                     if max(ini, otro['ini']) < min(fin_actual, fin_otro):
                                         conflicts += 20000
-                                        # Marcar para reparación prioritaria
-                                        conflictos_doble_rol.append((i, j))
 
         # Cargas mínimas y máximas
         for prof, carga in carga_prof.items():
@@ -1000,14 +934,13 @@ class TabuScheduler:
                                 conflicto = False
                                 for j, other in enumerate(sol):
                                     if j != idx and other:
-                                        other_ini = int(other['ini']) if not isinstance(other['ini'], int) else other['ini']
                                         if other['profesor'] == prof:
                                             for dia, contrib in patron['days'].items():
                                                 for dia2, contrib2 in other['patron']['days'].items():
                                                     if dia == dia2:
                                                         fin_actual = hora + int(contrib * 50)
-                                                        fin_exist = other_ini + int(contrib2 * 50)
-                                                        if max(hora, other_ini) < min(fin_actual, fin_exist):
+                                                        fin_exist = other['ini'] + int(contrib2 * 50)
+                                                        if max(hora, other['ini']) < min(fin_actual, fin_exist):
                                                             conflicto = True
                                                             break
                                                     if conflicto: break
@@ -1018,8 +951,8 @@ class TabuScheduler:
                                                 for dia2, contrib2 in other['patron']['days'].items():
                                                     if dia == dia2:
                                                         fin_actual = hora + int(contrib * 50)
-                                                        fin_exist = other_ini + int(contrib2 * 50)
-                                                        if max(hora, other_ini) < min(fin_actual, fin_exist):
+                                                        fin_exist = other['ini'] + int(contrib2 * 50)
+                                                        if max(hora, other['ini']) < min(fin_actual, fin_exist):
                                                             if salon in self.mega_salones and s.es_fusionable and other['seccion'].es_fusionable:
                                                                 if s.cupo + other['seccion'].cupo <= self.salon_capacidad.get(salon, 0):
                                                                     continue
@@ -1063,11 +996,6 @@ class TabuScheduler:
             salon = asign['salon']
             patron = asign['patron']
             ini = asign['ini']
-            # Convertir ini a entero si es string
-            try:
-                ini = int(ini)
-            except (ValueError, TypeError):
-                ini = 0
             if prof == "TBA" or salon == "TBA":
                 conflictos.append(idx)
                 continue
@@ -1123,125 +1051,6 @@ class TabuScheduler:
                                     if max(ini, otro['ini']) < min(fin_actual, fin_otro):
                                         conflictos.append(idx)
         return list(set(conflictos))
-
-    # --------------------------------------------------------------------------
-    # Reparación especializada para doble rol (Rf10)
-    # --------------------------------------------------------------------------
-    def _reparar_doble_rol(self, sol):
-        """
-        MEJORA: Reparación específica para conflictos de doble rol (Rf10).
-        Cuando un estudiante graduado tiene冲突 como instructor y estudiante,
-        intenta reprogramar una de las secciones a un horario diferente.
-        """
-        max_intentos = 30
-        mejoras_totales = 0
-
-        for _ in range(max_intentos):
-            conflictos_doble_rol = []
-
-            # Identificar conflictos de doble rol
-            for i, asign in enumerate(sol):
-                prof = asign['profesor']
-                if prof in self.graduados:
-                    cursos_recibidos = self.graduados[prof]
-                    for j, otro in enumerate(sol):
-                        if j != i and otro['seccion'].cod.split('-')[0] in cursos_recibidos:
-                            for dia, contrib in asign['patron']['days'].items():
-                                for dia2, contrib2 in otro['patron']['days'].items():
-                                    if dia == dia2:
-                                        fin_actual = asign['ini'] + int(contrib * 50)
-                                        fin_otro = otro['ini'] + int(contrib2 * 50)
-                                        if max(asign['ini'], otro['ini']) < min(fin_actual, fin_otro):
-                                            conflictos_doble_rol.append((i, j))
-
-            if not conflictos_doble_rol:
-                break  # No hay más conflictos de doble rol
-
-            # Intentar reparar cada conflicto
-            for i, j in conflictos_doble_rol:
-                s_i = sol[i]['seccion']
-                s_j = sol[j]['seccion']
-                prof_i = sol[i]['profesor']
-                prof_j = sol[j]['profesor']
-
-                # Determinar cuál sección reprogramar
-                # Preferir reprogramar la sección donde el graduado es instructor (i)
-                candidatos_horarios = []
-
-                for patron in PATRONES.get(s_i.creditos, PATRONES[3]):
-                    for ini in self.bloques:
-                        # Verificar si este horario funciona para el graduado como instructor
-                        conflicto = False
-                        for dia, contrib in patron['days'].items():
-                            duracion = int(contrib * 50)
-                            fin = ini + duracion
-
-                            # Verificar con todos los cursos que recibe el graduado
-                            cursos_recibidos = self.graduados.get(prof_i, set())
-                            for k, otra in enumerate(sol):
-                                if k != i and otra['seccion'].cod.split('-')[0] in cursos_recibidos:
-                                    for dia2, contrib2 in otra['patron']['days'].items():
-                                        if dia == dia2:
-                                            fin_otra = otra['ini'] + int(contrib2 * 50)
-                                            if max(ini, otra['ini']) < min(fin, fin_otra):
-                                                conflicto = True
-                                                break
-                                    if conflicto:
-                                        break
-                            if conflicto:
-                                break
-
-                            # Verificar cruces de profesor y salón
-                            if not conflicto:
-                                for k, otra in enumerate(sol):
-                                    if k != i:
-                                        if otra['profesor'] == prof_i and otra['profesor'] != "GRADUADOS":
-                                            for dia2, contrib2 in otra['patron']['days'].items():
-                                                if dia == dia2:
-                                                    fin_otra = otra['ini'] + int(contrib2 * 50)
-                                                    if max(ini, otra['ini']) < min(fin, fin_otra):
-                                                        conflicto = True
-                                                        break
-                                            if conflicto:
-                                                break
-                                        if otra['salon'] == sol[i]['salon']:
-                                            for dia2, contrib2 in otra['patron']['days'].items():
-                                                if dia == dia2:
-                                                    fin_otra = otra['ini'] + int(contrib2 * 50)
-                                                    if max(ini, otra['ini']) < min(fin, fin_otra):
-                                                        if not (sol[i]['salon'] in self.mega_salones and s_i.es_fusionable and otra['seccion'].es_fusionable):
-                                                            conflicto = True
-                                                            break
-                                            if conflicto:
-                                                break
-                                    if conflicto:
-                                        break
-                            if conflicto:
-                                break
-
-                        if not conflicto:
-                            candidatos_horarios.append((ini, patron))
-
-                if candidatos_horarios:
-                    # Tomar un horario aleatorio válido
-                    ini_new, patron_new = random.choice(candidatos_horarios)
-                    sol[i] = {'seccion': s_i, 'profesor': prof_i, 'salon': sol[i]['salon'],
-                             'patron': patron_new, 'ini': ini_new}
-                    mejoras_totales += 1
-                else:
-                    # No se pudo reprogramar la sección i, intentar reprogramar la sección j
-                    # (donde el graduado es estudiante)
-                    # En este caso, intentamos cambiar el profesor de la sección i
-                    cands_otros = [p for p in s_i.cands if p in self.profesores and p != prof_i]
-                    for otro_prof in cands_otros:
-                        sol[i]['profesor'] = otro_prof
-                        # Verificar si se resolvió
-                        nuevo_conflicto = False
-                        for dia, contrib in patron_new.items() if 'patron_new' in dir() else sol[i]['patron']['days'].items():
-                            pass  # Verificación simplificada
-                        break
-
-        return sol, mejoras_totales
 
     # --------------------------------------------------------------------------
     # Balanceo de cargas
@@ -1414,194 +1223,11 @@ class TabuScheduler:
                 if bar:
                     bar.progress((it+1)/iteraciones)
 
-        # Post-procesamiento final: reparación exhaustiva, doble rol, algoritmo genético y balanceo
+        # Post-procesamiento final: reparación exhaustiva y balanceo
         self.mejor_solucion = self._resolver_conflictos_total(self.mejor_solucion)
-        self.mejor_solucion, _ = self._reparar_doble_rol(self.mejor_solucion)  # MEJORA: Reparar doble rol
-        self.mejor_solucion = self._algoritmo_genetico_repair(self.mejor_solucion)
         self.mejor_solucion, _ = self._balancear_cargas(self.mejor_solucion)
-        # Reparación final después del balanceo
-        self.mejor_solucion = self._resolver_conflictos_total(self.mejor_solucion)
-        self.mejor_solucion, _ = self._reparar_doble_rol(self.mejor_solucion)
         self.mejor_costo = self._costo_total(self.mejor_solucion)
         return self.mejor_solucion, int(self.mejor_costo // 10000), self.historial_costos
-
-    # --------------------------------------------------------------------------
-    # ALGORITMO GENÉTICO PARA REPARACIÓN DE CONFLICTOS (basado en Tesis UPRM)
-    # --------------------------------------------------------------------------
-    def _algoritmo_genetico_repair(self, sol_inicial, generaciones=500, tamano_poblacion=50):
-        """
-        Algoritmo genético especializado para reparar conflictos residuales.
-        Inspirado en la metodología de la Tesis de Carlos para UCTP.
-
-        Fitness: f(H) = 10000 / (10000 + F_hard(H) + F_soft(H))
-        """
-        # Crear población inicial
-        poblacion = []
-
-        # Incluir la mejor solución actual
-        poblacion.append(deepcopy(sol_inicial))
-
-        # Generar variaciones para diversidad
-        for _ in range(tamano_poblacion - 1):
-            variante = self._generar_variante_reparada(sol_inicial)
-            poblacion.append(variante)
-
-        mejor_global = deepcopy(sol_inicial)
-        mejor_costo_global = self._costo_total(mejor_global)
-
-        for gen in range(generaciones):
-            # Evaluar fitness de toda la población
-            fitness_scores = []
-            for ind in poblacion:
-                costo = self._costo_total(ind)
-                # Fitness más alto = mejor (menor costo)
-                fitness = 10000 / (10000 + costo) if costo >= 0 else 1.0
-                fitness_scores.append((fitness, costo, ind))
-
-            # Ordenar por fitness (mayor es mejor)
-            fitness_scores.sort(key=lambda x: x[0], reverse=True)
-
-            # Preservar élite (mejores 10%)
-            num_elite = max(1, tamano_poblacion // 10)
-            nueva_poblacion = [deepcopy(ind) for _, _, ind in fitness_scores[:num_elite]]
-
-            # Actualizar mejor global
-            if fitness_scores[0][1] < mejor_costo_global:
-                mejor_costo_global = fitness_scores[0][1]
-                mejor_global = deepcopy(fitness_scores[0][2])
-
-            # Si encontramos solución sin conflictos, terminar
-            if mejor_costo_global == 0:
-                break
-
-            # Selección y cruza
-            while len(nueva_poblacion) < tamano_poblacion:
-                # Selección por torneo (tomar 3 aleatorios, mejor gana)
-                torneo = random.sample(range(len(poblacion)), min(3, len(poblacion)))
-                padre1_idx = max(torneo, key=lambda i: fitness_scores[i][0])
-
-                torneo2 = random.sample(range(len(poblacion)), min(3, len(poblacion)))
-                padre2_idx = max(torneo2, key=lambda i: fitness_scores[i][0])
-
-                padre1 = poblacion[padre1_idx]
-                padre2 = poblacion[padre2_idx]
-
-                # Cruza: mezclar aleatoriamente asignaciones
-                hijo = self._cruzar_soluciones(padre1, padre2)
-
-                # Mutación con probabilidad 20%
-                if random.random() < 0.2:
-                    hijo = self._mutar_reparacion(hijo)
-
-                # Reparación local del hijo
-                hijo = self._reparar_solucion(hijo)
-
-                nueva_poblacion.append(hijo)
-
-            poblacion = nueva_poblacion
-
-        return mejor_global
-
-    def _generar_variante_reparada(self, sol):
-        """Genera una variante reparada de una solución."""
-        variante = deepcopy(sol)
-
-        # Identificar secciones conflictivas
-        indices_conflictivos = self._obtener_indices_conflictivos(variante)
-
-        # Reasignar aleatoriamente secciones conflictivas
-        for idx in indices_conflictivos:
-            s = variante[idx]['seccion']
-            prof = getattr(s, 'prof_preasignado', None)
-
-            # Buscar una asignación válida
-            for _ in range(100):
-                candidatos = [p for p in s.cands if p in self.profesores]
-                if candidatos:
-                    prof_cand = random.choice(candidatos)
-                    patrones = PATRONES.get(s.creditos, PATRONES[3])
-                    patron = random.choice(patrones)
-                    ini = random.choice(self.bloques)
-                    salones = [sl['CODIGO'] for sl in self.salones if sl['CAPACIDAD'] >= s.cupo]
-                    if salones:
-                        salon = random.choice(salones)
-                        variante[idx] = {'seccion': s, 'profesor': prof_cand, 'salon': salon, 'patron': patron, 'ini': ini}
-                        break
-                else:
-                    break
-
-        return variante
-
-    def _cruzar_soluciones(self, padre1, padre2):
-        """Cruza dos soluciones intercambiando asignaciones."""
-        hijo = [None] * len(padre1)
-
-        # Para cada posición, elegir aleatoriamente de padre1 o padre2
-        for i in range(len(padre1)):
-            if random.random() < 0.5:
-                hijo[i] = deepcopy(padre1[i])
-            else:
-                hijo[i] = deepcopy(padre2[i])
-
-        return hijo
-
-    def _mutar_reparacion(self, sol):
-        """Mutación especializada para reparación: intenta cambiar secciones conflictivas."""
-        idx = random.randint(0, len(sol) - 1)
-        s = sol[idx]['seccion']
-        prof = sol[idx]['profesor']
-
-        # Intentar cambiar profesor
-        candidatos = [p for p in s.cands if p in self.profesores and p != prof]
-        if candidatos:
-            nuevo_prof = random.choice(candidatos)
-            sol[idx]['profesor'] = nuevo_prof
-
-        # Intentar cambiar horario
-        patrones = PATRONES.get(s.creditos, PATRONES[3])
-        sol[idx]['patron'] = random.choice(patrones)
-        sol[idx]['ini'] = random.choice(self.bloques)
-
-        # Intentar cambiar salón
-        salones = [sl['CODIGO'] for sl in self.salones if sl['CAPACIDAD'] >= s.cupo]
-        if salones:
-            sol[idx]['salon'] = random.choice(salones)
-
-        return sol
-
-    def _reparar_solucion(self, sol):
-        """Repara una solución intentando resolver conflictos."""
-        max_intentos = 50
-
-        for _ in range(max_intentos):
-            conflictos = self._obtener_indices_conflictivos(sol)
-            if not conflictos:
-                break
-
-            # Para cada conflicto, intentar arreglarlo
-            for idx in conflictos:
-                s = sol[idx]['seccion']
-                candidatos = [p for p in s.cands if p in self.profesores]
-
-                for prof in candidatos:
-                    for patron in PATRONES.get(s.creditos, PATRONES[3]):
-                        for ini in self.bloques:
-                            salones = [sl['CODIGO'] for sl in self.salones if sl['CAPACIDAD'] >= s.cupo]
-                            for salon in salones:
-                                # Probar esta combinación
-                                sol[idx] = {'seccion': s, 'profesor': prof, 'salon': salon, 'patron': patron, 'ini': ini}
-
-                                # Verificar si se resolvió el conflicto
-                                if idx not in self._obtener_indices_conflictivos(sol):
-                                    break
-                            else:
-                                continue
-                            break
-                        else:
-                            continue
-                        break
-
-        return sol
 
 # ==============================================================================
 # 5. FUNCIONES DE VISUALIZACIÓN
@@ -1611,10 +1237,8 @@ def generar_heatmap_ocupacion(scheduler, solucion):
     inicio = scheduler.limite_operativo[0]
     fin = scheduler.limite_operativo[1]
     horas_del_dia = list(range(inicio, fin + 1, 30))
-    # Matriz ahora con filas = horas, columnas = días
-    matriz = np.zeros((len(horas_del_dia), len(dias_semana)))
+    matriz = np.zeros((len(dias_semana), len(horas_del_dia)))
     total_salones = len(scheduler.salones)
-    
     for asign in solucion:
         salon = asign['salon']
         if salon == "TBA":
@@ -1629,40 +1253,31 @@ def generar_heatmap_ocupacion(scheduler, solucion):
             for minuto in range(ini, ini + duracion, 30):
                 if minuto in horas_del_dia:
                     hora_idx = horas_del_dia.index(minuto)
-                    matriz[hora_idx, dia_idx] += 1
-    
+                    matriz[dia_idx, hora_idx] += 1
     if total_salones > 0:
         matriz_porcentaje = (matriz / total_salones) * 100
     else:
         matriz_porcentaje = matriz
-    
     fig, ax = plt.subplots(figsize=(14, 6))
     im = ax.imshow(matriz_porcentaje, cmap='YlOrRd', aspect='auto', vmin=0, vmax=100)
-    
-    # Configurar eje X (días)
-    ax.set_xticks(range(len(dias_semana)))
-    ax.set_xticklabels(dias_semana, rotation=0, ha='center', color='black')
-    
-    # Configurar eje Y (horas)
-    step = max(1, len(horas_del_dia) // 12)
-    ax.set_yticks(range(0, len(horas_del_dia), step))
+    ax.set_xticks(range(len(horas_del_dia)))
     etiquetas_horas = [mins_to_str(h).replace(' AM', '').replace(' PM', '') for h in horas_del_dia]
-    ax.set_yticklabels(etiquetas_horas[::step], color='black')
-    
+    step = max(1, len(etiquetas_horas) // 12)
+    ax.set_xticks(range(0, len(horas_del_dia), step))
+    ax.set_xticklabels(etiquetas_horas[::step], rotation=45, ha='right', color='white')
+    ax.set_yticks(range(len(dias_semana)))
+    ax.set_yticklabels(dias_semana, color='white')
     cbar = plt.colorbar(im, ax=ax, label='% Ocupación')
-    cbar.ax.yaxis.label.set_color('black')
-    cbar.ax.tick_params(colors='black')
-    
-    ax.set_title('Ocupación de Salones por Franja Horaria', color='black', pad=20)
-    ax.set_xlabel('Día', color='black')
-    ax.set_ylabel('Hora de Inicio', color='black')
-    
-    fig.patch.set_facecolor('white')
-    ax.set_facecolor('#F8F8F8')
-    ax.tick_params(colors='black')
+    cbar.ax.yaxis.label.set_color('white')
+    cbar.ax.tick_params(colors='white')
+    ax.set_title('Ocupación de Salones por Franja Horaria', color='white', pad=20)
+    ax.set_xlabel('Hora de Inicio', color='white')
+    ax.set_ylabel('Día', color='white')
+    fig.patch.set_facecolor('#0F0F0F')
+    ax.set_facecolor('#1A1A1A')
+    ax.tick_params(colors='white')
     for spine in ax.spines.values():
         spine.set_edgecolor('#D4AF37')
-    
     plt.tight_layout()
     return fig
 
@@ -1721,10 +1336,10 @@ def generar_plantilla():
 # ==============================================================================
 def main():
     with st.sidebar:
-        st.markdown("### 📅 Configuración")
-        zona = st.selectbox("🏛️ Zona", ["CENTRAL", "PERIFERICA"])
+        st.markdown("### ∑ Configuración")
+        zona = st.selectbox("Zona Campus", ["CENTRAL", "PERIFERICA"])
         iteraciones = st.slider("Iteraciones de Búsqueda", 100, 10000, 8000, help="Más iteraciones aumentan la probabilidad de cero conflictos.")
-        file = st.file_uploader("Subir Excel 📊", type=['xlsx'])
+        file = st.file_uploader("Subir Protocolo Excel", type=['xlsx'])
         st.download_button(
             label="📥 Descargar Plantilla",
             data=generar_plantilla(),
@@ -1792,11 +1407,7 @@ def main():
                     st.session_state.detailed_conflicts = scheduler._obtener_conflictos(mejor_sol)
 
             except Exception as e:
-                import traceback
-                import sys
                 st.error(f"Error durante la optimización: {e}")
-                with st.expander("Detalles del error"):
-                    st.code(traceback.format_exc())
                 st.info("Revise que los datos de entrada sean consistentes (profesores candidatos, salones compatibles, etc.)")
                 return
 
@@ -1845,12 +1456,12 @@ def main():
             fitness_history = [10000 / (10000 + costo) for costo in st.session_state.historial]
             fig1, ax1 = plt.subplots(figsize=(10, 4))
             ax1.plot(fitness_history, color='#D4AF37', linewidth=2.5)
-            ax1.set_title("Crecimiento de Fitness Evolutivo", color='black', pad=15)
-            ax1.set_xlabel("Iteraciones", color='black')
-            ax1.set_ylabel("Fitness (1.0 = Ideal)", color='black')
-            fig1.patch.set_facecolor('#F8F8F8')
-            ax1.set_facecolor('#F8F8F8')
-            ax1.tick_params(colors='black')
+            ax1.set_title("Crecimiento de Fitness Evolutivo", color='white', pad=15)
+            ax1.set_xlabel("Iteraciones", color='white')
+            ax1.set_ylabel("Fitness (1.0 = Ideal)", color='white')
+            fig1.patch.set_facecolor('#0F0F0F')
+            ax1.set_facecolor('#1A1A1A')
+            ax1.tick_params(colors='white')
             for spine in ax1.spines.values(): spine.set_edgecolor('#D4AF37')
             st.pyplot(fig1)
 
@@ -1861,10 +1472,10 @@ def main():
             fig2, ax2 = plt.subplots(figsize=(12, 6))
             ax2.bar(cargas_df['Profesor'], cargas_df['Créditos Reales'], color='#8E6E13')
             ax2.axhline(y=12, color='#FF4B4B', linestyle='--', linewidth=2, label='Carga Estándar Típica (12 cr)')
-            ax2.set_xticklabels(cargas_df['Profesor'], rotation=45, ha='right', color='black')
-            ax2.tick_params(colors='black')
-            fig2.patch.set_facecolor('#F8F8F8')
-            ax2.set_facecolor('#F8F8F8')
+            ax2.set_xticklabels(cargas_df['Profesor'], rotation=45, ha='right', color='white')
+            ax2.tick_params(colors='white')
+            fig2.patch.set_facecolor('#0F0F0F')
+            ax2.set_facecolor('#1A1A1A')
             for spine in ax2.spines.values(): spine.set_edgecolor('#D4AF37')
             ax2.legend()
             st.pyplot(fig2)
