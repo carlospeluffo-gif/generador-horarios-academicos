@@ -1474,12 +1474,12 @@ def main():
             fitness_history = [10000 / (10000 + costo) for costo in st.session_state.historial]
             fig1, ax1 = plt.subplots(figsize=(10, 4))
             ax1.plot(fitness_history, color='#D4AF37', linewidth=2.5)
-            ax1.set_title("Crecimiento de Fitness Evolutivo", color='white', pad=15)
-            ax1.set_xlabel("Iteraciones", color='white')
-            ax1.set_ylabel("Fitness (1.0 = Ideal)", color='white')
-            fig1.patch.set_facecolor('#0F0F0F')
-            ax1.set_facecolor('#1A1A1A')
-            ax1.tick_params(colors='white')
+            ax1.set_title("Crecimiento de Fitness Evolutivo", color='black', pad=15)
+            ax1.set_xlabel("Iteraciones", color='black')
+            ax1.set_ylabel("Fitness (1.0 = Ideal)", color='black')
+            fig1.patch.set_facecolor('#F8F8F8')
+            ax1.set_facecolor('#F8F8F8')
+            ax1.tick_params(colors='black')
             for spine in ax1.spines.values(): spine.set_edgecolor('#D4AF37')
             st.pyplot(fig1)
 
