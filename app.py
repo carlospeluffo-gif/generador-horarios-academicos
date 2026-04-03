@@ -1357,7 +1357,7 @@ def main():
         st.markdown("### 📅 Configuración")
         zona = st.selectbox("🏛️ Zona", ["CENTRAL", "PERIFERICA"])
         iteraciones = st.slider("Iteraciones de Búsqueda", 100, 10000, 8000, help="Más iteraciones aumentan la probabilidad de cero conflictos.")
-        file = st.file_uploader("Subir Protocolo Excel", type=['xlsx'])
+        file = st.file_uploader("Subir Excel 📊", type=['xlsx'])
         st.download_button(
             label="📥 Descargar Plantilla",
             data=generar_plantilla(),
