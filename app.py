@@ -43,8 +43,8 @@ st.markdown("""
         overflow: hidden;
     }
 
-    .math-header::before { content: '∑'; position: absolute; left: 5%; font-size: 8rem; color: rgba(0, 0, 128, 0.25); font-family: serif; }
-    .math-header::after { content: '∫'; position: absolute; right: 5%; font-size: 8rem; color: rgba(0, 0, 128, 0.25); font-family: serif; }
+    .math-header::before { content: '∑'; position: absolute; left: 5%; font-size: 8rem; color: rgba(0, 40, 80, 0.2); font-family: serif; }
+    .math-header::after { content: '∫'; position: absolute; right: 5%; font-size: 8rem; color: rgba(0, 40, 80, 0.2); font-family: serif; }
 
     .title-box { text-align: center; z-index: 2; }
 
