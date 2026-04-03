@@ -1244,8 +1244,10 @@ def generar_heatmap_ocupacion(scheduler, solucion):
     inicio = scheduler.limite_operativo[0]
     fin = scheduler.limite_operativo[1]
     horas_del_dia = list(range(inicio, fin + 1, 30))
-    matriz = np.zeros((len(dias_semana), len(horas_del_dia)))
+    # Matriz ahora con filas = horas, columnas = días
+    matriz = np.zeros((len(horas_del_dia), len(dias_semana)))
     total_salones = len(scheduler.salones)
+    
     for asign in solucion:
         salon = asign['salon']
         if salon == "TBA":
@@ -1260,31 +1262,40 @@ def generar_heatmap_ocupacion(scheduler, solucion):
             for minuto in range(ini, ini + duracion, 30):
                 if minuto in horas_del_dia:
                     hora_idx = horas_del_dia.index(minuto)
-                    matriz[dia_idx, hora_idx] += 1
+                    matriz[hora_idx, dia_idx] += 1
+    
     if total_salones > 0:
         matriz_porcentaje = (matriz / total_salones) * 100
     else:
         matriz_porcentaje = matriz
+    
     fig, ax = plt.subplots(figsize=(14, 6))
-    im = ax.imshow(matriz_porcentaje, cmap='YlOrRd', aspect='auto', vmin=0, vmax=100, origin='lower')
-    ax.set_xticks(range(len(horas_del_dia)))
+    im = ax.imshow(matriz_porcentaje, cmap='YlOrRd', aspect='auto', vmin=0, vmax=100)
+    
+    # Configurar eje X (días)
+    ax.set_xticks(range(len(dias_semana)))
+    ax.set_xticklabels(dias_semana, rotation=0, ha='center', color='white')
+    
+    # Configurar eje Y (horas)
+    step = max(1, len(horas_del_dia) // 12)
+    ax.set_yticks(range(0, len(horas_del_dia), step))
     etiquetas_horas = [mins_to_str(h).replace(' AM', '').replace(' PM', '') for h in horas_del_dia]
-    step = max(1, len(etiquetas_horas) // 12)
-    ax.set_xticks(range(0, len(horas_del_dia), step))
-    ax.set_xticklabels(etiquetas_horas[::step], rotation=45, ha='right', color='white')
-    ax.set_yticks(range(len(dias_semana)))
-    ax.set_yticklabels(dias_semana, color='white')
+    ax.set_yticklabels(etiquetas_horas[::step], color='white')
+    
     cbar = plt.colorbar(im, ax=ax, label='% Ocupación')
     cbar.ax.yaxis.label.set_color('white')
     cbar.ax.tick_params(colors='white')
+    
     ax.set_title('Ocupación de Salones por Franja Horaria', color='white', pad=20)
-    ax.set_xlabel('Hora de Inicio', color='white')
-    ax.set_ylabel('Día', color='white')
+    ax.set_xlabel('Día', color='white')
+    ax.set_ylabel('Hora de Inicio', color='white')
+    
     fig.patch.set_facecolor('#0F0F0F')
     ax.set_facecolor('#1A1A1A')
     ax.tick_params(colors='white')
     for spine in ax.spines.values():
         spine.set_edgecolor('#D4AF37')
+    
     plt.tight_layout()
     return fig
 
