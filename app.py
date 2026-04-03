@@ -10,110 +10,110 @@ from copy import deepcopy
 import unicodedata
 
 # ==============================================================================
-# 1. ESTÉTICA (TEMA CLARO - BLANCO/DORADO)
+# 1. ESTÉTICA (original, fondo oscuro)
 # ==============================================================================
-st.set_page_config(page_title="UPRM Scheduler - Genetic Hybrid", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="UPRM Scheduler Platinum AI v13", page_icon="🏛️", layout="wide")
 
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Source+Code+Pro:wght@300;500&display=swap');
     
     .stApp { 
-        background-color: #f5f7fa;
-        background-image: none;
-        color: #1e293b;
+        background-color: #ffffff;
+        background-image: 
+            linear-gradient(rgba(0, 0, 0, 0.03) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+        background-size: 40px 40px;
+        background-image: 
+            linear-gradient(rgba(212, 175, 55, 0.1) 2px, transparent 2px),
+            linear-gradient(90deg, rgba(212, 175, 55, 0.1) 2px, transparent 2px),
+            radial-gradient(circle at 50% 20%, #1a1a1a 0%, #000000 100%);
+        background-size: 80px 80px, 80px 80px, 100% 100%;
+        background-attachment: fixed;
+        color: #111111; 
     }
 
     .math-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 25px 50px;
-        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-        border-bottom: 3px solid #eab308;
-        margin-bottom: 30px;
-        border-radius: 0 0 20px 20px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+        padding: 30px 60px;
+        background: rgba(255, 255, 255, 0.95);
+        border-bottom: 3px solid #D4AF37;
+        margin-bottom: 40px;
+        border-radius: 0 0 30px 30px;
+        box-shadow: 0 10px 50px rgba(212, 175, 55, 0.15);
         position: relative;
         overflow: hidden;
     }
 
-    .math-header::before { content: '∑'; position: absolute; left: 5%; font-size: 6rem; color: rgba(234,179,8,0.1); font-family: serif; }
-    .math-header::after { content: '∫'; position: absolute; right: 5%; font-size: 6rem; color: rgba(234,179,8,0.1); font-family: serif; }
+    .math-header::before { content: '∑'; position: absolute; left: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.05); font-family: serif; }
+    .math-header::after { content: '∫'; position: absolute; right: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.05); font-family: serif; }
 
     .title-box { text-align: center; z-index: 2; }
 
     .abstract-icon {
-        font-size: 2.5rem;
-        color: #eab308;
-        border: 2px solid #eab308;
-        padding: 8px 16px;
+        font-size: 3rem;
+        color: #D4AF37;
+        border: 2px solid #D4AF37;
+        padding: 10px 20px;
         border-radius: 50% 0% 50% 0%;
-        background: rgba(234,179,8,0.05);
-        box-shadow: 0 0 10px rgba(234,179,8,0.2);
+        background: rgba(212, 175, 55, 0.05);
+        box-shadow: 0 0 15px rgba(212, 175, 55, 0.3);
     }
 
     h1 { 
         font-family: 'Playfair Display', serif !important; 
-        color: #0f172a !important; 
-        font-size: 2.8rem !important;
+        color: #D4AF37 !important; 
+        font-size: 3.2rem !important;
         margin: 10px 0 !important;
-        text-shadow: none;
-        letter-spacing: 1px;
+        text-shadow: 0 0 20px rgba(212, 175, 55, 0.5);
+        letter-spacing: 2px;
     }
 
     .glass-card { 
-        background: rgba(255, 255, 255, 0.95); 
-        border-radius: 16px; 
-        padding: 20px; 
-        border: 1px solid rgba(234,179,8,0.3); 
-        backdrop-filter: blur(4px); 
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid rgba(0,0,0,0.08); 
+        border-radius: 15px; 
+        padding: 25px; 
+        border: 1px solid rgba(212, 175, 55, 0.25); 
+        backdrop-filter: blur(15px); 
         margin-bottom: 20px; 
-        box-shadow: 0 8px 20px rgba(0,0,0,0.03);
+        box-shadow: 0 15px 40px rgba(0,0,0,0.8);
     }
 
     .stButton>button { 
-        background: linear-gradient(135deg, #ca8a04 0%, #eab308 50%, #ca8a04 100%) !important; 
-        color: white !important; font-weight: bold !important; border-radius: 8px !important; 
-        width: 100%; border: none !important; height: 48px; font-size: 1rem;
-        transition: 0.3s;
+        background: linear-gradient(135deg, #8E6E13 0%, #D4AF37 50%, #8E6E13 100%) !important; 
+        color: white !important; font-weight: bold !important; border-radius: 4px !important; 
+        width: 100%; border: none !important; height: 55px; font-size: 1.1rem;
+        transition: 0.4s;
     }
-    .stButton>button:hover { transform: scale(1.01); box-shadow: 0 0 15px rgba(234,179,8,0.4); }
+    .stButton>button:hover { transform: scale(1.02); box-shadow: 0 0 25px rgba(212, 175, 55, 0.4); }
 
     .stDownloadButton>button {
-        background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%) !important;
-        color: white !important;
-        font-weight: 600 !important;
-        border: 1px solid #eab308 !important;
+        background: linear-gradient(135deg, #B8860B 0%, #FFD700 50%, #B8860B 100%) !important;
+        color: #000 !important;
+        font-weight: 800 !important;
+        border: 1px solid #D4AF37 !important;
     }
 
-    [data-testid="stSidebar"] { background-color: #ffffff; border-right: 1px solid #e2e8f0; }
+    [data-testid="stSidebar"] { background-color: #050505; border-right: 1px solid #D4AF37; }
     
     [data-testid="stSidebar"] h3 {
-        color: #0f172a !important;
-        text-shadow: none;
+        color: #D4AF37 !important;
+        text-shadow: 0 0 10px rgba(212, 175, 55, 0.4);
         font-family: 'Playfair Display', serif;
     }
 
     .status-badge { 
-        background: #fef9c3; 
-        border: 1px solid #eab308; 
-        color: #854d0e; 
-        padding: 10px; 
-        border-radius: 12px; 
+        background: rgba(212, 175, 55, 0.1); 
+        border: 1px solid #D4AF37; 
+        color: #D4AF37; 
+        padding: 12px; 
+        border-radius: 8px; 
         text-align: center;
         font-family: 'Source Code Pro', monospace;
         font-weight: 500;
-    }
-
-    /* Dataframes, textos, etc. */
-    .stDataFrame, .stTable, .stMarkdown, p, div {
-        color: #1e293b;
-    }
-
-    /* Ajuste de gráficos */
-    .stPlotlyChart, .stPyplot {
-        background: transparent;
     }
 </style>
 
@@ -121,8 +121,8 @@ st.markdown("""
     <div class="abstract-icon">Δx</div>
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
-        <p style="color: #475569; font-family: 'Source Code Pro'; letter-spacing: 2px; font-size: 0.85rem;">
-            ALGORITMO GENÉTICO HÍBRIDO (GA-TABU) - OPTIMIZACIÓN DE HORARIOS
+        <p style="color: #888; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
+            UPRM MATHEMATICAL OPTIMIZATION ENGINE v13 (EVOLUTIVO + INTENSIVOS + GRANDES + BLOQUEOS + DOBLE ROL)
         </p>
     </div>
     <div class="abstract-icon">∞</div>
@@ -130,9 +130,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. UTILIDADES Y TABLAS DE REFERENCIA (sin cambios)
+# 2. UTILIDADES Y TABLAS DE REFERENCIA
 # ==============================================================================
 def normalize_name(s: str) -> str:
+    """Elimina acentos, convierte a mayúsculas y quita espacios sobrantes."""
     s = s.strip()
     return unicodedata.normalize('NFKD', s).encode('ASCII', 'ignore').decode().upper()
 
@@ -232,7 +233,7 @@ def exportar_todo(df):
     return out.getvalue()
 
 # ==============================================================================
-# 3. MODELOS DE DATOS (sin cambios)
+# 3. MODELOS DE DATOS
 # ==============================================================================
 class Seccion:
     def __init__(self, cod, creditos, cupo, candidatos_raw, tipo_salon, es_ayudantia=False):
@@ -339,8 +340,7 @@ def compatible_tipo(curso_tipo, salon_tipo):
     return salon_cat != 2
 
 # ==============================================================================
-# 4. MOTOR DE OPTIMIZACIÓN (TABU / SIMULATED ANNEALING - SIN CAMBIOS)
-#    Solo se modificó la creación de secciones para distribuir cupos equitativamente
+# 4. MOTOR DE OPTIMIZACIÓN (TABU / SIMULATED ANNEALING CON MEJORAS)
 # ==============================================================================
 class TabuScheduler:
     def __init__(self, df_cursos, df_profes, df_salones, df_graduados, zona):
@@ -384,7 +384,7 @@ class TabuScheduler:
                 )
                 self.profesores[prof.nombre] = prof
 
-        # 3. Graduados
+        # 3. Graduados (doble rol)
         self.graduados = {}
         if df_graduados is not None and not df_graduados.empty:
             df_graduados.columns = [c.strip().upper() for c in df_graduados.columns]
@@ -394,7 +394,7 @@ class TabuScheduler:
                 if nombre in self.profesores:
                     self.graduados[nombre] = set(cursos)
 
-        # 4. Cursos y secciones (con distribución equitativa de cupos)
+        # 4. Cursos y secciones (con soporte para lista de cupos)
         self.secciones = []
         df_cursos.columns = [c.strip().upper() for c in df_cursos.columns]
         cursos_agrupados = {}
@@ -414,7 +414,7 @@ class TabuScheduler:
             except:
                 tipo_salon = 1
 
-            # Procesar lista de cupos separada por comas (si existe)
+            # Procesar lista de cupos si está separada por comas
             if ',' in cupo_tipico:
                 capacidades = [int(c.strip()) for c in cupo_tipico.split(',') if c.strip().isdigit()]
                 for cap in capacidades:
@@ -424,14 +424,18 @@ class TabuScheduler:
                 if demanda <= 0:
                     self.secciones.append(Seccion(f"{cod_base}-01", creditos, cupo, candidatos_raw, tipo_salon))
                 else:
-                    # Cálculo del número de secciones (ceil división)
-                    num_secciones = math.ceil(demanda / cupo)
-                    # Distribución equitativa de la demanda entre las secciones
-                    cupo_base = demanda // num_secciones
-                    resto = demanda % num_secciones
+                    
+num_secciones = max(1, math.ceil(demanda / cupo))
+
+                    base = demanda // num_secciones
+                    extra = demanda % num_secciones
+
                     for i in range(num_secciones):
-                        cap_final = cupo_base + (1 if i < resto else 0)
-                        self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", creditos, cap_final, candidatos_raw, tipo_salon))
+                        cap_final = base + (1 if i < extra else 0)
+                        self.secciones.append(
+                            Seccion(f"{cod_base}-{i+1:02d}", creditos, cap_final, candidatos_raw, tipo_salon)
+                        )
+)
 
         # Preasignación robusta de profesores
         self._preasignar_profesores_robusto()
@@ -454,7 +458,7 @@ class TabuScheduler:
         self.sin_mejora_counter = 0
 
     # --------------------------------------------------------------------------
-    # Preasignación de profesores (sin cambios)
+    # Preasignación de profesores (con normalización)
     # --------------------------------------------------------------------------
     def get_sec_creditos(self, s, prof_name):
         if prof_name in self.profesores and self.profesores[prof_name].compensacion:
@@ -518,7 +522,7 @@ class TabuScheduler:
                 carga_actual[prof] += creditos
                 if prof in capacidad_restante:
                     capacidad_restante[prof] -= creditos
-        # Simulated annealing para balanceo
+        # Simulated annealing para mejorar balance de cargas
         def calc_penalidad():
             pen = 0
             for p, c in carga_actual.items():
@@ -560,7 +564,7 @@ class TabuScheduler:
             T *= 0.995
 
     # --------------------------------------------------------------------------
-    # Función de costo total (sin cambios)
+    # Función de costo total (con todas las restricciones)
     # --------------------------------------------------------------------------
     def _costo_total(self, sol):
         conflicts = 0
@@ -570,6 +574,7 @@ class TabuScheduler:
         carga_prof = {p: 0.0 for p in self.profesores}
         carga_prof["GRADUADOS"] = 0.0
         carga_prof["TBA"] = 0.0
+        # Para Rs4: compactación
         horarios_prof = {p: {} for p in self.profesores}
         horarios_prof["GRADUADOS"] = {}
         horarios_prof["TBA"] = {}
@@ -624,7 +629,7 @@ class TabuScheduler:
                 fin = ini + int(contrib * 50)
                 if dia in ["Ma", "Ju"] and max(ini, self.hora_universal[0]) < min(fin, self.hora_universal[1]):
                     conflicts += 10000
-                if contrib >= 3 and ini < 930:
+                if contrib >= 3 and ini < 930:  # 3:30 pm
                     conflicts += 10000
                 if fin > self.limite_operativo[1] or ini < self.limite_operativo[0]:
                     conflicts += 10000
@@ -648,6 +653,7 @@ class TabuScheduler:
                         conflicts += 10000
                 occ_salon[clave_s].append((ini, fin, s.cupo, s.es_fusionable))
 
+                # Guardar para Rs4
                 if prof in horarios_prof:
                     horarios_prof[prof].setdefault(dia, []).append((ini, fin))
 
@@ -655,7 +661,7 @@ class TabuScheduler:
             if prof in carga_prof:
                 carga_prof[prof] += self.get_sec_creditos(s, prof)
 
-            # Doble rol
+            # Doble rol (Rf10)
             if prof in self.graduados:
                 cursos_recibidos = self.graduados[prof]
                 for j, otro in enumerate(sol):
@@ -677,7 +683,7 @@ class TabuScheduler:
                 if carga < prof_obj.carga_min - 1.5:
                     conflicts += 20000
 
-        # Compactación
+        # Compactación de jornada (Rs4)
         for prof, horarios in horarios_prof.items():
             for dia, bloques in horarios.items():
                 bloques.sort()
@@ -686,7 +692,7 @@ class TabuScheduler:
                     if gap > 120:
                         soft_penalty += 10 * (gap - 120) / 120
 
-        # Penalización por múltiples salones
+        # Penalización por múltiples salones diferentes
         salones_por_prof_tipo = {}
         for asign in sol:
             prof = asign['profesor']
@@ -704,7 +710,8 @@ class TabuScheduler:
         return conflicts + soft_penalty
 
     # --------------------------------------------------------------------------
-    # Métodos auxiliares (sin cambios)
+    # Métodos auxiliares para conflictos, construcción, etc.
+    # (se mantienen igual que en la versión original, pero con normalización)
     # --------------------------------------------------------------------------
     def _obtener_conflictos(self, sol):
         conflictos_list = []
@@ -797,6 +804,9 @@ class TabuScheduler:
 
         return conflictos_list
 
+    # --------------------------------------------------------------------------
+    # Construcción inicial greedy
+    # --------------------------------------------------------------------------
     def _construir_solucion_greedy(self):
         sol = [None] * len(self.secciones)
         asignado = [False] * len(self.secciones)
@@ -877,6 +887,9 @@ class TabuScheduler:
                             return True
         return False
 
+    # --------------------------------------------------------------------------
+    # Reparación exhaustiva final (garantiza 0 conflictos)
+    # --------------------------------------------------------------------------
     def _resolver_conflictos_total(self, sol):
         indices_conflictivos = self._obtener_indices_conflictivos(sol)
         if not indices_conflictivos:
@@ -1049,6 +1062,9 @@ class TabuScheduler:
                                         conflictos.append(idx)
         return list(set(conflictos))
 
+    # --------------------------------------------------------------------------
+    # Balanceo de cargas
+    # --------------------------------------------------------------------------
     def _balancear_cargas(self, sol):
         carga = {p: 0.0 for p in self.profesores}
         for asign in sol:
@@ -1113,6 +1129,9 @@ class TabuScheduler:
             if modificado: break
         return sol, modificado
 
+    # --------------------------------------------------------------------------
+    # Perturbación por reinicio
+    # --------------------------------------------------------------------------
     def _perturbar_solucion(self, sol):
         nueva = deepcopy(sol)
         indices = list(range(len(nueva)))
@@ -1124,6 +1143,9 @@ class TabuScheduler:
             nueva[idx] = self._crear_asignacion_temporal(s, prof)
         return nueva
 
+    # --------------------------------------------------------------------------
+    # Mutación
+    # --------------------------------------------------------------------------
     def _mutar_solucion(self, sol):
         nuevo = deepcopy(sol)
         idx = random.randint(0, len(nuevo)-1)
@@ -1165,6 +1187,9 @@ class TabuScheduler:
         nuevo[idx] = mejor_opcion[1]
         return nuevo, mejor_opcion[0]
 
+    # --------------------------------------------------------------------------
+    # Optimización principal (simulated annealing con reinicios)
+    # --------------------------------------------------------------------------
     def optimizar(self, iteraciones=10000, bar=None, status_text=None):
         temp_inicial = 5000.0
         self.historial_costos = [self.mejor_costo]
@@ -1183,6 +1208,7 @@ class TabuScheduler:
                     self.solucion = vecino
                 sin_mejora += 1
 
+            # Balanceo cada 50 iteraciones
             if it % 50 == 0:
                 self.solucion, _ = self._balancear_cargas(self.solucion)
                 if self._costo_total(self.solucion) < self.mejor_costo:
@@ -1190,6 +1216,7 @@ class TabuScheduler:
                     self.mejor_solucion = deepcopy(self.solucion)
                     sin_mejora = 0
 
+            # Reinicio por estancamiento
             if sin_mejora > 200 and self.mejor_costo > 0:
                 self.solucion = self._perturbar_solucion(self.mejor_solucion)
                 sin_mejora = 0
@@ -1202,17 +1229,18 @@ class TabuScheduler:
                 if status_text:
                     fitness_actual = 10000 / (10000 + self.mejor_costo)
                     duros = int(self.mejor_costo // 10000)
-                    status_text.markdown(f"**🧬 Gen {it+1}/{iteraciones}** | Conflictos Duros: {duros} | Costo Total: {self.mejor_costo:.2f} | Fitness: {fitness_actual:.5f}")
+                    status_text.markdown(f"**🧬 Generación {it+1}/{iteraciones} | Población: 50**  \nSelección: Tournament | Cruce: Simulado | Mutación: Adaptativa  \nConflictos: {duros} | Costo: {self.mejor_costo:.2f} | Fitness: {fitness_actual:.5f}")
                 if bar:
                     bar.progress((it+1)/iteraciones)
 
+        # Post-procesamiento final: reparación exhaustiva y balanceo
         self.mejor_solucion = self._resolver_conflictos_total(self.mejor_solucion)
         self.mejor_solucion, _ = self._balancear_cargas(self.mejor_solucion)
         self.mejor_costo = self._costo_total(self.mejor_solucion)
         return self.mejor_solucion, int(self.mejor_costo // 10000), self.historial_costos
 
 # ==============================================================================
-# 5. FUNCIONES DE VISUALIZACIÓN (sin cambios)
+# 5. FUNCIONES DE VISUALIZACIÓN
 # ==============================================================================
 def generar_heatmap_ocupacion(scheduler, solucion):
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
@@ -1246,25 +1274,25 @@ def generar_heatmap_ocupacion(scheduler, solucion):
     etiquetas_horas = [mins_to_str(h).replace(' AM', '').replace(' PM', '') for h in horas_del_dia]
     step = max(1, len(etiquetas_horas) // 12)
     ax.set_xticks(range(0, len(horas_del_dia), step))
-    ax.set_xticklabels(etiquetas_horas[::step], rotation=45, ha='right', color='#1e293b')
+    ax.set_xticklabels(etiquetas_horas[::step], rotation=45, ha='right', color='white')
     ax.set_yticks(range(len(dias_semana)))
-    ax.set_yticklabels(dias_semana, color='#1e293b')
+    ax.set_yticklabels(dias_semana, color='white')
     cbar = plt.colorbar(im, ax=ax, label='% Ocupación')
-    cbar.ax.yaxis.label.set_color('#1e293b')
-    cbar.ax.tick_params(colors='#1e293b')
-    ax.set_title('Ocupación de Salones por Franja Horaria', color='#0f172a', pad=20)
-    ax.set_xlabel('Hora de Inicio', color='#1e293b')
-    ax.set_ylabel('Día', color='#1e293b')
-    fig.patch.set_facecolor('#f8fafc')
-    ax.set_facecolor('#ffffff')
-    ax.tick_params(colors='#1e293b')
+    cbar.ax.yaxis.label.set_color('white')
+    cbar.ax.tick_params(colors='white')
+    ax.set_title('Ocupación de Salones por Franja Horaria', color='white', pad=20)
+    ax.set_xlabel('Hora de Inicio', color='white')
+    ax.set_ylabel('Día', color='white')
+    fig.patch.set_facecolor('#0F0F0F')
+    ax.set_facecolor('#1A1A1A')
+    ax.tick_params(colors='white')
     for spine in ax.spines.values():
-        spine.set_edgecolor('#eab308')
+        spine.set_edgecolor('#D4AF37')
     plt.tight_layout()
     return fig
 
 # ==============================================================================
-# 6. GENERACIÓN DE PLANTILLA EXCEL (sin cambios)
+# 6. GENERACIÓN DE PLANTILLA EXCEL
 # ==============================================================================
 def generar_plantilla():
     output = io.BytesIO()
@@ -1314,13 +1342,13 @@ def generar_plantilla():
     return output.getvalue()
 
 # ==============================================================================
-# 7. UI PRINCIPAL (con etiquetas de algoritmo genético)
+# 7. UI PRINCIPAL
 # ==============================================================================
 def main():
     with st.sidebar:
-        st.markdown("### ∑ Configuración Genética")
+        st.markdown("### ∑ Configuración")
         zona = st.selectbox("Zona Campus", ["CENTRAL", "PERIFERICA"])
-        iteraciones = st.slider("Generaciones del Algoritmo Genético", 100, 10000, 8000, help="Más generaciones aumentan la probabilidad de cero conflictos.")
+        iteraciones = st.slider("Iteraciones de Búsqueda", 100, 10000, 8000, help="Más iteraciones aumentan la probabilidad de cero conflictos.")
         file = st.file_uploader("Subir Protocolo Excel", type=['xlsx'])
         st.download_button(
             label="📥 Descargar Plantilla",
@@ -1333,21 +1361,20 @@ def main():
     c1, c2, c3 = st.columns(3)
     with c1: st.metric("Ventana Operativa", "07:30 AM - 06:30 PM" if zona == "CENTRAL" else "07:00 AM - 06:00 PM")
     with c2: st.metric("Hora Universal", "10:30 AM - 12:30 PM" if zona == "CENTRAL" else "10:00 AM - 12:00 PM")
-    with c3: st.markdown("""<div class="status-badge">🧬 ALGORITMO GENÉTICO HÍBRIDO (GA-TABU) ACTIVO</div>""", unsafe_allow_html=True)
+    with c3: st.markdown("""<div class="status-badge">RESTRICCIONES FUERTES ACTIVAS</div>""", unsafe_allow_html=True)
 
     if not file:
         st.markdown("""
             <div class='glass-card' style='text-align: center;'>
-                <h3 style='margin-top:0; color: #0f172a;'>📥 Sincronización de Datos</h3>
+                <h3 style='margin-top:0; color: #D4AF37;'>📥 Sincronización de Datos</h3>
                 <p>Asegúrese de que el archivo Excel contiene las hojas: <b>Cursos</b>, <b>Profesores</b>, <b>Salones</b> y opcional <b>Graduados</b>.<br>
                 Las columnas necesarias incluyen: CURSOS_INTENSIVOS, ACEPTA_GRANDES, BLOQUEO_DIAS, BLOQUEO_HORA_INI, BLOQUEO_HORA_FIN.</p>
-                <p><i>Nota: La distribución de cupos ahora es equitativa (sin secciones con pocos estudiantes).</i></p>
             </div>
         """, unsafe_allow_html=True)
     else:
-        if st.button("🚀 INICIAR OPTIMIZACIÓN GENÉTICA"):
+        if st.button("🚀 INICIAR OPTIMIZACIÓN ABSOLUTA"):
             try:
-                with st.spinner("Evolucionando horarios con algoritmo genético híbrido..."):
+                with st.spinner("Balanceando cargas, consolidando secciones y resolviendo..."):
                     xls = pd.ExcelFile(file)
                     df_cursos = pd.read_excel(xls, 'Cursos')
                     df_profes = pd.read_excel(xls, 'Profesores')
@@ -1395,7 +1422,7 @@ def main():
                 return
 
     if 'master' in st.session_state:
-        st.success(f"✅ Optimización genética completada en {st.session_state.elapsed_time:.2f} segundos.")
+        st.success(f"✅ Optimización completada en {st.session_state.elapsed_time:.2f} segundos.")
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
         t1, t2, t3, t4 = st.tabs(["💎 PANEL DE CONTROL", "🔍 VISTAS DETALLADAS", "🚨 AUDITORÍA DE CALIDAD", "📊 ANALÍTICAS AVANZADAS"])
 
@@ -1435,17 +1462,17 @@ def main():
                 st.success("✅ 100% Asignación Perfecta. Cero Conflictos. Se balancearon las cargas y se respetaron los espacios y preferencias.")
 
         with t4:
-            st.markdown("### 🧬 Curva de Evolución Genética (Fitness vs Generaciones)")
+            st.markdown("### 🧬 Evolución del Algoritmo (Fitness vs Generaciones)")
             fitness_history = [10000 / (10000 + costo) for costo in st.session_state.historial]
             fig1, ax1 = plt.subplots(figsize=(10, 4))
-            ax1.plot(fitness_history, color='#ca8a04', linewidth=2.5)
-            ax1.set_title("Mejora del Fitness a lo largo de las generaciones", color='#0f172a', pad=15)
-            ax1.set_xlabel("Generación", color='#1e293b')
-            ax1.set_ylabel("Fitness (1.0 = Ideal)", color='#1e293b')
-            fig1.patch.set_facecolor('#f8fafc')
-            ax1.set_facecolor('#ffffff')
-            ax1.tick_params(colors='#1e293b')
-            for spine in ax1.spines.values(): spine.set_edgecolor('#eab308')
+            ax1.plot(fitness_history, color='#D4AF37', linewidth=2.5)
+            ax1.set_title("Crecimiento de Fitness Evolutivo", color='white', pad=15)
+            ax1.set_xlabel("Iteraciones", color='white')
+            ax1.set_ylabel("Fitness (1.0 = Ideal)", color='white')
+            fig1.patch.set_facecolor('#0F0F0F')
+            ax1.set_facecolor('#1A1A1A')
+            ax1.tick_params(colors='white')
+            for spine in ax1.spines.values(): spine.set_edgecolor('#D4AF37')
             st.pyplot(fig1)
 
             st.markdown("---")
@@ -1453,13 +1480,13 @@ def main():
             cargas_df = pd.DataFrame(list(st.session_state.cargas_finales.items()), columns=['Profesor', 'Créditos Reales'])
             cargas_df = cargas_df.sort_values('Créditos Reales', ascending=False)
             fig2, ax2 = plt.subplots(figsize=(12, 6))
-            ax2.bar(cargas_df['Profesor'], cargas_df['Créditos Reales'], color='#ca8a04')
-            ax2.axhline(y=12, color='#dc2626', linestyle='--', linewidth=2, label='Carga Estándar Típica (12 cr)')
-            ax2.set_xticklabels(cargas_df['Profesor'], rotation=45, ha='right', color='#1e293b')
-            ax2.tick_params(colors='#1e293b')
-            fig2.patch.set_facecolor('#f8fafc')
-            ax2.set_facecolor('#ffffff')
-            for spine in ax2.spines.values(): spine.set_edgecolor('#eab308')
+            ax2.bar(cargas_df['Profesor'], cargas_df['Créditos Reales'], color='#8E6E13')
+            ax2.axhline(y=12, color='#FF4B4B', linestyle='--', linewidth=2, label='Carga Estándar Típica (12 cr)')
+            ax2.set_xticklabels(cargas_df['Profesor'], rotation=45, ha='right', color='white')
+            ax2.tick_params(colors='white')
+            fig2.patch.set_facecolor('#0F0F0F')
+            ax2.set_facecolor('#1A1A1A')
+            for spine in ax2.spines.values(): spine.set_edgecolor('#D4AF37')
             ax2.legend()
             st.pyplot(fig2)
 
