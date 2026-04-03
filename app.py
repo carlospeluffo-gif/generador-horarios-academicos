@@ -167,7 +167,11 @@ def get_creditos_reales(creditos_base, cupo):
     return float(creditos_base) + max_extra
 
 def mins_to_str(m):
-    h, mins = divmod(int(m), 60)
+    try:
+        m = int(m)
+    except (ValueError, TypeError):
+        m = 0
+    h, mins = divmod(m, 60)
     am_pm = "AM" if h < 12 else "PM"
     h_disp = h if h <= 12 else h - 12
     if h_disp == 0: h_disp = 12
@@ -218,8 +222,15 @@ PATRONES = {
 
 def format_horario(patron, h_ini):
     parts = []
+    try:
+        h_ini = int(h_ini)
+    except (ValueError, TypeError):
+        h_ini = 0
     for dia, contrib in patron['days'].items():
-        mins_duracion = int(contrib * 50)
+        try:
+            mins_duracion = int(float(contrib) * 50)
+        except (ValueError, TypeError):
+            mins_duracion = 50
         h_fin = h_ini + mins_duracion
         parts.append(f"{dia}: {mins_to_str(h_ini)}-{mins_to_str(h_fin)}")
     return " | ".join(parts)
@@ -240,12 +251,18 @@ def exportar_todo(df):
 class Seccion:
     def __init__(self, cod, creditos, cupo, candidatos_raw, tipo_salon, es_ayudantia=False):
         self.cod = str(cod)
-        self.creditos = int(creditos)
-        self.cupo = int(cupo)
+        try:
+            self.creditos = int(float(str(creditos)))
+        except:
+            self.creditos = 3
+        try:
+            self.cupo = int(float(str(cupo)))
+        except:
+            self.cupo = 30
         if isinstance(candidatos_raw, list):
-            raw_list = [normalize_name(c) for c in candidatos_raw if c.strip()]
+            raw_list = [normalize_name(str(c)) for c in candidatos_raw if c and str(c).strip()]
         else:
-            raw_list = [normalize_name(c.strip()) for c in str(candidatos_raw).split(',') if c.strip() and str(c).upper() != 'NAN']
+            raw_list = [normalize_name(str(c).strip()) for c in str(candidatos_raw).split(',') if c and str(c).strip() and str(c).upper().strip() != 'NAN']
         self.cands = list(set(raw_list))
         try:
             t = float(tipo_salon)
@@ -403,8 +420,14 @@ class TabuScheduler:
         cursos_agrupados = {}
         for _, r in df_cursos.iterrows():
             cod_base = normalize_name(str(r['CODIGO']).strip())
-            creditos = int(r['CREDITOS'])
-            demanda = int(r.get('DEMANDA', 0))
+            try:
+                creditos = int(float(str(r['CREDITOS']).strip()))
+            except:
+                creditos = 3
+            try:
+                demanda = int(float(str(r.get('DEMANDA', 0)).strip()))
+            except:
+                demanda = 0
             cupo_tipico = str(r.get('CUPO', '30'))
             candidatos_raw = r.get('CANDIDATOS', '')
             tipo_salon = r.get('TIPO_SALON', 1)
@@ -418,41 +441,47 @@ class TabuScheduler:
                 tipo_salon = 1
 
             # Procesar lista de cupos si está separada por comas
-            if ',' in cupo_tipico:
-                capacidades = [int(c.strip()) for c in cupo_tipico.split(',') if c.strip().isdigit()]
+            if ',' in str(cupo_tipico):
+                capacidades = []
+                for c in str(cupo_tipico).split(','):
+                    try:
+                        capacidades.append(int(float(c.strip())))
+                    except:
+                        pass
                 for cap in capacidades:
-                    self.secciones.append(Seccion(f"{cod_base}-{len(self.secciones)+1:02d}", creditos, cap, candidatos_raw, tipo_salon))
+                    num_sec = len(self.secciones) + 1
+                    codigo_seccion = str(cod_base) + "-" + str(num_sec).zfill(2)
+                    self.secciones.append(Seccion(codigo_seccion, creditos, cap, candidatos_raw, tipo_salon))
             else:
-                cupo = int(cupo_tipico)
-                if demanda <= 0:
-                    self.secciones.append(Seccion(f"{cod_base}-01", creditos, cupo, candidatos_raw, tipo_salon))
+                try:
+                    cupo = int(float(str(cupo_tipico).strip()))
+                except:
+                    cupo = 30
+                if demanda <= 0 or cupo <= 0:
+                    self.secciones.append(Seccion(str(cod_base) + "-01", creditos, max(1, cupo), candidatos_raw, tipo_salon))
                 else:
                     # MEJORA: Crear MINIMO de secciones redistribuyendo estudiantes sobrantes
-                    # Estrategia: usar floor para minimizar secciones, redistribuir si sobrantes son pocos
-                    num_secciones_base = demanda // cupo  # Floor - mínimo de secciones
+                    num_secciones_base = max(1, demanda // max(1, cupo))
                     sobrantes = demanda % cupo
 
                     if sobrantes == 0:
-                        # Sin sobrantes: crear secciones normales
                         for i in range(num_secciones_base):
-                            self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", creditos, cupo, candidatos_raw, tipo_salon))
-                    elif sobrantes < max(5, cupo * 0.2):
-                        # Sobrantes muy pocos (< 5 o < 20% del cupo): redistribuir en num_secciones_base secciones
+                            codigo_seccion = str(cod_base) + "-" + str(i + 1).zfill(2)
+                            self.secciones.append(Seccion(codigo_seccion, creditos, cupo, candidatos_raw, tipo_salon))
+                    elif sobrantes < max(5, int(cupo * 0.2)):
                         capacidad_base = demanda // num_secciones_base
                         extra = demanda - capacidad_base * num_secciones_base
-
                         for i in range(num_secciones_base):
                             cap_seccion = capacidad_base + (1 if i < extra else 0)
-                            self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", creditos, cap_seccion, candidatos_raw, tipo_salon))
+                            codigo_seccion = str(cod_base) + "-" + str(i + 1).zfill(2)
+                            self.secciones.append(Seccion(codigo_seccion, creditos, cap_seccion, candidatos_raw, tipo_salon))
                     else:
-                        # Sobrantes significativos: crear una sección extra para los sobrantes
-                        # num_secciones_base secciones de cupo normal + 1 sección con sobrantes
                         num_secciones = num_secciones_base + 1
-
                         for i in range(num_secciones_base):
-                            self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", creditos, cupo, candidatos_raw, tipo_salon))
-                        # Última sección con estudiantes sobrantes
-                        self.secciones.append(Seccion(f"{cod_base}-{num_secciones:02d}", creditos, sobrantes, candidatos_raw, tipo_salon))
+                            codigo_seccion = str(cod_base) + "-" + str(i + 1).zfill(2)
+                            self.secciones.append(Seccion(codigo_seccion, creditos, cupo, candidatos_raw, tipo_salon))
+                        codigo_seccion = str(cod_base) + "-" + str(num_secciones).zfill(2)
+                        self.secciones.append(Seccion(codigo_seccion, creditos, sobrantes, candidatos_raw, tipo_salon))
 
         # Preasignación robusta de profesores
         self._preasignar_profesores_robusto()
@@ -1752,7 +1781,11 @@ def main():
                     st.session_state.detailed_conflicts = scheduler._obtener_conflictos(mejor_sol)
 
             except Exception as e:
+                import traceback
+                import sys
                 st.error(f"Error durante la optimización: {e}")
+                with st.expander("Detalles del error"):
+                    st.code(traceback.format_exc())
                 st.info("Revise que los datos de entrada sean consistentes (profesores candidatos, salones compatibles, etc.)")
                 return
 
