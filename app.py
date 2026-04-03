@@ -1244,7 +1244,7 @@ def generar_heatmap_ocupacion(scheduler, solucion):
     inicio = scheduler.limite_operativo[0]
     fin = scheduler.limite_operativo[1]
     horas_del_dia = list(range(inicio, fin + 1, 30))
-    matriz = np.zeros((len(horas_del_dia), len(dias_semana)))
+    matriz = np.zeros((len(dias_semana), len(horas_del_dia)))
     total_salones = len(scheduler.salones)
     for asign in solucion:
         salon = asign['salon']
@@ -1266,7 +1266,7 @@ def generar_heatmap_ocupacion(scheduler, solucion):
     else:
         matriz_porcentaje = matriz
     fig, ax = plt.subplots(figsize=(14, 6))
-    im = ax.imshow(matriz_porcentaje, cmap='YlOrRd', aspect='auto', vmin=0, vmax=100)
+    im = ax.imshow(matriz_porcentaje, cmap='YlOrRd', aspect='auto', vmin=0, vmax=100, origin='lower')
     ax.set_xticks(range(len(horas_del_dia)))
     etiquetas_horas = [mins_to_str(h).replace(' AM', '').replace(' PM', '') for h in horas_del_dia]
     step = max(1, len(etiquetas_horas) // 12)
