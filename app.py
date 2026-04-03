@@ -1244,7 +1244,7 @@ def generar_heatmap_ocupacion(scheduler, solucion):
     inicio = scheduler.limite_operativo[0]
     fin = scheduler.limite_operativo[1]
     horas_del_dia = list(range(inicio, fin + 1, 30))
-    matriz = np.zeros((len(dias_semana), len(horas_del_dia)))
+    matriz = np.zeros((len(horas_del_dia), len(dias_semana)))
     total_salones = len(scheduler.salones)
     for asign in solucion:
         salon = asign['salon']
