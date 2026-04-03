@@ -1214,8 +1214,7 @@ class TabuScheduler:
             if status_text:
                 fitness = 10000 / (10000 + self.mejor_costo)
                 status_text.markdown(
-                    f"**🧬 Generación {gen+1}/{iteraciones} | Población: {poblacion_size}**  
-"
+                    f"**🧬 Generación {gen+1}/{iteraciones} | Población: {poblacion_size}**  \n" f""
                     f"Memetic Algorithm (GA + Local Search)  
 "
                     f"Costo: {self.mejor_costo:.2f} | Fitness: {fitness:.5f}"
