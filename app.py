@@ -10,7 +10,7 @@ from copy import deepcopy
 import unicodedata
 
 # ==============================================================================
-# 1. ESTÉTICA (FONDO BLANCO, TEXTOS OSCUROS, MANTENIENDO EL ESTILO PLATINUM)
+# 1. ESTÉTICA (original, fondo oscuro)
 # ==============================================================================
 st.set_page_config(page_title="UPRM Scheduler Platinum AI v13", page_icon="🏛️", layout="wide")
 
@@ -19,14 +19,14 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Source+Code+Pro:wght@300;500&display=swap');
     
     .stApp { 
-        background-color: #ffffff;
+        background-color: #050505;
         background-image: 
-            linear-gradient(rgba(212, 175, 55, 0.15) 2px, transparent 2px),
-            linear-gradient(90deg, rgba(212, 175, 55, 0.15) 2px, transparent 2px),
-            radial-gradient(circle at 50% 20%, #f8f8f8 0%, #ffffff 100%);
+            linear-gradient(rgba(212, 175, 55, 0.1) 2px, transparent 2px),
+            linear-gradient(90deg, rgba(212, 175, 55, 0.1) 2px, transparent 2px),
+            radial-gradient(circle at 50% 20%, #1a1a1a 0%, #000000 100%);
         background-size: 80px 80px, 80px 80px, 100% 100%;
         background-attachment: fixed;
-        color: #1e1e1e; 
+        color: #e0e0e0; 
     }
 
     .math-header {
@@ -34,17 +34,17 @@ st.markdown("""
         justify-content: space-between;
         align-items: center;
         padding: 30px 60px;
-        background: rgba(255, 255, 255, 0.95);
+        background: rgba(0, 0, 0, 0.85);
         border-bottom: 3px solid #D4AF37;
         margin-bottom: 40px;
         border-radius: 0 0 30px 30px;
-        box-shadow: 0 10px 50px rgba(0,0,0,0.1);
+        box-shadow: 0 10px 50px rgba(212, 175, 55, 0.15);
         position: relative;
         overflow: hidden;
     }
 
-    .math-header::before { content: '∑'; position: absolute; left: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.1); font-family: serif; }
-    .math-header::after { content: '∫'; position: absolute; right: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.1); font-family: serif; }
+    .math-header::before { content: '∑'; position: absolute; left: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.05); font-family: serif; }
+    .math-header::after { content: '∫'; position: absolute; right: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.05); font-family: serif; }
 
     .title-box { text-align: center; z-index: 2; }
 
@@ -60,21 +60,21 @@ st.markdown("""
 
     h1 { 
         font-family: 'Playfair Display', serif !important; 
-        color: #8E6E13 !important; 
+        color: #D4AF37 !important; 
         font-size: 3.2rem !important;
         margin: 10px 0 !important;
-        text-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
+        text-shadow: 0 0 20px rgba(212, 175, 55, 0.5);
         letter-spacing: 2px;
     }
 
     .glass-card { 
-        background: rgba(245, 245, 245, 0.95); 
+        background: rgba(15, 15, 15, 0.9); 
         border-radius: 15px; 
         padding: 25px; 
-        border: 1px solid rgba(212, 175, 55, 0.5); 
-        backdrop-filter: blur(5px); 
+        border: 1px solid rgba(212, 175, 55, 0.25); 
+        backdrop-filter: blur(15px); 
         margin-bottom: 20px; 
-        box-shadow: 0 15px 40px rgba(0,0,0,0.1);
+        box-shadow: 0 15px 40px rgba(0,0,0,0.8);
     }
 
     .stButton>button { 
@@ -92,31 +92,23 @@ st.markdown("""
         border: 1px solid #D4AF37 !important;
     }
 
-    [data-testid="stSidebar"] { background-color: #fafafa; border-right: 1px solid #D4AF37; }
+    [data-testid="stSidebar"] { background-color: #050505; border-right: 1px solid #D4AF37; }
     
     [data-testid="stSidebar"] h3 {
-        color: #8E6E13 !important;
-        text-shadow: 0 0 5px rgba(212, 175, 55, 0.3);
+        color: #D4AF37 !important;
+        text-shadow: 0 0 10px rgba(212, 175, 55, 0.4);
         font-family: 'Playfair Display', serif;
     }
 
     .status-badge { 
-        background: rgba(212, 175, 55, 0.15); 
+        background: rgba(212, 175, 55, 0.1); 
         border: 1px solid #D4AF37; 
-        color: #5a4a0e; 
+        color: #D4AF37; 
         padding: 12px; 
         border-radius: 8px; 
         text-align: center;
         font-family: 'Source Code Pro', monospace;
         font-weight: 500;
-    }
-    
-    /* Ajustes para tablas y texto en general */
-    .stMarkdown, .stTable, .stDataFrame {
-        color: #1e1e1e;
-    }
-    .stSelectbox label, .stSlider label {
-        color: #1e1e1e !important;
     }
 </style>
 
@@ -124,7 +116,7 @@ st.markdown("""
     <div class="abstract-icon">Δx</div>
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
-        <p style="color: #444; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
+        <p style="color: #888; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
             UPRM MATHEMATICAL OPTIMIZATION ENGINE v13 (EVOLUTIVO + INTENSIVOS + GRANDES + BLOQUEOS + DOBLE ROL)
         </p>
     </div>
@@ -133,9 +125,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. UTILIDADES Y TABLAS DE REFERENCIA (IDÉNTICO AL ORIGINAL)
+# 2. UTILIDADES Y TABLAS DE REFERENCIA
 # ==============================================================================
 def normalize_name(s: str) -> str:
+    """Elimina acentos, convierte a mayúsculas y quita espacios sobrantes."""
     s = s.strip()
     return unicodedata.normalize('NFKD', s).encode('ASCII', 'ignore').decode().upper()
 
@@ -235,7 +228,7 @@ def exportar_todo(df):
     return out.getvalue()
 
 # ==============================================================================
-# 3. MODELOS DE DATOS (SIN CAMBIOS)
+# 3. MODELOS DE DATOS
 # ==============================================================================
 class Seccion:
     def __init__(self, cod, creditos, cupo, candidatos_raw, tipo_salon, es_ayudantia=False):
@@ -342,8 +335,7 @@ def compatible_tipo(curso_tipo, salon_tipo):
     return salon_cat != 2
 
 # ==============================================================================
-# 4. MOTOR DE OPTIMIZACIÓN (IDÉNTICO AL CÓDIGO 1, CON LA ÚNICA MODIFICACIÓN
-#    EN LA CREACIÓN DE SECCIONES PARA DISTRIBUIR REMANENTES PEQUEÑOS)
+# 4. MOTOR DE OPTIMIZACIÓN (TABU / SIMULATED ANNEALING CON MEJORAS)
 # ==============================================================================
 class TabuScheduler:
     def __init__(self, df_cursos, df_profes, df_salones, df_graduados, zona):
@@ -397,7 +389,7 @@ class TabuScheduler:
                 if nombre in self.profesores:
                     self.graduados[nombre] = set(cursos)
 
-        # 4. Cursos y secciones (con la nueva lógica de distribución equitativa del remanente)
+        # 4. Cursos y secciones (con soporte para lista de cupos)
         self.secciones = []
         df_cursos.columns = [c.strip().upper() for c in df_cursos.columns]
         cursos_agrupados = {}
@@ -427,29 +419,13 @@ class TabuScheduler:
                 if demanda <= 0:
                     self.secciones.append(Seccion(f"{cod_base}-01", creditos, cupo, candidatos_raw, tipo_salon))
                 else:
-                    # NUEVA LÓGICA: evitar sección extra por remanente pequeño
-                    secciones_completas = demanda // cupo
-                    remanente = demanda % cupo
-                    # Si el remanente es > 0 y <= mitad del cupo, distribuimos equitativamente entre las secciones completas
-                    if remanente > 0 and remanente <= cupo // 2:
-                        num_secciones = secciones_completas
-                        # Crear las secciones con cupo base
-                        for i in range(num_secciones):
-                            self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", creditos, cupo, candidatos_raw, tipo_salon))
-                        # Distribuir el remanente sumando 1 estudiante a cada sección (de forma cíclica)
-                        idx = 0
-                        while remanente > 0:
-                            self.secciones[idx].cupo += 1
-                            remanente -= 1
-                            idx = (idx + 1) % num_secciones
-                    else:
-                        # Caso normal: crear todas las secciones necesarias (incluyendo la de remanente)
-                        num_secciones = secciones_completas + (1 if remanente > 0 else 0)
-                        for i in range(num_secciones):
-                            cap_final = cupo
-                            if i == num_secciones - 1 and remanente > 0:
-                                cap_final = remanente
-                            self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", creditos, cap_final, candidatos_raw, tipo_salon))
+                    num_secciones = math.ceil(demanda / cupo)
+                    for i in range(num_secciones):
+                        cap_final = cupo
+                        if i == num_secciones-1:
+                            cap_final = demanda - cupo*(num_secciones-1)
+                            if cap_final < 0: cap_final = cupo
+                        self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", creditos, cap_final, candidatos_raw, tipo_salon))
 
         # Preasignación robusta de profesores
         self._preasignar_profesores_robusto()
@@ -725,7 +701,7 @@ class TabuScheduler:
 
     # --------------------------------------------------------------------------
     # Métodos auxiliares para conflictos, construcción, etc.
-    # (se mantienen igual que en la versión original)
+    # (se mantienen igual que en la versión original, pero con normalización)
     # --------------------------------------------------------------------------
     def _obtener_conflictos(self, sol):
         conflictos_list = []
@@ -1288,18 +1264,18 @@ def generar_heatmap_ocupacion(scheduler, solucion):
     etiquetas_horas = [mins_to_str(h).replace(' AM', '').replace(' PM', '') for h in horas_del_dia]
     step = max(1, len(etiquetas_horas) // 12)
     ax.set_xticks(range(0, len(horas_del_dia), step))
-    ax.set_xticklabels(etiquetas_horas[::step], rotation=45, ha='right', color='black')
+    ax.set_xticklabels(etiquetas_horas[::step], rotation=45, ha='right', color='white')
     ax.set_yticks(range(len(dias_semana)))
-    ax.set_yticklabels(dias_semana, color='black')
+    ax.set_yticklabels(dias_semana, color='white')
     cbar = plt.colorbar(im, ax=ax, label='% Ocupación')
-    cbar.ax.yaxis.label.set_color('black')
-    cbar.ax.tick_params(colors='black')
-    ax.set_title('Ocupación de Salones por Franja Horaria', color='black', pad=20)
-    ax.set_xlabel('Hora de Inicio', color='black')
-    ax.set_ylabel('Día', color='black')
-    fig.patch.set_facecolor('#FFFFFF')
-    ax.set_facecolor('#F0F0F0')
-    ax.tick_params(colors='black')
+    cbar.ax.yaxis.label.set_color('white')
+    cbar.ax.tick_params(colors='white')
+    ax.set_title('Ocupación de Salones por Franja Horaria', color='white', pad=20)
+    ax.set_xlabel('Hora de Inicio', color='white')
+    ax.set_ylabel('Día', color='white')
+    fig.patch.set_facecolor('#0F0F0F')
+    ax.set_facecolor('#1A1A1A')
+    ax.tick_params(colors='white')
     for spine in ax.spines.values():
         spine.set_edgecolor('#D4AF37')
     plt.tight_layout()
@@ -1380,7 +1356,7 @@ def main():
     if not file:
         st.markdown("""
             <div class='glass-card' style='text-align: center;'>
-                <h3 style='margin-top:0; color: #8E6E13;'>📥 Sincronización de Datos</h3>
+                <h3 style='margin-top:0; color: #D4AF37;'>📥 Sincronización de Datos</h3>
                 <p>Asegúrese de que el archivo Excel contiene las hojas: <b>Cursos</b>, <b>Profesores</b>, <b>Salones</b> y opcional <b>Graduados</b>.<br>
                 Las columnas necesarias incluyen: CURSOS_INTENSIVOS, ACEPTA_GRANDES, BLOQUEO_DIAS, BLOQUEO_HORA_INI, BLOQUEO_HORA_FIN.</p>
             </div>
@@ -1480,12 +1456,12 @@ def main():
             fitness_history = [10000 / (10000 + costo) for costo in st.session_state.historial]
             fig1, ax1 = plt.subplots(figsize=(10, 4))
             ax1.plot(fitness_history, color='#D4AF37', linewidth=2.5)
-            ax1.set_title("Crecimiento de Fitness Evolutivo", color='black', pad=15)
-            ax1.set_xlabel("Iteraciones", color='black')
-            ax1.set_ylabel("Fitness (1.0 = Ideal)", color='black')
-            fig1.patch.set_facecolor('#FFFFFF')
-            ax1.set_facecolor('#F0F0F0')
-            ax1.tick_params(colors='black')
+            ax1.set_title("Crecimiento de Fitness Evolutivo", color='white', pad=15)
+            ax1.set_xlabel("Iteraciones", color='white')
+            ax1.set_ylabel("Fitness (1.0 = Ideal)", color='white')
+            fig1.patch.set_facecolor('#0F0F0F')
+            ax1.set_facecolor('#1A1A1A')
+            ax1.tick_params(colors='white')
             for spine in ax1.spines.values(): spine.set_edgecolor('#D4AF37')
             st.pyplot(fig1)
 
@@ -1496,10 +1472,10 @@ def main():
             fig2, ax2 = plt.subplots(figsize=(12, 6))
             ax2.bar(cargas_df['Profesor'], cargas_df['Créditos Reales'], color='#8E6E13')
             ax2.axhline(y=12, color='#FF4B4B', linestyle='--', linewidth=2, label='Carga Estándar Típica (12 cr)')
-            ax2.set_xticklabels(cargas_df['Profesor'], rotation=45, ha='right', color='black')
-            ax2.tick_params(colors='black')
-            fig2.patch.set_facecolor('#FFFFFF')
-            ax2.set_facecolor('#F0F0F0')
+            ax2.set_xticklabels(cargas_df['Profesor'], rotation=45, ha='right', color='white')
+            ax2.tick_params(colors='white')
+            fig2.patch.set_facecolor('#0F0F0F')
+            ax2.set_facecolor('#1A1A1A')
             for spine in ax2.spines.values(): spine.set_edgecolor('#D4AF37')
             ax2.legend()
             st.pyplot(fig2)
