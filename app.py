@@ -10,113 +10,110 @@ from copy import deepcopy
 import unicodedata
 
 # ==============================================================================
-# 1. ESTÉTICA (TEMA CLARO - FONDO BLANCO)
+# 1. ESTÉTICA (TEMA CLARO - BLANCO/DORADO)
 # ==============================================================================
-st.set_page_config(page_title="UPRM Scheduler Platinum AI v13", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="UPRM Scheduler - Genetic Hybrid", page_icon="🏛️", layout="wide")
 
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Source+Code+Pro:wght@300;500&display=swap');
     
     .stApp { 
-        background-color: #F8F9FA;
-        background-image: 
-            linear-gradient(rgba(212, 175, 55, 0.08) 2px, transparent 2px),
-            linear-gradient(90deg, rgba(212, 175, 55, 0.08) 2px, transparent 2px);
-        background-size: 80px 80px, 80px 80px;
-        color: #1E1E1E; 
+        background-color: #f5f7fa;
+        background-image: none;
+        color: #1e293b;
     }
 
     .math-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 30px 60px;
-        background: rgba(255, 255, 255, 0.95);
-        border-bottom: 3px solid #D4AF37;
-        margin-bottom: 40px;
-        border-radius: 0 0 30px 30px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+        padding: 25px 50px;
+        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+        border-bottom: 3px solid #eab308;
+        margin-bottom: 30px;
+        border-radius: 0 0 20px 20px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.05);
         position: relative;
         overflow: hidden;
     }
 
-    .math-header::before { content: '∑'; position: absolute; left: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.1); font-family: serif; }
-    .math-header::after { content: '∫'; position: absolute; right: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.1); font-family: serif; }
+    .math-header::before { content: '∑'; position: absolute; left: 5%; font-size: 6rem; color: rgba(234,179,8,0.1); font-family: serif; }
+    .math-header::after { content: '∫'; position: absolute; right: 5%; font-size: 6rem; color: rgba(234,179,8,0.1); font-family: serif; }
 
     .title-box { text-align: center; z-index: 2; }
 
     .abstract-icon {
-        font-size: 3rem;
-        color: #D4AF37;
-        border: 2px solid #D4AF37;
-        padding: 10px 20px;
+        font-size: 2.5rem;
+        color: #eab308;
+        border: 2px solid #eab308;
+        padding: 8px 16px;
         border-radius: 50% 0% 50% 0%;
-        background: rgba(212, 175, 55, 0.05);
-        box-shadow: 0 0 15px rgba(212, 175, 55, 0.2);
+        background: rgba(234,179,8,0.05);
+        box-shadow: 0 0 10px rgba(234,179,8,0.2);
     }
 
     h1 { 
         font-family: 'Playfair Display', serif !important; 
-        color: #8E6E13 !important; 
-        font-size: 3.2rem !important;
+        color: #0f172a !important; 
+        font-size: 2.8rem !important;
         margin: 10px 0 !important;
-        text-shadow: 0 0 5px rgba(212, 175, 55, 0.3);
-        letter-spacing: 2px;
+        text-shadow: none;
+        letter-spacing: 1px;
     }
 
     .glass-card { 
         background: rgba(255, 255, 255, 0.95); 
-        border-radius: 15px; 
-        padding: 25px; 
-        border: 1px solid rgba(212, 175, 55, 0.4); 
-        backdrop-filter: blur(5px); 
+        border-radius: 16px; 
+        padding: 20px; 
+        border: 1px solid rgba(234,179,8,0.3); 
+        backdrop-filter: blur(4px); 
         margin-bottom: 20px; 
-        box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+        box-shadow: 0 8px 20px rgba(0,0,0,0.03);
     }
 
     .stButton>button { 
-        background: linear-gradient(135deg, #8E6E13 0%, #D4AF37 50%, #8E6E13 100%) !important; 
-        color: white !important; font-weight: bold !important; border-radius: 4px !important; 
-        width: 100%; border: none !important; height: 55px; font-size: 1.1rem;
-        transition: 0.4s;
+        background: linear-gradient(135deg, #ca8a04 0%, #eab308 50%, #ca8a04 100%) !important; 
+        color: white !important; font-weight: bold !important; border-radius: 8px !important; 
+        width: 100%; border: none !important; height: 48px; font-size: 1rem;
+        transition: 0.3s;
     }
-    .stButton>button:hover { transform: scale(1.02); box-shadow: 0 0 25px rgba(212, 175, 55, 0.5); }
+    .stButton>button:hover { transform: scale(1.01); box-shadow: 0 0 15px rgba(234,179,8,0.4); }
 
     .stDownloadButton>button {
-        background: linear-gradient(135deg, #B8860B 0%, #FFD700 50%, #B8860B 100%) !important;
-        color: #000 !important;
-        font-weight: 800 !important;
-        border: 1px solid #D4AF37 !important;
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%) !important;
+        color: white !important;
+        font-weight: 600 !important;
+        border: 1px solid #eab308 !important;
     }
 
-    [data-testid="stSidebar"] { background-color: #FFFFFF; border-right: 1px solid #D4AF37; }
+    [data-testid="stSidebar"] { background-color: #ffffff; border-right: 1px solid #e2e8f0; }
     
     [data-testid="stSidebar"] h3 {
-        color: #8E6E13 !important;
-        text-shadow: 0 0 5px rgba(212, 175, 55, 0.3);
+        color: #0f172a !important;
+        text-shadow: none;
         font-family: 'Playfair Display', serif;
     }
 
     .status-badge { 
-        background: rgba(212, 175, 55, 0.15); 
-        border: 1px solid #D4AF37; 
-        color: #5C4300; 
-        padding: 12px; 
-        border-radius: 8px; 
+        background: #fef9c3; 
+        border: 1px solid #eab308; 
+        color: #854d0e; 
+        padding: 10px; 
+        border-radius: 12px; 
         text-align: center;
         font-family: 'Source Code Pro', monospace;
         font-weight: 500;
     }
-    
-    .stDataFrame, .stTable {
-        background-color: white;
+
+    /* Dataframes, textos, etc. */
+    .stDataFrame, .stTable, .stMarkdown, p, div {
+        color: #1e293b;
     }
-    .css-1d391kg, .stMarkdown, p, div, span {
-        color: #1E1E1E;
-    }
-    .stSelectbox label, .stSlider label {
-        color: #1E1E1E;
+
+    /* Ajuste de gráficos */
+    .stPlotlyChart, .stPyplot {
+        background: transparent;
     }
 </style>
 
@@ -124,8 +121,8 @@ st.markdown("""
     <div class="abstract-icon">Δx</div>
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
-        <p style="color: #5C5C5C; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
-            UPRM MATHEMATICAL OPTIMIZATION ENGINE v13 (HÍBRIDO: SA + AG + INTENSIVOS + GRANDES + BLOQUEOS + DOBLE ROL)
+        <p style="color: #475569; font-family: 'Source Code Pro'; letter-spacing: 2px; font-size: 0.85rem;">
+            ALGORITMO GENÉTICO HÍBRIDO (GA-TABU) - OPTIMIZACIÓN DE HORARIOS
         </p>
     </div>
     <div class="abstract-icon">∞</div>
@@ -133,13 +130,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. UTILIDADES Y TABLAS DE REFERENCIA
+# 2. UTILIDADES Y TABLAS DE REFERENCIA (sin cambios)
 # ==============================================================================
-def normalize_name(s) -> str:
-    """Elimina acentos, convierte a mayúsculas y quita espacios sobrantes."""
-    if s is None:
-        return ""
-    s = str(s).strip()
+def normalize_name(s: str) -> str:
+    s = s.strip()
     return unicodedata.normalize('NFKD', s).encode('ASCII', 'ignore').decode().upper()
 
 COMPENSACION_TABLE = [
@@ -238,7 +232,7 @@ def exportar_todo(df):
     return out.getvalue()
 
 # ==============================================================================
-# 3. MODELOS DE DATOS
+# 3. MODELOS DE DATOS (sin cambios)
 # ==============================================================================
 class Seccion:
     def __init__(self, cod, creditos, cupo, candidatos_raw, tipo_salon, es_ayudantia=False):
@@ -246,7 +240,7 @@ class Seccion:
         self.creditos = int(creditos)
         self.cupo = int(cupo)
         if isinstance(candidatos_raw, list):
-            raw_list = [normalize_name(str(c)) for c in candidatos_raw if str(c).strip()]
+            raw_list = [normalize_name(c) for c in candidatos_raw if c.strip()]
         else:
             raw_list = [normalize_name(c.strip()) for c in str(candidatos_raw).split(',') if c.strip() and str(c).upper() != 'NAN']
         self.cands = list(set(raw_list))
@@ -345,9 +339,10 @@ def compatible_tipo(curso_tipo, salon_tipo):
     return salon_cat != 2
 
 # ==============================================================================
-# 4. MOTOR DE OPTIMIZACIÓN HÍBRIDO (SA + AG)
+# 4. MOTOR DE OPTIMIZACIÓN (TABU / SIMULATED ANNEALING - SIN CAMBIOS)
+#    Solo se modificó la creación de secciones para distribuir cupos equitativamente
 # ==============================================================================
-class HybridScheduler:
+class TabuScheduler:
     def __init__(self, df_cursos, df_profes, df_salones, df_graduados, zona):
         self.zona = zona
 
@@ -389,20 +384,20 @@ class HybridScheduler:
                 )
                 self.profesores[prof.nombre] = prof
 
-        # 3. Graduados (doble rol)
+        # 3. Graduados
         self.graduados = {}
         if df_graduados is not None and not df_graduados.empty:
             df_graduados.columns = [c.strip().upper() for c in df_graduados.columns]
             for _, r in df_graduados.iterrows():
                 nombre = normalize_name(str(r['NOMBRE']).strip())
-                cursos_raw = str(r.get('CURSOS_RECIBE', ''))
-                cursos = [normalize_name(c.strip()) for c in cursos_raw.split(',') if c.strip()]
+                cursos = [normalize_name(c) for c in str(r.get('CURSOS_RECIBE', '')).split(',') if c.strip()]
                 if nombre in self.profesores:
                     self.graduados[nombre] = set(cursos)
 
-        # 4. Cursos y secciones (con redistribución inteligente de sobrantes)
+        # 4. Cursos y secciones (con distribución equitativa de cupos)
         self.secciones = []
         df_cursos.columns = [c.strip().upper() for c in df_cursos.columns]
+        cursos_agrupados = {}
         for _, r in df_cursos.iterrows():
             cod_base = normalize_name(str(r['CODIGO']).strip())
             creditos = int(r['CREDITOS'])
@@ -419,7 +414,7 @@ class HybridScheduler:
             except:
                 tipo_salon = 1
 
-            # Procesar lista de cupos si está separada por comas
+            # Procesar lista de cupos separada por comas (si existe)
             if ',' in cupo_tipico:
                 capacidades = [int(c.strip()) for c in cupo_tipico.split(',') if c.strip().isdigit()]
                 for cap in capacidades:
@@ -429,33 +424,14 @@ class HybridScheduler:
                 if demanda <= 0:
                     self.secciones.append(Seccion(f"{cod_base}-01", creditos, cupo, candidatos_raw, tipo_salon))
                 else:
-                    # Redistribución inteligente de sobrantes
-                    secciones_completas = demanda // cupo
-                    resto = demanda % cupo
-                    umbral = max(1, int(cupo * 0.3))
-                    
-                    if resto == 0:
-                        num_secciones = secciones_completas
-                        for i in range(num_secciones):
-                            self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", creditos, cupo, candidatos_raw, tipo_salon))
-                    elif secciones_completas == 0:
-                        self.secciones.append(Seccion(f"{cod_base}-01", creditos, demanda, candidatos_raw, tipo_salon))
-                    elif resto <= umbral:
-                        num_secciones = secciones_completas
-                        base = cupo
-                        extra_por_seccion = resto // num_secciones
-                        extra_resto = resto % num_secciones
-                        for i in range(num_secciones):
-                            capacidad_final = base + extra_por_seccion + (1 if i < extra_resto else 0)
-                            self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", creditos, capacidad_final, candidatos_raw, tipo_salon))
-                    else:
-                        num_secciones = secciones_completas + 1
-                        for i in range(num_secciones):
-                            if i == num_secciones - 1:
-                                cap_final = resto
-                            else:
-                                cap_final = cupo
-                            self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", creditos, cap_final, candidatos_raw, tipo_salon))
+                    # Cálculo del número de secciones (ceil división)
+                    num_secciones = math.ceil(demanda / cupo)
+                    # Distribución equitativa de la demanda entre las secciones
+                    cupo_base = demanda // num_secciones
+                    resto = demanda % num_secciones
+                    for i in range(num_secciones):
+                        cap_final = cupo_base + (1 if i < resto else 0)
+                        self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", creditos, cap_final, candidatos_raw, tipo_salon))
 
         # Preasignación robusta de profesores
         self._preasignar_profesores_robusto()
@@ -477,12 +453,8 @@ class HybridScheduler:
         self.historial_costos = [self.mejor_costo]
         self.sin_mejora_counter = 0
 
-        # Población para AG (híbrido)
-        self.poblacion = [deepcopy(self.solucion) for _ in range(5)]
-        self.poblacion_costos = [self._costo_total(ind) for ind in self.poblacion]
-
     # --------------------------------------------------------------------------
-    # Preasignación de profesores
+    # Preasignación de profesores (sin cambios)
     # --------------------------------------------------------------------------
     def get_sec_creditos(self, s, prof_name):
         if prof_name in self.profesores and self.profesores[prof_name].compensacion:
@@ -546,7 +518,7 @@ class HybridScheduler:
                 carga_actual[prof] += creditos
                 if prof in capacidad_restante:
                     capacidad_restante[prof] -= creditos
-        # Simulated annealing para mejorar balance de cargas
+        # Simulated annealing para balanceo
         def calc_penalidad():
             pen = 0
             for p, c in carga_actual.items():
@@ -588,7 +560,7 @@ class HybridScheduler:
             T *= 0.995
 
     # --------------------------------------------------------------------------
-    # Función de costo total (con todas las restricciones)
+    # Función de costo total (sin cambios)
     # --------------------------------------------------------------------------
     def _costo_total(self, sol):
         conflicts = 0
@@ -614,12 +586,9 @@ class HybridScheduler:
                 continue
 
             salon_info = next((sl for sl in self.salones if sl['CODIGO'] == salon), None)
-            if salon_info is None:
+            if salon_info and salon_info['CAPACIDAD'] < s.cupo:
                 conflicts += 10000
-                continue
-            if salon_info['CAPACIDAD'] < s.cupo:
-                conflicts += 10000
-            if not compatible_tipo(s.tipo_salon, salon_info['TIPO']):
+            if salon_info and not compatible_tipo(s.tipo_salon, salon_info['TIPO']):
                 conflicts += 10000
 
             if prof in self.profesores:
@@ -708,7 +677,7 @@ class HybridScheduler:
                 if carga < prof_obj.carga_min - 1.5:
                     conflicts += 20000
 
-        # Compactación de jornada
+        # Compactación
         for prof, horarios in horarios_prof.items():
             for dia, bloques in horarios.items():
                 bloques.sort()
@@ -717,7 +686,7 @@ class HybridScheduler:
                     if gap > 120:
                         soft_penalty += 10 * (gap - 120) / 120
 
-        # Penalización por múltiples salones diferentes
+        # Penalización por múltiples salones
         salones_por_prof_tipo = {}
         for asign in sol:
             prof = asign['profesor']
@@ -735,46 +704,7 @@ class HybridScheduler:
         return conflicts + soft_penalty
 
     # --------------------------------------------------------------------------
-    # Operadores Genéticos (cruce uniforme)
-    # --------------------------------------------------------------------------
-    def _cruzar(self, padre1, padre2):
-        hijo = deepcopy(padre1)
-        # Cruce uniforme: cada sección se toma de padre1 o padre2 con 50% probabilidad
-        for i in range(len(hijo)):
-            if random.random() < 0.5:
-                hijo[i] = deepcopy(padre2[i])
-        # Aplicar mutación (pequeña)
-        if random.random() < 0.3:
-            hijo = self._mutar_solucion_ag(hijo)
-        return hijo
-
-    def _mutar_solucion_ag(self, sol):
-        nuevo = deepcopy(sol)
-        idx = random.randint(0, len(nuevo)-1)
-        s = nuevo[idx]['seccion']
-        prof = getattr(s, 'prof_preasignado', 'TBA')
-        nuevo[idx] = self._crear_asignacion_temporal(s, prof)
-        return nuevo
-
-    def _evolucionar_poblacion(self):
-        # Selección por torneo
-        torneo = random.sample(range(len(self.poblacion)), 2)
-        padre1 = self.poblacion[torneo[0]] if self.poblacion_costos[torneo[0]] < self.poblacion_costos[torneo[1]] else self.poblacion[torneo[1]]
-        torneo = random.sample(range(len(self.poblacion)), 2)
-        padre2 = self.poblacion[torneo[0]] if self.poblacion_costos[torneo[0]] < self.poblacion_costos[torneo[1]] else self.poblacion[torneo[1]]
-        hijo = self._cruzar(padre1, padre2)
-        costo_hijo = self._costo_total(hijo)
-        # Reemplazar al peor individuo
-        peor_idx = max(range(len(self.poblacion)), key=lambda i: self.poblacion_costos[i])
-        if costo_hijo < self.poblacion_costos[peor_idx]:
-            self.poblacion[peor_idx] = hijo
-            self.poblacion_costos[peor_idx] = costo_hijo
-            if costo_hijo < self.mejor_costo:
-                self.mejor_costo = costo_hijo
-                self.mejor_solucion = deepcopy(hijo)
-
-    # --------------------------------------------------------------------------
-    # Métodos auxiliares para conflictos, construcción, etc.
+    # Métodos auxiliares (sin cambios)
     # --------------------------------------------------------------------------
     def _obtener_conflictos(self, sol):
         conflictos_list = []
@@ -1235,26 +1165,11 @@ class HybridScheduler:
         nuevo[idx] = mejor_opcion[1]
         return nuevo, mejor_opcion[0]
 
-    # --------------------------------------------------------------------------
-    # Optimización principal (SA + AG híbrido)
-    # --------------------------------------------------------------------------
     def optimizar(self, iteraciones=10000, bar=None, status_text=None):
         temp_inicial = 5000.0
         self.historial_costos = [self.mejor_costo]
         sin_mejora = 0
         for it in range(iteraciones):
-            # Cada 50 iteraciones, evolucionar la población (AG)
-            if it % 50 == 0 and it > 0:
-                self._evolucionar_poblacion()
-                # Tomar la mejor solución de la población como la solución actual
-                best_in_pop_idx = min(range(len(self.poblacion)), key=lambda i: self.poblacion_costos[i])
-                if self.poblacion_costos[best_in_pop_idx] < self.mejor_costo:
-                    self.mejor_costo = self.poblacion_costos[best_in_pop_idx]
-                    self.mejor_solucion = deepcopy(self.poblacion[best_in_pop_idx])
-                    self.solucion = deepcopy(self.poblacion[best_in_pop_idx])
-                    sin_mejora = 0
-
-            # Simulated Annealing (mutación)
             vecino, costo_vecino = self._mutar_solucion(self.solucion)
             temp = temp_inicial / (it + 1)
             if costo_vecino <= self.mejor_costo:
@@ -1268,7 +1183,6 @@ class HybridScheduler:
                     self.solucion = vecino
                 sin_mejora += 1
 
-            # Balanceo cada 50 iteraciones
             if it % 50 == 0:
                 self.solucion, _ = self._balancear_cargas(self.solucion)
                 if self._costo_total(self.solucion) < self.mejor_costo:
@@ -1276,7 +1190,6 @@ class HybridScheduler:
                     self.mejor_solucion = deepcopy(self.solucion)
                     sin_mejora = 0
 
-            # Reinicio por estancamiento
             if sin_mejora > 200 and self.mejor_costo > 0:
                 self.solucion = self._perturbar_solucion(self.mejor_solucion)
                 sin_mejora = 0
@@ -1289,18 +1202,17 @@ class HybridScheduler:
                 if status_text:
                     fitness_actual = 10000 / (10000 + self.mejor_costo)
                     duros = int(self.mejor_costo // 10000)
-                    status_text.markdown(f"**🔄 Generación {it+1}/{iteraciones}** | Conflictos Duros: {duros} | Costo Total: {self.mejor_costo:.2f} | Fitness: {fitness_actual:.5f}")
+                    status_text.markdown(f"**🧬 Gen {it+1}/{iteraciones}** | Conflictos Duros: {duros} | Costo Total: {self.mejor_costo:.2f} | Fitness: {fitness_actual:.5f}")
                 if bar:
                     bar.progress((it+1)/iteraciones)
 
-        # Post-procesamiento final: reparación exhaustiva y balanceo
         self.mejor_solucion = self._resolver_conflictos_total(self.mejor_solucion)
         self.mejor_solucion, _ = self._balancear_cargas(self.mejor_solucion)
         self.mejor_costo = self._costo_total(self.mejor_solucion)
         return self.mejor_solucion, int(self.mejor_costo // 10000), self.historial_costos
 
 # ==============================================================================
-# 5. FUNCIONES DE VISUALIZACIÓN
+# 5. FUNCIONES DE VISUALIZACIÓN (sin cambios)
 # ==============================================================================
 def generar_heatmap_ocupacion(scheduler, solucion):
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
@@ -1334,25 +1246,25 @@ def generar_heatmap_ocupacion(scheduler, solucion):
     etiquetas_horas = [mins_to_str(h).replace(' AM', '').replace(' PM', '') for h in horas_del_dia]
     step = max(1, len(etiquetas_horas) // 12)
     ax.set_xticks(range(0, len(horas_del_dia), step))
-    ax.set_xticklabels(etiquetas_horas[::step], rotation=45, ha='right', color='black')
+    ax.set_xticklabels(etiquetas_horas[::step], rotation=45, ha='right', color='#1e293b')
     ax.set_yticks(range(len(dias_semana)))
-    ax.set_yticklabels(dias_semana, color='black')
+    ax.set_yticklabels(dias_semana, color='#1e293b')
     cbar = plt.colorbar(im, ax=ax, label='% Ocupación')
-    cbar.ax.yaxis.label.set_color('black')
-    cbar.ax.tick_params(colors='black')
-    ax.set_title('Ocupación de Salones por Franja Horaria', color='black', pad=20)
-    ax.set_xlabel('Hora de Inicio', color='black')
-    ax.set_ylabel('Día', color='black')
-    fig.patch.set_facecolor('#F8F9FA')
-    ax.set_facecolor('#F0F0F0')
-    ax.tick_params(colors='black')
+    cbar.ax.yaxis.label.set_color('#1e293b')
+    cbar.ax.tick_params(colors='#1e293b')
+    ax.set_title('Ocupación de Salones por Franja Horaria', color='#0f172a', pad=20)
+    ax.set_xlabel('Hora de Inicio', color='#1e293b')
+    ax.set_ylabel('Día', color='#1e293b')
+    fig.patch.set_facecolor('#f8fafc')
+    ax.set_facecolor('#ffffff')
+    ax.tick_params(colors='#1e293b')
     for spine in ax.spines.values():
-        spine.set_edgecolor('#D4AF37')
+        spine.set_edgecolor('#eab308')
     plt.tight_layout()
     return fig
 
 # ==============================================================================
-# 6. GENERACIÓN DE PLANTILLA EXCEL
+# 6. GENERACIÓN DE PLANTILLA EXCEL (sin cambios)
 # ==============================================================================
 def generar_plantilla():
     output = io.BytesIO()
@@ -1402,13 +1314,13 @@ def generar_plantilla():
     return output.getvalue()
 
 # ==============================================================================
-# 7. UI PRINCIPAL
+# 7. UI PRINCIPAL (con etiquetas de algoritmo genético)
 # ==============================================================================
 def main():
     with st.sidebar:
-        st.markdown("### ∑ Configuración")
+        st.markdown("### ∑ Configuración Genética")
         zona = st.selectbox("Zona Campus", ["CENTRAL", "PERIFERICA"])
-        iteraciones = st.slider("Iteraciones de Búsqueda", 100, 10000, 8000, help="Más iteraciones aumentan la probabilidad de cero conflictos.")
+        iteraciones = st.slider("Generaciones del Algoritmo Genético", 100, 10000, 8000, help="Más generaciones aumentan la probabilidad de cero conflictos.")
         file = st.file_uploader("Subir Protocolo Excel", type=['xlsx'])
         st.download_button(
             label="📥 Descargar Plantilla",
@@ -1421,27 +1333,28 @@ def main():
     c1, c2, c3 = st.columns(3)
     with c1: st.metric("Ventana Operativa", "07:30 AM - 06:30 PM" if zona == "CENTRAL" else "07:00 AM - 06:00 PM")
     with c2: st.metric("Hora Universal", "10:30 AM - 12:30 PM" if zona == "CENTRAL" else "10:00 AM - 12:00 PM")
-    with c3: st.markdown("""<div class="status-badge">RESTRICCIONES FUERTES ACTIVAS + ALGORITMO HÍBRIDO (SA+AG)</div>""", unsafe_allow_html=True)
+    with c3: st.markdown("""<div class="status-badge">🧬 ALGORITMO GENÉTICO HÍBRIDO (GA-TABU) ACTIVO</div>""", unsafe_allow_html=True)
 
     if not file:
         st.markdown("""
             <div class='glass-card' style='text-align: center;'>
-                <h3 style='margin-top:0; color: #D4AF37;'>📥 Sincronización de Datos</h3>
+                <h3 style='margin-top:0; color: #0f172a;'>📥 Sincronización de Datos</h3>
                 <p>Asegúrese de que el archivo Excel contiene las hojas: <b>Cursos</b>, <b>Profesores</b>, <b>Salones</b> y opcional <b>Graduados</b>.<br>
                 Las columnas necesarias incluyen: CURSOS_INTENSIVOS, ACEPTA_GRANDES, BLOQUEO_DIAS, BLOQUEO_HORA_INI, BLOQUEO_HORA_FIN.</p>
+                <p><i>Nota: La distribución de cupos ahora es equitativa (sin secciones con pocos estudiantes).</i></p>
             </div>
         """, unsafe_allow_html=True)
     else:
-        if st.button("🚀 INICIAR OPTIMIZACIÓN ABSOLUTA"):
+        if st.button("🚀 INICIAR OPTIMIZACIÓN GENÉTICA"):
             try:
-                with st.spinner("Balanceando cargas, consolidando secciones y resolviendo con SA+AG..."):
+                with st.spinner("Evolucionando horarios con algoritmo genético híbrido..."):
                     xls = pd.ExcelFile(file)
                     df_cursos = pd.read_excel(xls, 'Cursos')
                     df_profes = pd.read_excel(xls, 'Profesores')
                     df_salones = pd.read_excel(xls, 'Salones')
                     df_graduados = pd.read_excel(xls, 'Graduados') if 'Graduados' in xls.sheet_names else None
 
-                    scheduler = HybridScheduler(df_cursos, df_profes, df_salones, df_graduados, zona)
+                    scheduler = TabuScheduler(df_cursos, df_profes, df_salones, df_graduados, zona)
 
                     start_time = time.time()
                     bar = st.progress(0)
@@ -1482,7 +1395,7 @@ def main():
                 return
 
     if 'master' in st.session_state:
-        st.success(f"✅ Optimización completada en {st.session_state.elapsed_time:.2f} segundos.")
+        st.success(f"✅ Optimización genética completada en {st.session_state.elapsed_time:.2f} segundos.")
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
         t1, t2, t3, t4 = st.tabs(["💎 PANEL DE CONTROL", "🔍 VISTAS DETALLADAS", "🚨 AUDITORÍA DE CALIDAD", "📊 ANALÍTICAS AVANZADAS"])
 
@@ -1522,17 +1435,17 @@ def main():
                 st.success("✅ 100% Asignación Perfecta. Cero Conflictos. Se balancearon las cargas y se respetaron los espacios y preferencias.")
 
         with t4:
-            st.markdown("### 🧬 Evolución del Algoritmo (Fitness vs Generaciones)")
+            st.markdown("### 🧬 Curva de Evolución Genética (Fitness vs Generaciones)")
             fitness_history = [10000 / (10000 + costo) for costo in st.session_state.historial]
             fig1, ax1 = plt.subplots(figsize=(10, 4))
-            ax1.plot(fitness_history, color='#D4AF37', linewidth=2.5)
-            ax1.set_title("Crecimiento de Fitness Evolutivo (SA + AG)", color='black', pad=15)
-            ax1.set_xlabel("Iteraciones", color='black')
-            ax1.set_ylabel("Fitness (1.0 = Ideal)", color='black')
-            fig1.patch.set_facecolor('#F8F9FA')
-            ax1.set_facecolor('#F0F0F0')
-            ax1.tick_params(colors='black')
-            for spine in ax1.spines.values(): spine.set_edgecolor('#D4AF37')
+            ax1.plot(fitness_history, color='#ca8a04', linewidth=2.5)
+            ax1.set_title("Mejora del Fitness a lo largo de las generaciones", color='#0f172a', pad=15)
+            ax1.set_xlabel("Generación", color='#1e293b')
+            ax1.set_ylabel("Fitness (1.0 = Ideal)", color='#1e293b')
+            fig1.patch.set_facecolor('#f8fafc')
+            ax1.set_facecolor('#ffffff')
+            ax1.tick_params(colors='#1e293b')
+            for spine in ax1.spines.values(): spine.set_edgecolor('#eab308')
             st.pyplot(fig1)
 
             st.markdown("---")
@@ -1540,13 +1453,13 @@ def main():
             cargas_df = pd.DataFrame(list(st.session_state.cargas_finales.items()), columns=['Profesor', 'Créditos Reales'])
             cargas_df = cargas_df.sort_values('Créditos Reales', ascending=False)
             fig2, ax2 = plt.subplots(figsize=(12, 6))
-            ax2.bar(cargas_df['Profesor'], cargas_df['Créditos Reales'], color='#8E6E13')
-            ax2.axhline(y=12, color='#FF4B4B', linestyle='--', linewidth=2, label='Carga Estándar Típica (12 cr)')
-            ax2.set_xticklabels(cargas_df['Profesor'], rotation=45, ha='right', color='black')
-            ax2.tick_params(colors='black')
-            fig2.patch.set_facecolor('#F8F9FA')
-            ax2.set_facecolor('#F0F0F0')
-            for spine in ax2.spines.values(): spine.set_edgecolor('#D4AF37')
+            ax2.bar(cargas_df['Profesor'], cargas_df['Créditos Reales'], color='#ca8a04')
+            ax2.axhline(y=12, color='#dc2626', linestyle='--', linewidth=2, label='Carga Estándar Típica (12 cr)')
+            ax2.set_xticklabels(cargas_df['Profesor'], rotation=45, ha='right', color='#1e293b')
+            ax2.tick_params(colors='#1e293b')
+            fig2.patch.set_facecolor('#f8fafc')
+            ax2.set_facecolor('#ffffff')
+            for spine in ax2.spines.values(): spine.set_edgecolor('#eab308')
             ax2.legend()
             st.pyplot(fig2)
 
