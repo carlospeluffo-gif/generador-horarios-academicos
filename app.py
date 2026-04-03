@@ -419,13 +419,16 @@ class TabuScheduler:
                 if demanda <= 0:
                     self.secciones.append(Seccion(f"{cod_base}-01", creditos, cupo, candidatos_raw, tipo_salon))
                 else:
-                    num_secciones = math.ceil(demanda / cupo)
-                    for i in range(num_secciones):
-                        cap_final = cupo
-                        if i == num_secciones-1:
-                            cap_final = demanda - cupo*(num_secciones-1)
-                            if cap_final < 0: cap_final = cupo
-                        self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", creditos, cap_final, candidatos_raw, tipo_salon))
+                    num_secciones = max(1, math.ceil(demanda / cupo))
+
+base = demanda // num_secciones
+extra = demanda % num_secciones
+
+for i in range(num_secciones):
+    cap_final = base + (1 if i < extra else 0)
+    self.secciones.append(
+        Seccion(f"{cod_base}-{i+1:02d}", creditos, cap_final, candidatos_raw, tipo_salon)
+    )
 
         # Preasignación robusta de profesores
         self._preasignar_profesores_robusto()
@@ -1181,49 +1184,57 @@ class TabuScheduler:
     # Optimización principal (simulated annealing con reinicios)
     # --------------------------------------------------------------------------
     
-    def optimizar(self, iteraciones=2000, bar=None, status_text=None):
-        poblacion_size = 10
-        poblacion = [deepcopy(self.solucion) for _ in range(poblacion_size)]
-        mejores_costos = []
+    def optimizar(self, iteraciones=1500, bar=None, status_text=None):
+    from copy import deepcopy
 
-        for gen in range(iteraciones):
-            nueva_poblacion = []
+    poblacion_size = 8
+    poblacion = [deepcopy(self.solucion) for _ in range(poblacion_size)]
 
-            for individuo in poblacion:
-                # Mutación (variación genética)
-                nuevo, _ = self._mutar_solucion(individuo)
+    for gen in range(iteraciones):
+        nueva_poblacion = []
 
-                # Mejora local (MEMETIC: tu motor real)
-                nuevo = self._resolver_conflictos_total(nuevo)
-                nuevo, _ = self._balancear_cargas(nuevo)
+        for individuo in poblacion:
+            # Mutación (GA)
+            nuevo, _ = self._mutar_solucion(individuo)
 
-                nueva_poblacion.append(nuevo)
+            # Mejora local (MEMETIC)
+            nuevo = self._resolver_conflictos_total(nuevo)
+            nuevo, _ = self._balancear_cargas(nuevo)
 
-            # Selección (elitismo simple)
-            poblacion = sorted(nueva_poblacion, key=lambda sol: self._costo_total(sol))[:poblacion_size]
+            nueva_poblacion.append(nuevo)
 
-            mejor_actual = poblacion[0]
-            costo_actual = self._costo_total(mejor_actual)
+        # Selección elitista
+        poblacion = sorted(
+            nueva_poblacion,
+            key=lambda sol: self._costo_total(sol)
+        )[:poblacion_size]
 
-            if costo_actual < self.mejor_costo:
-                self.mejor_costo = costo_actual
-                self.mejor_solucion = deepcopy(mejor_actual)
+        mejor_actual = poblacion[0]
+        costo_actual = self._costo_total(mejor_actual)
 
-            mejores_costos.append(self.mejor_costo)
+        if costo_actual < self.mejor_costo:
+            self.mejor_costo = costo_actual
+            self.mejor_solucion = deepcopy(mejor_actual)
 
-            if status_text:
-                fitness = 10000 / (10000 + self.mejor_costo)
-                status_text.markdown(
-                    f"**🧬 Generación {gen+1}/{iteraciones} | Población: {poblacion_size}**  \n" f""
-                    f"Memetic Algorithm (GA + Local Search)  
-"
-                    f"Costo: {self.mejor_costo:.2f} | Fitness: {fitness:.5f}"
+        if status_text:
+            fitness = 10000 / (10000 + self.mejor_costo)
+
+            status_text.markdown(
+                "**🧬 Generación {}/{} | Población: {}**\n"
+                "Memetic Algorithm (GA + Local Search)\n"
+                "Costo: {:.2f} | Fitness: {:.5f}".format(
+                    gen+1,
+                    iteraciones,
+                    poblacion_size,
+                    self.mejor_costo,
+                    fitness
                 )
+            )
 
-            if bar:
-                bar.progress((gen+1)/iteraciones)
+        if bar:
+            bar.progress((gen+1) / iteraciones)
 
-        return self.mejor_solucion, int(self.mejor_costo // 10000), mejores_costos
+    return self.mejor_solucion, int(self.mejor_costo // 10000), []
 
 
 # ==============================================================================
