@@ -633,6 +633,11 @@ class TabuScheduler:
             salon = asign['salon']
             patron = asign['patron']
             ini = asign['ini']
+            # Convertir ini a entero si es string
+            try:
+                ini = int(ini)
+            except (ValueError, TypeError):
+                ini = 0
 
             if prof == "TBA" or salon == "TBA":
                 conflicts += 10000
@@ -995,13 +1000,14 @@ class TabuScheduler:
                                 conflicto = False
                                 for j, other in enumerate(sol):
                                     if j != idx and other:
+                                        other_ini = int(other['ini']) if not isinstance(other['ini'], int) else other['ini']
                                         if other['profesor'] == prof:
                                             for dia, contrib in patron['days'].items():
                                                 for dia2, contrib2 in other['patron']['days'].items():
                                                     if dia == dia2:
                                                         fin_actual = hora + int(contrib * 50)
-                                                        fin_exist = other['ini'] + int(contrib2 * 50)
-                                                        if max(hora, other['ini']) < min(fin_actual, fin_exist):
+                                                        fin_exist = other_ini + int(contrib2 * 50)
+                                                        if max(hora, other_ini) < min(fin_actual, fin_exist):
                                                             conflicto = True
                                                             break
                                                     if conflicto: break
@@ -1012,8 +1018,8 @@ class TabuScheduler:
                                                 for dia2, contrib2 in other['patron']['days'].items():
                                                     if dia == dia2:
                                                         fin_actual = hora + int(contrib * 50)
-                                                        fin_exist = other['ini'] + int(contrib2 * 50)
-                                                        if max(hora, other['ini']) < min(fin_actual, fin_exist):
+                                                        fin_exist = other_ini + int(contrib2 * 50)
+                                                        if max(hora, other_ini) < min(fin_actual, fin_exist):
                                                             if salon in self.mega_salones and s.es_fusionable and other['seccion'].es_fusionable:
                                                                 if s.cupo + other['seccion'].cupo <= self.salon_capacidad.get(salon, 0):
                                                                     continue
@@ -1057,6 +1063,11 @@ class TabuScheduler:
             salon = asign['salon']
             patron = asign['patron']
             ini = asign['ini']
+            # Convertir ini a entero si es string
+            try:
+                ini = int(ini)
+            except (ValueError, TypeError):
+                ini = 0
             if prof == "TBA" or salon == "TBA":
                 conflictos.append(idx)
                 continue
