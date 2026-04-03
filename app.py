@@ -1354,8 +1354,8 @@ def generar_plantilla():
 # ==============================================================================
 def main():
     with st.sidebar:
-        st.markdown("### ∑ Configuración")
-        zona = st.selectbox("Zona Campus", ["CENTRAL", "PERIFERICA"])
+        st.markdown("### 📅 Configuración")
+        zona = st.selectbox("🏛️ Zona", ["CENTRAL", "PERIFERICA"])
         iteraciones = st.slider("Iteraciones de Búsqueda", 100, 10000, 8000, help="Más iteraciones aumentan la probabilidad de cero conflictos.")
         file = st.file_uploader("Subir Protocolo Excel", type=['xlsx'])
         st.download_button(
