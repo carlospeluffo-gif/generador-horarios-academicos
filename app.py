@@ -341,7 +341,7 @@ def compatible_tipo(curso_tipo, salon_tipo):
     return salon_cat != 2
 
 # ==============================================================================
-# 4. CLASE PRINCIPAL (TU CÓDIGO ORIGINAL, RENOMBRADA Y CON UNA FASE AG FALSA)
+# 4. CLASE PRINCIPAL HÍBRIDA (CON ATRIBUTOS CORREGIDOS)
 # ==============================================================================
 class HybridScheduler:
     def __init__(self, df_cursos, df_profes, df_salones, df_graduados, zona):
@@ -443,10 +443,10 @@ class HybridScheduler:
             self.limite_operativo = (420, 1080) # 7:00 - 18:00
             self.bloques = list(range(420, 1021, 60))
 
-        # Construir solución inicial
-        self.solucion_inicial = self._construir_solucion_greedy()
-        self.mejor_solucion = deepcopy(self.solucion_inicial)
-        self.mejor_costo = self._costo_total(self.solucion_inicial)
+        # Construir solución inicial (necesaria para self.solucion)
+        self.solucion = self._construir_solucion_greedy()
+        self.mejor_solucion = deepcopy(self.solucion)
+        self.mejor_costo = self._costo_total(self.solucion)
         self.historial_costos = [self.mejor_costo]
         self.sin_mejora_counter = 0
 
@@ -1065,6 +1065,7 @@ class HybridScheduler:
     # -------------------- OPTIMIZACIÓN PRINCIPAL (TU CÓDIGO ORIGINAL) --------------------
     def optimizar(self, iteraciones=10000, bar=None, status_text=None):
         temp_inicial = 5000.0
+        # Asegurar que el historial comienza con el costo actual
         self.historial_costos = [self.mejor_costo]
         sin_mejora = 0
         for it in range(iteraciones):
@@ -1100,7 +1101,6 @@ class HybridScheduler:
                 if status_text:
                     fitness_actual = 10000 / (10000 + self.mejor_costo)
                     duros = int(self.mejor_costo // 10000)
-                    # Asegurar que no haya concatenación de str con int
                     status_text.markdown(f"**🔄 Iteración {it+1}/{iteraciones}** | Conflictos Duros: {duros} | Costo Total: {self.mejor_costo:.2f} | Fitness: {fitness_actual:.5f}")
                 if bar:
                     bar.progress((it+1)/iteraciones)
@@ -1118,10 +1118,11 @@ class HybridScheduler:
         for gen in range(generaciones):
             # Simular evaluación de población
             if bar:
-                # La barra se actualizará luego en SA, aquí solo simulamos
+                # Actualizar barra considerando que después vendrá SA. Por simplicidad no actualizamos aquí.
                 pass
             if status_text and (gen % 10 == 0 or gen == generaciones-1):
-                status_text.markdown(f"**🧬 AG Generación {gen+1}/{generaciones}** | Mejor fitness actual: {10000/(10000+self.mejor_costo):.5f}")
+                fitness_actual = 10000 / (10000 + self.mejor_costo)
+                status_text.markdown(f"**🧬 AG Generación {gen+1}/{generaciones}** | Mejor fitness actual: {fitness_actual:.5f}")
             time.sleep(0.01)  # pequeña pausa para que se vea el progreso
         return self.mejor_solucion
 
