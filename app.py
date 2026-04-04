@@ -10,7 +10,7 @@ from copy import deepcopy
 import unicodedata
 
 # ==============================================================================
-# 1. ESTÉTICA (TEMA CLARO - FONDO BLANCO)
+# 1. ESTÉTICA (FONDO BLANCO, TEXTOS OSCUROS)
 # ==============================================================================
 st.set_page_config(page_title="UPRM Scheduler Platinum AI v13", page_icon="🏛️", layout="wide")
 
@@ -19,12 +19,14 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Source+Code+Pro:wght@300;500&display=swap');
     
     .stApp { 
-        background-color: #F8F9FA;
+        background-color: #ffffff;
         background-image: 
-            linear-gradient(rgba(212, 175, 55, 0.08) 2px, transparent 2px),
-            linear-gradient(90deg, rgba(212, 175, 55, 0.08) 2px, transparent 2px);
-        background-size: 80px 80px, 80px 80px;
-        color: #1E1E1E; 
+            linear-gradient(rgba(212, 175, 55, 0.15) 2px, transparent 2px),
+            linear-gradient(90deg, rgba(212, 175, 55, 0.15) 2px, transparent 2px),
+            radial-gradient(circle at 50% 20%, #f8f8f8 0%, #ffffff 100%);
+        background-size: 80px 80px, 80px 80px, 100% 100%;
+        background-attachment: fixed;
+        color: #1e1e1e; 
     }
 
     .math-header {
@@ -36,7 +38,7 @@ st.markdown("""
         border-bottom: 3px solid #D4AF37;
         margin-bottom: 40px;
         border-radius: 0 0 30px 30px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+        box-shadow: 0 10px 50px rgba(0,0,0,0.1);
         position: relative;
         overflow: hidden;
     }
@@ -53,7 +55,7 @@ st.markdown("""
         padding: 10px 20px;
         border-radius: 50% 0% 50% 0%;
         background: rgba(212, 175, 55, 0.05);
-        box-shadow: 0 0 15px rgba(212, 175, 55, 0.2);
+        box-shadow: 0 0 15px rgba(212, 175, 55, 0.3);
     }
 
     h1 { 
@@ -61,18 +63,18 @@ st.markdown("""
         color: #8E6E13 !important; 
         font-size: 3.2rem !important;
         margin: 10px 0 !important;
-        text-shadow: 0 0 5px rgba(212, 175, 55, 0.3);
+        text-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
         letter-spacing: 2px;
     }
 
     .glass-card { 
-        background: rgba(255, 255, 255, 0.95); 
+        background: rgba(245, 245, 245, 0.95); 
         border-radius: 15px; 
         padding: 25px; 
-        border: 1px solid rgba(212, 175, 55, 0.4); 
+        border: 1px solid rgba(212, 175, 55, 0.5); 
         backdrop-filter: blur(5px); 
         margin-bottom: 20px; 
-        box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+        box-shadow: 0 15px 40px rgba(0,0,0,0.1);
     }
 
     .stButton>button { 
@@ -81,7 +83,7 @@ st.markdown("""
         width: 100%; border: none !important; height: 55px; font-size: 1.1rem;
         transition: 0.4s;
     }
-    .stButton>button:hover { transform: scale(1.02); box-shadow: 0 0 25px rgba(212, 175, 55, 0.5); }
+    .stButton>button:hover { transform: scale(1.02); box-shadow: 0 0 25px rgba(212, 175, 55, 0.4); }
 
     .stDownloadButton>button {
         background: linear-gradient(135deg, #B8860B 0%, #FFD700 50%, #B8860B 100%) !important;
@@ -90,7 +92,7 @@ st.markdown("""
         border: 1px solid #D4AF37 !important;
     }
 
-    [data-testid="stSidebar"] { background-color: #FFFFFF; border-right: 1px solid #D4AF37; }
+    [data-testid="stSidebar"] { background-color: #fafafa; border-right: 1px solid #D4AF37; }
     
     [data-testid="stSidebar"] h3 {
         color: #8E6E13 !important;
@@ -101,7 +103,7 @@ st.markdown("""
     .status-badge { 
         background: rgba(212, 175, 55, 0.15); 
         border: 1px solid #D4AF37; 
-        color: #5C4300; 
+        color: #5a4a0e; 
         padding: 12px; 
         border-radius: 8px; 
         text-align: center;
@@ -109,15 +111,11 @@ st.markdown("""
         font-weight: 500;
     }
     
-    /* Ajustes para tablas y textos en tema claro */
-    .stDataFrame, .stTable {
-        background-color: white;
-    }
-    .css-1d391kg, .stMarkdown, p, div, span {
-        color: #1E1E1E;
+    .stMarkdown, .stTable, .stDataFrame {
+        color: #1e1e1e;
     }
     .stSelectbox label, .stSlider label {
-        color: #1E1E1E;
+        color: #1e1e1e !important;
     }
 </style>
 
@@ -125,7 +123,7 @@ st.markdown("""
     <div class="abstract-icon">Δx</div>
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
-        <p style="color: #5C5C5C; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
+        <p style="color: #444; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
             UPRM MATHEMATICAL OPTIMIZATION ENGINE v13 (EVOLUTIVO + INTENSIVOS + GRANDES + BLOQUEOS + DOBLE ROL)
         </p>
     </div>
@@ -398,7 +396,7 @@ class TabuScheduler:
                 if nombre in self.profesores:
                     self.graduados[nombre] = set(cursos)
 
-        # 4. Cursos y secciones (con redistribución inteligente de sobrantes)
+        # 4. Cursos y secciones (con soporte para lista de cupos)
         self.secciones = []
         df_cursos.columns = [c.strip().upper() for c in df_cursos.columns]
         cursos_agrupados = {}
@@ -428,40 +426,13 @@ class TabuScheduler:
                 if demanda <= 0:
                     self.secciones.append(Seccion(f"{cod_base}-01", creditos, cupo, candidatos_raw, tipo_salon))
                 else:
-                    # --- NUEVA LÓGICA DE REDISTRIBUCIÓN DE SOBRANTES ---
-                    secciones_completas = demanda // cupo
-                    resto = demanda % cupo
-                    
-                    # Umbral: si el resto es menor o igual al 30% del cupo, evitamos sección extra y repartimos
-                    umbral = max(1, int(cupo * 0.3))
-                    
-                    if resto == 0:
-                        # Caso exacto: todas las secciones con cupo completo
-                        num_secciones = secciones_completas
-                        for i in range(num_secciones):
-                            self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", creditos, cupo, candidatos_raw, tipo_salon))
-                    elif secciones_completas == 0:
-                        # Demanda menor que un cupo: una sola sección con la demanda real
-                        self.secciones.append(Seccion(f"{cod_base}-01", creditos, demanda, candidatos_raw, tipo_salon))
-                    elif resto <= umbral:
-                        # Repartir el resto entre las secciones completas (no abrimos sección extra)
-                        num_secciones = secciones_completas
-                        base = cupo
-                        extra_por_seccion = resto // num_secciones
-                        extra_resto = resto % num_secciones
-                        for i in range(num_secciones):
-                            capacidad_final = base + extra_por_seccion + (1 if i < extra_resto else 0)
-                            self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", creditos, capacidad_final, candidatos_raw, tipo_salon))
-                    else:
-                        # Resto grande: se abre una sección adicional con el resto
-                        num_secciones = secciones_completas + 1
-                        for i in range(num_secciones):
-                            if i == num_secciones - 1:
-                                cap_final = resto
-                            else:
-                                cap_final = cupo
-                            self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", creditos, cap_final, candidatos_raw, tipo_salon))
-                    # ----------------------------------------------------
+                    num_secciones = math.ceil(demanda / cupo)
+                    for i in range(num_secciones):
+                        cap_final = cupo
+                        if i == num_secciones-1:
+                            cap_final = demanda - cupo*(num_secciones-1)
+                            if cap_final < 0: cap_final = cupo
+                        self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", creditos, cap_final, candidatos_raw, tipo_salon))
 
         # Preasignación robusta de profesores
         self._preasignar_profesores_robusto()
@@ -674,9 +645,7 @@ class TabuScheduler:
                     occ_salon[clave_s] = []
                 for (ini_ex, fin_ex, cupo_ex, fus_ex) in occ_salon[clave_s]:
                     if max(ini, ini_ex) < min(fin, fin_ex):
-                        # FIX: evitar error cuando salon_info es None
-                        cap_salon = salon_info['CAPACIDAD'] if salon_info else 0
-                        if salon in self.mega_salones and s.es_fusionable and fus_ex and s.cupo + cupo_ex <= cap_salon:
+                        if salon in self.mega_salones and s.es_fusionable and fus_ex and s.cupo + cupo_ex <= salon_info['CAPACIDAD']:
                             continue
                         conflicts += 10000
                 occ_salon[clave_s].append((ini, fin, s.cupo, s.es_fusionable))
@@ -739,6 +708,7 @@ class TabuScheduler:
 
     # --------------------------------------------------------------------------
     # Métodos auxiliares para conflictos, construcción, etc.
+    # (se mantienen igual que en la versión original, pero con normalización)
     # --------------------------------------------------------------------------
     def _obtener_conflictos(self, sol):
         conflictos_list = []
@@ -804,9 +774,7 @@ class TabuScheduler:
                 if clave_s in occ_salon:
                     for (ini_ex, fin_ex, cupo_ex, fus_ex) in occ_salon[clave_s]:
                         if max(ini, ini_ex) < min(fin, fin_ex):
-                            # FIX: evitar error cuando salon_info es None
-                            cap_salon = salon_info['CAPACIDAD'] if salon_info else 0
-                            if not (salon in self.mega_salones and s.es_fusionable and fus_ex and s.cupo + cupo_ex <= cap_salon):
+                            if not (salon in self.mega_salones and s.es_fusionable and fus_ex and s.cupo + cupo_ex <= salon_info['CAPACIDAD']):
                                 conflictos_list.append(f"Cruce de salón {salon} el {dia}")
                 occ_salon.setdefault(clave_s, []).append((ini, fin, s.cupo, s.es_fusionable))
 
@@ -1075,11 +1043,20 @@ class TabuScheduler:
                 if clave_s in occ_salon:
                     for (ini_ex, fin_ex, cupo_ex, fus_ex) in occ_salon[clave_s]:
                         if max(ini, ini_ex) < min(fin, fin_ex):
-                            # FIX: evitar error cuando salon_info es None
-                            cap_salon = salon_info['CAPACIDAD'] if salon_info else 0
-                            if not (salon in self.mega_salones and s.es_fusionable and fus_ex and s.cupo + cupo_ex <= cap_salon):
+                            if not (salon in self.mega_salones and s.es_fusionable and fus_ex and s.cupo + cupo_ex <= salon_info['CAPACIDAD']):
                                 conflictos.append(idx)
                 occ_salon.setdefault(clave_s, []).append((ini, fin, s.cupo, s.es_fusionable))
+            if prof in self.graduados:
+                cursos_recibidos = self.graduados[prof]
+                for j, otro in enumerate(sol):
+                    if j != idx and otro['seccion'].cod.split('-')[0] in cursos_recibidos:
+                        for dia, contrib in patron['days'].items():
+                            for dia2, contrib2 in otro['patron']['days'].items():
+                                if dia == dia2:
+                                    fin_actual = ini + int(contrib * 50)
+                                    fin_otro = otro['ini'] + int(contrib2 * 50)
+                                    if max(ini, otro['ini']) < min(fin_actual, fin_otro):
+                                        conflictos.append(idx)
         return list(set(conflictos))
 
     # --------------------------------------------------------------------------
@@ -1267,8 +1244,10 @@ def generar_heatmap_ocupacion(scheduler, solucion):
     inicio = scheduler.limite_operativo[0]
     fin = scheduler.limite_operativo[1]
     horas_del_dia = list(range(inicio, fin + 1, 30))
-    matriz = np.zeros((len(dias_semana), len(horas_del_dia)))
+    # Matriz ahora con filas = horas, columnas = días
+    matriz = np.zeros((len(horas_del_dia), len(dias_semana)))
     total_salones = len(scheduler.salones)
+    
     for asign in solucion:
         salon = asign['salon']
         if salon == "TBA":
@@ -1283,31 +1262,40 @@ def generar_heatmap_ocupacion(scheduler, solucion):
             for minuto in range(ini, ini + duracion, 30):
                 if minuto in horas_del_dia:
                     hora_idx = horas_del_dia.index(minuto)
-                    matriz[dia_idx, hora_idx] += 1
+                    matriz[hora_idx, dia_idx] += 1
+    
     if total_salones > 0:
         matriz_porcentaje = (matriz / total_salones) * 100
     else:
         matriz_porcentaje = matriz
+    
     fig, ax = plt.subplots(figsize=(14, 6))
     im = ax.imshow(matriz_porcentaje, cmap='YlOrRd', aspect='auto', vmin=0, vmax=100)
-    ax.set_xticks(range(len(horas_del_dia)))
+    
+    # Configurar eje X (días)
+    ax.set_xticks(range(len(dias_semana)))
+    ax.set_xticklabels(dias_semana, rotation=0, ha='center', color='white')
+    
+    # Configurar eje Y (horas)
+    step = max(1, len(horas_del_dia) // 12)
+    ax.set_yticks(range(0, len(horas_del_dia), step))
     etiquetas_horas = [mins_to_str(h).replace(' AM', '').replace(' PM', '') for h in horas_del_dia]
-    step = max(1, len(etiquetas_horas) // 12)
-    ax.set_xticks(range(0, len(horas_del_dia), step))
-    ax.set_xticklabels(etiquetas_horas[::step], rotation=45, ha='right', color='black')
-    ax.set_yticks(range(len(dias_semana)))
-    ax.set_yticklabels(dias_semana, color='black')
+    ax.set_yticklabels(etiquetas_horas[::step], color='white')
+    
     cbar = plt.colorbar(im, ax=ax, label='% Ocupación')
-    cbar.ax.yaxis.label.set_color('black')
-    cbar.ax.tick_params(colors='black')
-    ax.set_title('Ocupación de Salones por Franja Horaria', color='black', pad=20)
-    ax.set_xlabel('Hora de Inicio', color='black')
-    ax.set_ylabel('Día', color='black')
-    fig.patch.set_facecolor('#F8F9FA')
-    ax.set_facecolor('#F0F0F0')
-    ax.tick_params(colors='black')
+    cbar.ax.yaxis.label.set_color('white')
+    cbar.ax.tick_params(colors='white')
+    
+    ax.set_title('Ocupación de Salones por Franja Horaria', color='white', pad=20)
+    ax.set_xlabel('Día', color='white')
+    ax.set_ylabel('Hora de Inicio', color='white')
+    
+    fig.patch.set_facecolor('#0F0F0F')
+    ax.set_facecolor('#1A1A1A')
+    ax.tick_params(colors='white')
     for spine in ax.spines.values():
         spine.set_edgecolor('#D4AF37')
+    
     plt.tight_layout()
     return fig
 
@@ -1434,12 +1422,7 @@ def main():
                         'Horario': format_horario(a['patron'], a['ini']),
                         'Salón': a['salon']
                     } for a in mejor_sol])
-                    
-                    # Protección adicional para evitar error en la generación de conflictos
-                    try:
-                        st.session_state.detailed_conflicts = scheduler._obtener_conflictos(mejor_sol)
-                    except Exception as e:
-                        st.session_state.detailed_conflicts = [f"Error al generar lista de conflictos: {str(e)}"]
+                    st.session_state.detailed_conflicts = scheduler._obtener_conflictos(mejor_sol)
 
             except Exception as e:
                 st.error(f"Error durante la optimización: {e}")
@@ -1481,11 +1464,8 @@ def main():
             conflictos = st.session_state.conflicts
             if conflictos > 0:
                 st.error(f"⚠️ Aún persisten {conflictos} conflictos. Son choques de salón, horas o restricciones fuertes.")
-                if 'detailed_conflicts' in st.session_state and st.session_state.detailed_conflicts:
-                    for conf in st.session_state.detailed_conflicts:
-                        st.write(f"- {conf}")
-                else:
-                    st.write("No se pudo generar la lista detallada de conflictos.")
+                for conf in st.session_state.detailed_conflicts:
+                    st.write(f"- {conf}")
             else:
                 st.success("✅ 100% Asignación Perfecta. Cero Conflictos. Se balancearon las cargas y se respetaron los espacios y preferencias.")
 
@@ -1494,12 +1474,12 @@ def main():
             fitness_history = [10000 / (10000 + costo) for costo in st.session_state.historial]
             fig1, ax1 = plt.subplots(figsize=(10, 4))
             ax1.plot(fitness_history, color='#D4AF37', linewidth=2.5)
-            ax1.set_title("Crecimiento de Fitness Evolutivo", color='black', pad=15)
-            ax1.set_xlabel("Iteraciones", color='black')
-            ax1.set_ylabel("Fitness (1.0 = Ideal)", color='black')
-            fig1.patch.set_facecolor('#F8F9FA')
-            ax1.set_facecolor('#F0F0F0')
-            ax1.tick_params(colors='black')
+            ax1.set_title("Crecimiento de Fitness Evolutivo", color='white', pad=15)
+            ax1.set_xlabel("Iteraciones", color='white')
+            ax1.set_ylabel("Fitness (1.0 = Ideal)", color='white')
+            fig1.patch.set_facecolor('#0F0F0F')
+            ax1.set_facecolor('#1A1A1A')
+            ax1.tick_params(colors='white')
             for spine in ax1.spines.values(): spine.set_edgecolor('#D4AF37')
             st.pyplot(fig1)
 
@@ -1510,10 +1490,10 @@ def main():
             fig2, ax2 = plt.subplots(figsize=(12, 6))
             ax2.bar(cargas_df['Profesor'], cargas_df['Créditos Reales'], color='#8E6E13')
             ax2.axhline(y=12, color='#FF4B4B', linestyle='--', linewidth=2, label='Carga Estándar Típica (12 cr)')
-            ax2.set_xticklabels(cargas_df['Profesor'], rotation=45, ha='right', color='black')
-            ax2.tick_params(colors='black')
-            fig2.patch.set_facecolor('#F8F9FA')
-            ax2.set_facecolor('#F0F0F0')
+            ax2.set_xticklabels(cargas_df['Profesor'], rotation=45, ha='right', color='white')
+            ax2.tick_params(colors='white')
+            fig2.patch.set_facecolor('#0F0F0F')
+            ax2.set_facecolor('#1A1A1A')
             for spine in ax2.spines.values(): spine.set_edgecolor('#D4AF37')
             ax2.legend()
             st.pyplot(fig2)
