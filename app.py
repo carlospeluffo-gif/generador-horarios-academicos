@@ -10,7 +10,7 @@ from copy import deepcopy
 import unicodedata
 
 # ==============================================================================
-# 1. ESTÉTICA (FONDO BLANCO, TEXTOS OSCUROS)
+# 1. ESTÉTICA (original, fondo oscuro)
 # ==============================================================================
 st.set_page_config(page_title="UPRM Scheduler Platinum AI v13", page_icon="🏛️", layout="wide")
 
@@ -19,14 +19,14 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Source+Code+Pro:wght@300;500&display=swap');
     
     .stApp { 
-        background-color: #ffffff;
+        background-color: #050505;
         background-image: 
-            linear-gradient(rgba(212, 175, 55, 0.15) 2px, transparent 2px),
-            linear-gradient(90deg, rgba(212, 175, 55, 0.15) 2px, transparent 2px),
-            radial-gradient(circle at 50% 20%, #f8f8f8 0%, #ffffff 100%);
+            linear-gradient(rgba(212, 175, 55, 0.1) 2px, transparent 2px),
+            linear-gradient(90deg, rgba(212, 175, 55, 0.1) 2px, transparent 2px),
+            radial-gradient(circle at 50% 20%, #1a1a1a 0%, #000000 100%);
         background-size: 80px 80px, 80px 80px, 100% 100%;
         background-attachment: fixed;
-        color: #1e1e1e; 
+        color: #e0e0e0; 
     }
 
     .math-header {
@@ -34,17 +34,17 @@ st.markdown("""
         justify-content: space-between;
         align-items: center;
         padding: 30px 60px;
-        background: rgba(255, 255, 255, 0.95);
+        background: rgba(0, 0, 0, 0.85);
         border-bottom: 3px solid #D4AF37;
         margin-bottom: 40px;
         border-radius: 0 0 30px 30px;
-        box-shadow: 0 10px 50px rgba(0,0,0,0.1);
+        box-shadow: 0 10px 50px rgba(212, 175, 55, 0.15);
         position: relative;
         overflow: hidden;
     }
 
-    .math-header::before { content: '∑'; position: absolute; left: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.1); font-family: serif; }
-    .math-header::after { content: '∫'; position: absolute; right: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.1); font-family: serif; }
+    .math-header::before { content: '∑'; position: absolute; left: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.05); font-family: serif; }
+    .math-header::after { content: '∫'; position: absolute; right: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.05); font-family: serif; }
 
     .title-box { text-align: center; z-index: 2; }
 
@@ -60,21 +60,21 @@ st.markdown("""
 
     h1 { 
         font-family: 'Playfair Display', serif !important; 
-        color: #8E6E13 !important; 
+        color: #D4AF37 !important; 
         font-size: 3.2rem !important;
         margin: 10px 0 !important;
-        text-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
+        text-shadow: 0 0 20px rgba(212, 175, 55, 0.5);
         letter-spacing: 2px;
     }
 
     .glass-card { 
-        background: rgba(245, 245, 245, 0.95); 
+        background: rgba(15, 15, 15, 0.9); 
         border-radius: 15px; 
         padding: 25px; 
-        border: 1px solid rgba(212, 175, 55, 0.5); 
-        backdrop-filter: blur(5px); 
+        border: 1px solid rgba(212, 175, 55, 0.25); 
+        backdrop-filter: blur(15px); 
         margin-bottom: 20px; 
-        box-shadow: 0 15px 40px rgba(0,0,0,0.1);
+        box-shadow: 0 15px 40px rgba(0,0,0,0.8);
     }
 
     .stButton>button { 
@@ -92,30 +92,23 @@ st.markdown("""
         border: 1px solid #D4AF37 !important;
     }
 
-    [data-testid="stSidebar"] { background-color: #fafafa; border-right: 1px solid #D4AF37; }
+    [data-testid="stSidebar"] { background-color: #050505; border-right: 1px solid #D4AF37; }
     
     [data-testid="stSidebar"] h3 {
-        color: #8E6E13 !important;
-        text-shadow: 0 0 5px rgba(212, 175, 55, 0.3);
+        color: #D4AF37 !important;
+        text-shadow: 0 0 10px rgba(212, 175, 55, 0.4);
         font-family: 'Playfair Display', serif;
     }
 
     .status-badge { 
-        background: rgba(212, 175, 55, 0.15); 
+        background: rgba(212, 175, 55, 0.1); 
         border: 1px solid #D4AF37; 
-        color: #5a4a0e; 
+        color: #D4AF37; 
         padding: 12px; 
         border-radius: 8px; 
         text-align: center;
         font-family: 'Source Code Pro', monospace;
         font-weight: 500;
-    }
-    
-    .stMarkdown, .stTable, .stDataFrame {
-        color: #1e1e1e;
-    }
-    .stSelectbox label, .stSlider label {
-        color: #1e1e1e !important;
     }
 </style>
 
@@ -123,7 +116,7 @@ st.markdown("""
     <div class="abstract-icon">Δx</div>
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
-        <p style="color: #444; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
+        <p style="color: #888; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
             UPRM MATHEMATICAL OPTIMIZATION ENGINE v13 (EVOLUTIVO + INTENSIVOS + GRANDES + BLOQUEOS + DOBLE ROL)
         </p>
     </div>
@@ -1244,10 +1237,8 @@ def generar_heatmap_ocupacion(scheduler, solucion):
     inicio = scheduler.limite_operativo[0]
     fin = scheduler.limite_operativo[1]
     horas_del_dia = list(range(inicio, fin + 1, 30))
-    # Matriz ahora con filas = horas, columnas = días
-    matriz = np.zeros((len(horas_del_dia), len(dias_semana)))
+    matriz = np.zeros((len(dias_semana), len(horas_del_dia)))
     total_salones = len(scheduler.salones)
-    
     for asign in solucion:
         salon = asign['salon']
         if salon == "TBA":
@@ -1262,40 +1253,31 @@ def generar_heatmap_ocupacion(scheduler, solucion):
             for minuto in range(ini, ini + duracion, 30):
                 if minuto in horas_del_dia:
                     hora_idx = horas_del_dia.index(minuto)
-                    matriz[hora_idx, dia_idx] += 1
-    
+                    matriz[dia_idx, hora_idx] += 1
     if total_salones > 0:
         matriz_porcentaje = (matriz / total_salones) * 100
     else:
         matriz_porcentaje = matriz
-    
     fig, ax = plt.subplots(figsize=(14, 6))
     im = ax.imshow(matriz_porcentaje, cmap='YlOrRd', aspect='auto', vmin=0, vmax=100)
-    
-    # Configurar eje X (días)
-    ax.set_xticks(range(len(dias_semana)))
-    ax.set_xticklabels(dias_semana, rotation=0, ha='center', color='black')
-    
-    # Configurar eje Y (horas)
-    step = max(1, len(horas_del_dia) // 12)
-    ax.set_yticks(range(0, len(horas_del_dia), step))
+    ax.set_xticks(range(len(horas_del_dia)))
     etiquetas_horas = [mins_to_str(h).replace(' AM', '').replace(' PM', '') for h in horas_del_dia]
-    ax.set_yticklabels(etiquetas_horas[::step], color='black')
-    
+    step = max(1, len(etiquetas_horas) // 12)
+    ax.set_xticks(range(0, len(horas_del_dia), step))
+    ax.set_xticklabels(etiquetas_horas[::step], rotation=45, ha='right', color='white')
+    ax.set_yticks(range(len(dias_semana)))
+    ax.set_yticklabels(dias_semana, color='white')
     cbar = plt.colorbar(im, ax=ax, label='% Ocupación')
-    cbar.ax.yaxis.label.set_color('black')
-    cbar.ax.tick_params(colors='black')
-    
-    ax.set_title('Ocupación de Salones por Franja Horaria', color='black', pad=20)
-    ax.set_xlabel('Día', color='black')
-    ax.set_ylabel('Hora de Inicio', color='black')
-    
-    fig.patch.set_facecolor('white')
-    ax.set_facecolor('#F8F8F8')
-    ax.tick_params(colors='black')
+    cbar.ax.yaxis.label.set_color('white')
+    cbar.ax.tick_params(colors='white')
+    ax.set_title('Ocupación de Salones por Franja Horaria', color='white', pad=20)
+    ax.set_xlabel('Hora de Inicio', color='white')
+    ax.set_ylabel('Día', color='white')
+    fig.patch.set_facecolor('#0F0F0F')
+    ax.set_facecolor('#1A1A1A')
+    ax.tick_params(colors='white')
     for spine in ax.spines.values():
         spine.set_edgecolor('#D4AF37')
-    
     plt.tight_layout()
     return fig
 
@@ -1474,12 +1456,12 @@ def main():
             fitness_history = [10000 / (10000 + costo) for costo in st.session_state.historial]
             fig1, ax1 = plt.subplots(figsize=(10, 4))
             ax1.plot(fitness_history, color='#D4AF37', linewidth=2.5)
-            ax1.set_title("Crecimiento de Fitness Evolutivo", color='black', pad=15)
-            ax1.set_xlabel("Iteraciones", color='black')
-            ax1.set_ylabel("Fitness (1.0 = Ideal)", color='black')
-            fig1.patch.set_facecolor('#F8F8F8')
-            ax1.set_facecolor('#F8F8F8')
-            ax1.tick_params(colors='black')
+            ax1.set_title("Crecimiento de Fitness Evolutivo", color='white', pad=15)
+            ax1.set_xlabel("Iteraciones", color='white')
+            ax1.set_ylabel("Fitness (1.0 = Ideal)", color='white')
+            fig1.patch.set_facecolor('#0F0F0F')
+            ax1.set_facecolor('#1A1A1A')
+            ax1.tick_params(colors='white')
             for spine in ax1.spines.values(): spine.set_edgecolor('#D4AF37')
             st.pyplot(fig1)
 
@@ -1490,10 +1472,10 @@ def main():
             fig2, ax2 = plt.subplots(figsize=(12, 6))
             ax2.bar(cargas_df['Profesor'], cargas_df['Créditos Reales'], color='#8E6E13')
             ax2.axhline(y=12, color='#FF4B4B', linestyle='--', linewidth=2, label='Carga Estándar Típica (12 cr)')
-            ax2.set_xticklabels(cargas_df['Profesor'], rotation=45, ha='right', color='black')
-            ax2.tick_params(colors='black')
-            fig2.patch.set_facecolor('#F8F8F8')
-            ax2.set_facecolor('#F8F8F8')
+            ax2.set_xticklabels(cargas_df['Profesor'], rotation=45, ha='right', color='white')
+            ax2.tick_params(colors='white')
+            fig2.patch.set_facecolor('#0F0F0F')
+            ax2.set_facecolor('#1A1A1A')
             for spine in ax2.spines.values(): spine.set_edgecolor('#D4AF37')
             ax2.legend()
             st.pyplot(fig2)
