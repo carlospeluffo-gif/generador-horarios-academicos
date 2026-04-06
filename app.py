@@ -1172,7 +1172,6 @@ def generar_heatmap_ocupacion(scheduler, solucion):
     inicio = scheduler.limite_operativo[0]
     fin = scheduler.limite_operativo[1]
     horas = list(range(inicio, fin + 1, 30))
-    # Matriz original: filas=días, columnas=horas
     matriz_original = np.zeros((len(dias_semana), len(horas)))
     total_salones = len(scheduler.salones)
     for asign in solucion:
@@ -1195,19 +1194,16 @@ def generar_heatmap_ocupacion(scheduler, solucion):
     else:
         matriz_porcentaje = matriz_original
 
-    # Invertir ejes: queremos X = días, Y = horas
-    matriz_transpuesta = matriz_porcentaje.T  # ahora filas=horas, columnas=días
-
-    # Crear etiquetas para horas (y-axis)
-    etiquetas_horas = [mins_to_str(h).replace(' AM', '').replace(' PM', '') for h in horas]
+    # INVERTIR EJES: X = días, Y = horas
+    matriz_correcta = matriz_porcentaje.T  # ahora filas = horas, columnas = días
 
     fig, ax = plt.subplots(figsize=(10, 8))
-    im = ax.imshow(matriz_transpuesta, cmap='YlOrRd', aspect='auto', vmin=0, vmax=100)
+    im = ax.imshow(matriz_correcta, cmap='YlOrRd', aspect='auto', vmin=0, vmax=100)
 
     ax.set_xticks(range(len(dias_semana)))
     ax.set_xticklabels(dias_semana, color='#2c2c2c')
     ax.set_yticks(range(len(horas)))
-    ax.set_yticklabels(etiquetas_horas, color='#2c2c2c', fontsize=8)
+    ax.set_yticklabels([mins_to_str(h).replace(' AM', '').replace(' PM', '') for h in horas], color='#2c2c2c', fontsize=8)
 
     cbar = plt.colorbar(im, ax=ax, label='% Ocupación')
     cbar.ax.yaxis.label.set_color('#2c2c2c')
@@ -1258,11 +1254,15 @@ def render_calendar_view(df_master, filter_type, filter_value):
     if not records:
         st.info("No hay eventos para mostrar en el calendario.")
         return
+
     df_events = pd.DataFrame(records)
     try:
-        # Convertir a datetime para plotly
-        df_events['Inicio_dt'] = pd.to_datetime(df_events['Inicio'].astype(str))
-        df_events['Fin_dt'] = pd.to_datetime(df_events['Fin'].astype(str))
+        # Convertir a datetime usando una fecha ficticia para que plotly lo acepte
+        df_events['Inicio_str'] = df_events['Inicio'].apply(lambda x: f"1970-01-01 {x.strftime('%H:%M:%S')}")
+        df_events['Fin_str'] = df_events['Fin'].apply(lambda x: f"1970-01-01 {x.strftime('%H:%M:%S')}")
+        df_events['Inicio_dt'] = pd.to_datetime(df_events['Inicio_str'])
+        df_events['Fin_dt'] = pd.to_datetime(df_events['Fin_str'])
+
         fig = px.timeline(df_events, x_start='Inicio_dt', x_end='Fin_dt', y='Día', color='Curso',
                           title=f"Horario - {filter_type}: {filter_value}")
         fig.update_xaxis(tickformat="%H:%M", title="Hora")
@@ -1274,19 +1274,9 @@ def render_calendar_view(df_master, filter_type, filter_value):
 
 def generar_utilizacion_salones(scheduler, solucion):
     """Nuevo gráfico: Tasa de utilización de salones (porcentaje de franjas ocupadas)."""
-    # Definir franjas horarias cada 30 minutos en el rango operativo
-    inicio = scheduler.limite_operativo[0]
-    fin = scheduler.limite_operativo[1]
-    franjas = list(range(inicio, fin, 30))
-    total_franjas = len(franjas)
-    dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
-    total_espacios = len(dias_semana) * total_franjas
-
-    uso_salon = {}
-    for salon in scheduler.salones:
-        cod = salon['CODIGO']
-        uso_salon[cod] = set()
-
+    franjas = list(range(scheduler.limite_operativo[0], scheduler.limite_operativo[1], 30))
+    total_franjas = len(franjas) * 5  # 5 días
+    uso = {s['CODIGO']: 0 for s in scheduler.salones}
     for asign in solucion:
         salon = asign['salon']
         if salon == "TBA":
@@ -1294,24 +1284,14 @@ def generar_utilizacion_salones(scheduler, solucion):
         patron = asign['patron']
         ini = asign['ini']
         for dia, contrib in patron['days'].items():
-            if dia not in dias_semana:
-                continue
             duracion = int(contrib * 50)
-            for minuto in range(ini, ini + duracion, 30):
-                if minuto in franjas:
-                    idx_franja = franjas.index(minuto)
-                    idx_dia = dias_semana.index(dia)
-                    uso_salon[salon].add((idx_dia, idx_franja))
-
-    utilizacion = []
-    for salon in scheduler.salones:
-        cod = salon['CODIGO']
-        ocupados = len(uso_salon[cod])
-        pct = (ocupados / total_espacios) * 100 if total_espacios > 0 else 0
-        utilizacion.append({'Salón': cod, 'Utilización (%)': pct})
-    df_util = pd.DataFrame(utilizacion).sort_values('Utilización (%)', ascending=False)
+            for m in range(ini, ini + duracion, 30):
+                if m in franjas:
+                    uso[salon] += 1
+    df = pd.DataFrame([{'Salón': k, 'Utilización %': (v / total_franjas) * 100} for k, v in uso.items()])
+    df = df.sort_values('Utilización %', ascending=False)
     fig, ax = plt.subplots(figsize=(10, 6))
-    ax.bar(df_util['Salón'], df_util['Utilización (%)'], color='#D4AF37')
+    ax.bar(df['Salón'], df['Utilización %'], color='#D4AF37')
     ax.set_ylabel('Porcentaje de ocupación')
     ax.set_title('Tasa de Utilización de Salones', color='#2c2c2c')
     plt.xticks(rotation=45, ha='right')
@@ -1322,34 +1302,27 @@ def generar_utilizacion_salones(scheduler, solucion):
     plt.tight_layout()
     return fig
 
-def generar_distribucion_intensivos(solucion):
-    """Nuevo gráfico: Distribución de cursos intensivos vs regulares por profesor."""
-    prof_intensivos = {}
+def generar_distribucion_carga_por_profesor(solucion):
+    """Nuevo gráfico: Distribución de carga horaria (créditos reales) por profesor."""
+    cargas = {}
     for asign in solucion:
         prof = asign['profesor']
         if prof in ["TBA", "GRADUADOS"]:
             continue
-        patron = asign['patron']
-        es_intensivo = any(c >= 3 for c in patron['days'].values())
-        if prof not in prof_intensivos:
-            prof_intensivos[prof] = {'intensivos': 0, 'regulares': 0}
-        if es_intensivo:
-            prof_intensivos[prof]['intensivos'] += 1
-        else:
-            prof_intensivos[prof]['regulares'] += 1
-    if not prof_intensivos:
+        creditos = asign['seccion'].creditos  # o get_sec_creditos si está disponible
+        # Para mantener consistencia, usamos los créditos reales (con compensación)
+        # Como no tenemos acceso al scheduler aquí, usamos los créditos base, pero se puede mejorar.
+        # En la UI se usa la variable cargas_finales ya calculada, así que esta función es complementaria.
+        cargas[prof] = cargas.get(prof, 0) + creditos
+    if not cargas:
         return None
-    df = pd.DataFrame.from_dict(prof_intensivos, orient='index').reset_index()
-    df.columns = ['Profesor', 'Intensivos', 'Regulares']
-    df_melt = df.melt(id_vars='Profesor', value_vars=['Intensivos', 'Regulares'],
-                      var_name='Tipo', value_name='Cantidad')
+    df = pd.DataFrame(list(cargas.items()), columns=['Profesor', 'Créditos'])
+    df = df.sort_values('Créditos', ascending=False)
     fig, ax = plt.subplots(figsize=(12, 6))
-    for tipo in ['Intensivos', 'Regulares']:
-        subset = df_melt[df_melt['Tipo'] == tipo]
-        ax.bar(subset['Profesor'], subset['Cantidad'], label=tipo, alpha=0.7)
-    ax.set_xlabel('Profesor')
-    ax.set_ylabel('Número de secciones')
-    ax.set_title('Distribución de Cursos Intensivos vs Regulares por Profesor')
+    ax.bar(df['Profesor'], df['Créditos'], color='#D4AF37')
+    ax.axhline(y=12, color='#FF4B4B', linestyle='--', linewidth=2, label='Carga típica (12 cr)')
+    ax.set_ylabel('Créditos asignados')
+    ax.set_title('Distribución de Carga Horaria por Profesor')
     ax.legend()
     plt.xticks(rotation=45, ha='right')
     fig.patch.set_facecolor('#ffffff')
@@ -1471,7 +1444,6 @@ def main():
                 status_sa = st.empty()
 
                 # Volvemos a ejecutar el SA con los mismos parámetros pero usando la solución del AG como inicial
-                # Nota: engine.scheduler ya tiene la solución del AG, así que llamamos a optimizar directamente
                 mejor_sol, conflictos, historial = engine.scheduler.optimizar(
                     iteraciones=iterations_sa,
                     bar=bar_sa,
@@ -1525,14 +1497,14 @@ def main():
         # Mostrar métricas de ambas fases
         col_m1, col_m2, col_m3, col_m4 = st.columns(4)
         with col_m1:
-            st.metric("Fase 1 - Costo AG", f"{st.session_state.best_costo_ag:.0f}")
+            st.metric("💰 Costo AG (Fase 1)", f"{st.session_state.best_costo_ag:.0f}")
         with col_m2:
-            st.metric("Fase 2 - Costo Final", f"{engine.scheduler.mejor_costo:.0f}")
+            st.metric("🔥 Costo SA (Fase 2)", f"{engine.scheduler.mejor_costo:.0f}")
         with col_m3:
-            st.metric("Conflictos Duros", st.session_state.conflicts)
+            st.metric("⚠️ Conflictos Duros", st.session_state.conflicts)
         with col_m4:
-            st.metric("Soft Constraints Cumplidas", f"{st.session_state.final_soft_pct:.1f}%")
-        st.markdown(f"**Fitness Final:** {st.session_state.final_fitness:.5f}")
+            st.metric("✅ Soft Constraints", f"{st.session_state.final_soft_pct:.1f}%")
+        st.markdown(f"**🎯 Fitness Final:** {st.session_state.final_fitness:.5f}")
 
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
         t1, t2, t3, t4 = st.tabs(["💎 PANEL DE CONTROL", "🔍 VISTAS DETALLADAS", "🚨 AUDITORÍA DE CALIDAD", "📊 ANALÍTICAS AVANZADAS"])
@@ -1616,7 +1588,7 @@ def main():
             else:
                 st.warning("No hay datos suficientes para generar el heatmap.")
 
-            # Nuevas analíticas
+            # NUEVAS ANALÍTICAS
             st.markdown("---")
             st.markdown("### 🏫 Tasa de Utilización de Salones")
             if 'scheduler' in st.session_state and 'mejor_sol' in st.session_state:
@@ -1626,9 +1598,9 @@ def main():
                 st.warning("No hay datos suficientes para generar la utilización de salones.")
 
             st.markdown("---")
-            st.markdown("### 📊 Distribución de Cursos Intensivos vs Regulares")
+            st.markdown("### 📊 Distribución de Carga Horaria por Profesor (Detallada)")
             if 'mejor_sol' in st.session_state:
-                fig5 = generar_distribucion_intensivos(st.session_state.mejor_sol)
+                fig5 = generar_distribucion_carga_por_profesor(st.session_state.mejor_sol)
                 if fig5:
                     st.pyplot(fig5)
                 else:
