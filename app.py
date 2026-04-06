@@ -1102,6 +1102,9 @@ class GeneticTimetablingEngine:
     def run(self, progress_callback=None):
         poblacion = [self._crear_individuo() for _ in range(self.pop_size)]
         fitnesses = [self._fitness(ind)[0] for ind in poblacion]
+        best_fitness_overall = max(fitnesses)
+        best_costo_overall = None
+        best_sol_overall = None
         for gen in range(self.generations):
             elite_count = max(1, int(self.pop_size * self.elite_ratio))
             sorted_idx = np.argsort(fitnesses)[::-1]
@@ -1121,11 +1124,15 @@ class GeneticTimetablingEngine:
             fitnesses = [self._fitness(ind)[0] for ind in poblacion]
             best_idx = np.argmax(fitnesses)
             best_fitness = fitnesses[best_idx]
+            if best_fitness > best_fitness_overall:
+                best_fitness_overall = best_fitness
+                _, best_costo_overall, best_sol_overall = self._fitness(poblacion[best_idx])
             if progress_callback:
                 progress_callback(gen, best_fitness)
-        best_idx = np.argmax(fitnesses)
-        best_fitness, best_costo, best_sol = self._fitness(poblacion[best_idx])
-        return poblacion[best_idx], best_sol, best_costo
+        if best_sol_overall is None:
+            best_idx = np.argmax(fitnesses)
+            _, best_costo_overall, best_sol_overall = self._fitness(poblacion[best_idx])
+        return best_sol_overall, best_costo_overall
 
 # ==============================================================================
 # 7. CONTROLADOR HÍBRIDO (FASE 1 + FASE 2) - CORREGIDO
@@ -1148,24 +1155,25 @@ class HybridTimetablingEngine:
             p_cross=self.p_cross,
             p_mut=self.p_mut
         )
-        best_individual, best_sol_ag, best_costo_ag = ag_engine.run(progress_callback)
+        best_sol_ag, best_costo_ag = ag_engine.run(progress_callback)
         self.scheduler.solucion = best_sol_ag
         self.scheduler.mejor_solucion = deepcopy(best_sol_ag)
         self.scheduler.mejor_costo = best_costo_ag
         mejor_sol_final, conflictos_final, historial = self.scheduler.optimizar(
             iteraciones=iterations_sa, bar=bar, status_text=status_text
         )
-        return mejor_sol_final, conflictos_final, historial
+        return mejor_sol_final, conflictos_final, historial, best_costo_ag
 
 # ==============================================================================
-# 8. FUNCIONES DE VISUALIZACIÓN (CORREGIDAS)
+# 8. FUNCIONES DE VISUALIZACIÓN (CORREGIDAS Y MEJORADAS)
 # ==============================================================================
 def generar_heatmap_ocupacion(scheduler, solucion):
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
     inicio = scheduler.limite_operativo[0]
     fin = scheduler.limite_operativo[1]
     horas = list(range(inicio, fin + 1, 30))
-    matriz = np.zeros((len(dias_semana), len(horas)))
+    # Matriz original: filas=días, columnas=horas
+    matriz_original = np.zeros((len(dias_semana), len(horas)))
     total_salones = len(scheduler.salones)
     for asign in solucion:
         salon = asign['salon']
@@ -1181,23 +1189,32 @@ def generar_heatmap_ocupacion(scheduler, solucion):
             for minuto in range(ini, ini + duracion, 30):
                 if minuto in horas:
                     hora_idx = horas.index(minuto)
-                    matriz[dia_idx, hora_idx] += 1
+                    matriz_original[dia_idx, hora_idx] += 1
     if total_salones > 0:
-        matriz_porcentaje = (matriz / total_salones) * 100
+        matriz_porcentaje = (matriz_original / total_salones) * 100
     else:
-        matriz_porcentaje = matriz
-    fig, ax = plt.subplots(figsize=(12, 6))
-    im = ax.imshow(matriz_porcentaje, cmap='YlOrRd', aspect='auto', vmin=0, vmax=100)
-    ax.set_xticks(range(0, len(horas), max(1, len(horas)//12)))
-    ax.set_xticklabels([mins_to_str(h).replace(' AM', '').replace(' PM', '') for h in horas[::max(1, len(horas)//12)]], rotation=45, ha='right', color='#2c2c2c')
-    ax.set_yticks(range(len(dias_semana)))
-    ax.set_yticklabels(dias_semana, color='#2c2c2c')
+        matriz_porcentaje = matriz_original
+
+    # Invertir ejes: queremos X = días, Y = horas
+    matriz_transpuesta = matriz_porcentaje.T  # ahora filas=horas, columnas=días
+
+    # Crear etiquetas para horas (y-axis)
+    etiquetas_horas = [mins_to_str(h).replace(' AM', '').replace(' PM', '') for h in horas]
+
+    fig, ax = plt.subplots(figsize=(10, 8))
+    im = ax.imshow(matriz_transpuesta, cmap='YlOrRd', aspect='auto', vmin=0, vmax=100)
+
+    ax.set_xticks(range(len(dias_semana)))
+    ax.set_xticklabels(dias_semana, color='#2c2c2c')
+    ax.set_yticks(range(len(horas)))
+    ax.set_yticklabels(etiquetas_horas, color='#2c2c2c', fontsize=8)
+
     cbar = plt.colorbar(im, ax=ax, label='% Ocupación')
     cbar.ax.yaxis.label.set_color('#2c2c2c')
     cbar.ax.tick_params(colors='#2c2c2c')
     ax.set_title('Ocupación de Salones por Franja Horaria', color='#2c2c2c', pad=20)
-    ax.set_xlabel('Hora de Inicio', color='#2c2c2c')
-    ax.set_ylabel('Día', color='#2c2c2c')
+    ax.set_xlabel('Día', color='#2c2c2c')
+    ax.set_ylabel('Hora de Inicio', color='#2c2c2c')
     fig.patch.set_facecolor('#ffffff')
     ax.set_facecolor('#f0f0f0')
     ax.tick_params(colors='#2c2c2c')
@@ -1254,6 +1271,93 @@ def render_calendar_view(df_master, filter_type, filter_value):
     except Exception as e:
         st.warning(f"No se pudo generar el gráfico. Mostrando tabla en su lugar. Error: {e}")
         st.dataframe(df_events[['Día', 'Inicio', 'Fin', 'Curso', 'Salón']])
+
+def generar_utilizacion_salones(scheduler, solucion):
+    """Nuevo gráfico: Tasa de utilización de salones (porcentaje de franjas ocupadas)."""
+    # Definir franjas horarias cada 30 minutos en el rango operativo
+    inicio = scheduler.limite_operativo[0]
+    fin = scheduler.limite_operativo[1]
+    franjas = list(range(inicio, fin, 30))
+    total_franjas = len(franjas)
+    dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
+    total_espacios = len(dias_semana) * total_franjas
+
+    uso_salon = {}
+    for salon in scheduler.salones:
+        cod = salon['CODIGO']
+        uso_salon[cod] = set()
+
+    for asign in solucion:
+        salon = asign['salon']
+        if salon == "TBA":
+            continue
+        patron = asign['patron']
+        ini = asign['ini']
+        for dia, contrib in patron['days'].items():
+            if dia not in dias_semana:
+                continue
+            duracion = int(contrib * 50)
+            for minuto in range(ini, ini + duracion, 30):
+                if minuto in franjas:
+                    idx_franja = franjas.index(minuto)
+                    idx_dia = dias_semana.index(dia)
+                    uso_salon[salon].add((idx_dia, idx_franja))
+
+    utilizacion = []
+    for salon in scheduler.salones:
+        cod = salon['CODIGO']
+        ocupados = len(uso_salon[cod])
+        pct = (ocupados / total_espacios) * 100 if total_espacios > 0 else 0
+        utilizacion.append({'Salón': cod, 'Utilización (%)': pct})
+    df_util = pd.DataFrame(utilizacion).sort_values('Utilización (%)', ascending=False)
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.bar(df_util['Salón'], df_util['Utilización (%)'], color='#D4AF37')
+    ax.set_ylabel('Porcentaje de ocupación')
+    ax.set_title('Tasa de Utilización de Salones', color='#2c2c2c')
+    plt.xticks(rotation=45, ha='right')
+    fig.patch.set_facecolor('#ffffff')
+    ax.set_facecolor('#f0f0f0')
+    for spine in ax.spines.values():
+        spine.set_edgecolor('#D4AF37')
+    plt.tight_layout()
+    return fig
+
+def generar_distribucion_intensivos(solucion):
+    """Nuevo gráfico: Distribución de cursos intensivos vs regulares por profesor."""
+    prof_intensivos = {}
+    for asign in solucion:
+        prof = asign['profesor']
+        if prof in ["TBA", "GRADUADOS"]:
+            continue
+        patron = asign['patron']
+        es_intensivo = any(c >= 3 for c in patron['days'].values())
+        if prof not in prof_intensivos:
+            prof_intensivos[prof] = {'intensivos': 0, 'regulares': 0}
+        if es_intensivo:
+            prof_intensivos[prof]['intensivos'] += 1
+        else:
+            prof_intensivos[prof]['regulares'] += 1
+    if not prof_intensivos:
+        return None
+    df = pd.DataFrame.from_dict(prof_intensivos, orient='index').reset_index()
+    df.columns = ['Profesor', 'Intensivos', 'Regulares']
+    df_melt = df.melt(id_vars='Profesor', value_vars=['Intensivos', 'Regulares'],
+                      var_name='Tipo', value_name='Cantidad')
+    fig, ax = plt.subplots(figsize=(12, 6))
+    for tipo in ['Intensivos', 'Regulares']:
+        subset = df_melt[df_melt['Tipo'] == tipo]
+        ax.bar(subset['Profesor'], subset['Cantidad'], label=tipo, alpha=0.7)
+    ax.set_xlabel('Profesor')
+    ax.set_ylabel('Número de secciones')
+    ax.set_title('Distribución de Cursos Intensivos vs Regulares por Profesor')
+    ax.legend()
+    plt.xticks(rotation=45, ha='right')
+    fig.patch.set_facecolor('#ffffff')
+    ax.set_facecolor('#f0f0f0')
+    for spine in ax.spines.values():
+        spine.set_edgecolor('#D4AF37')
+    plt.tight_layout()
+    return fig
 
 # ==============================================================================
 # 9. GENERACIÓN DE PLANTILLA EXCEL
@@ -1353,12 +1457,11 @@ def main():
                     bar_ag.progress(min(1.0, progress))
                     status_ag.markdown(f"**🧬 AG Generación {gen+1}/{generations_ag}** | Mejor Fitness: {fitness:.5f}")
 
-                # Para la Fase 2, creamos nuevos elementos (la barra se reutilizará)
-                # Primero dejamos que termine el AG, luego mostramos la Fase 2
-                mejor_sol, conflictos, historial = engine.solve(
+                # Ejecutar la optimización híbrida, capturando el costo final del AG
+                mejor_sol, conflictos, historial, best_costo_ag = engine.solve(
                     iterations_sa=iterations_sa,
                     progress_callback=ag_callback,
-                    bar=None,  # La barra la pasaremos después de reiniciar
+                    bar=None,
                     status_text=None
                 )
 
@@ -1380,6 +1483,7 @@ def main():
                 st.session_state.historial = historial
                 st.session_state.scheduler = engine.scheduler
                 st.session_state.mejor_sol = mejor_sol
+                st.session_state.best_costo_ag = best_costo_ag   # Guardar para mostrar métricas
 
                 cargas_finales = {}
                 for asign in mejor_sol:
@@ -1403,6 +1507,10 @@ def main():
                 } for a in mejor_sol])
                 st.session_state.detailed_conflicts = engine.scheduler._obtener_conflictos(mejor_sol)
 
+                # Calcular soft compliance final
+                st.session_state.final_soft_pct = engine.scheduler.soft_compliance_percentage(mejor_sol)
+                st.session_state.final_fitness = 10000 / (10000 + engine.scheduler.mejor_costo)
+
                 status_sa.markdown("✅ Optimización completada. Generando resultados...")
 
         except Exception as e:
@@ -1414,6 +1522,18 @@ def main():
 
     if 'master' in st.session_state:
         st.success(f"✅ Optimización completada en {st.session_state.elapsed_time:.2f} segundos.")
+        # Mostrar métricas de ambas fases
+        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+        with col_m1:
+            st.metric("Fase 1 - Costo AG", f"{st.session_state.best_costo_ag:.0f}")
+        with col_m2:
+            st.metric("Fase 2 - Costo Final", f"{engine.scheduler.mejor_costo:.0f}")
+        with col_m3:
+            st.metric("Conflictos Duros", st.session_state.conflicts)
+        with col_m4:
+            st.metric("Soft Constraints Cumplidas", f"{st.session_state.final_soft_pct:.1f}%")
+        st.markdown(f"**Fitness Final:** {st.session_state.final_fitness:.5f}")
+
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
         t1, t2, t3, t4 = st.tabs(["💎 PANEL DE CONTROL", "🔍 VISTAS DETALLADAS", "🚨 AUDITORÍA DE CALIDAD", "📊 ANALÍTICAS AVANZADAS"])
 
@@ -1495,6 +1615,26 @@ def main():
                 st.pyplot(fig3)
             else:
                 st.warning("No hay datos suficientes para generar el heatmap.")
+
+            # Nuevas analíticas
+            st.markdown("---")
+            st.markdown("### 🏫 Tasa de Utilización de Salones")
+            if 'scheduler' in st.session_state and 'mejor_sol' in st.session_state:
+                fig4 = generar_utilizacion_salones(st.session_state.scheduler, st.session_state.mejor_sol)
+                st.pyplot(fig4)
+            else:
+                st.warning("No hay datos suficientes para generar la utilización de salones.")
+
+            st.markdown("---")
+            st.markdown("### 📊 Distribución de Cursos Intensivos vs Regulares")
+            if 'mejor_sol' in st.session_state:
+                fig5 = generar_distribucion_intensivos(st.session_state.mejor_sol)
+                if fig5:
+                    st.pyplot(fig5)
+                else:
+                    st.info("No se encontraron profesores para mostrar distribución.")
+            else:
+                st.warning("No hay datos suficientes para generar la distribución.")
 
         st.markdown("</div>", unsafe_allow_html=True)
 
