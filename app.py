@@ -1209,6 +1209,7 @@ def generar_heatmap_ocupacion(scheduler, solucion):
 
 def render_calendar_view(df_master, filter_type, filter_value):
     import plotly.express as px
+    import datetime
     records = []
     for _, row in df_master.iterrows():
         if filter_type == "profesor" and row['Persona'] != filter_value:
@@ -1225,10 +1226,13 @@ def render_calendar_view(df_master, filter_type, filter_value):
             start_str, end_str = horas.strip().split('-')
             start_min = str_to_mins(start_str)
             end_min = str_to_mins(end_str)
+            # Convertir minutos a datetime.time
+            start_time = datetime.time(start_min // 60, start_min % 60)
+            end_time = datetime.time(end_min // 60, end_min % 60)
             records.append({
                 'Día': dia.strip(),
-                'Inicio': start_min,
-                'Fin': end_min,
+                'Inicio': start_time,
+                'Fin': end_time,
                 'Curso': row['ID'],
                 'Salón': row['Salón'],
                 'Profesor': row['Persona']
@@ -1237,9 +1241,12 @@ def render_calendar_view(df_master, filter_type, filter_value):
         st.warning("No hay eventos para mostrar.")
         return
     df_events = pd.DataFrame(records)
-    fig = px.timeline(df_events, x_start='Inicio', x_end='Fin', y='Día', color='Curso',
+    # Convertir las columnas de tiempo a datetime para que Plotly las entienda
+    df_events['Inicio_dt'] = pd.to_datetime(df_events['Inicio'].astype(str))
+    df_events['Fin_dt'] = pd.to_datetime(df_events['Fin'].astype(str))
+    fig = px.timeline(df_events, x_start='Inicio_dt', x_end='Fin_dt', y='Día', color='Curso',
                       title=f"Horario - {filter_type}: {filter_value}")
-    fig.update_xaxis(tickformat="%H:%M")
+    fig.update_xaxis(tickformat="%H:%M", title="Hora")
     fig.update_layout(plot_bgcolor='white', paper_bgcolor='white', font_color='#2c2c2c')
     st.plotly_chart(fig)
 
