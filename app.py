@@ -1,7 +1,5 @@
 # ==============================================================================
-# UPRM TIMETABLE SYSTEM - PLATINUM EDITION
-# Basado en la formulación matemática de los capítulos 1-5
-# Algoritmo Genético con mutación asistida, reparación exhaustiva y cero conflictos
+# UPRM TIMETABLE SYSTEM - PLATINUM EDITION (CORREGIDO)
 # ==============================================================================
 
 import streamlit as st
@@ -134,11 +132,9 @@ st.markdown("""
 # 2. UTILIDADES Y TABLAS DE REFERENCIA
 # ==============================================================================
 def normalize_name(s: str) -> str:
-    """Elimina acentos, convierte a mayúsculas y quita espacios sobrantes."""
     s = s.strip()
     return unicodedata.normalize('NFKD', s).encode('ASCII', 'ignore').decode().upper()
 
-# Tabla de compensación crediticia (horas contacto vs estudiantes)
 COMPENSACION_TABLE = [
     (1, 1, 44, 0.0), (1, 45, 74, 0.5), (1, 75, 104, 1.0), (1, 105, 134, 1.5), (1, 135, 164, 2.0),
     (2, 1, 37, 0.0), (2, 38, 52, 0.5), (2, 53, 67, 1.0), (2, 68, 82, 1.5), (2, 83, 97, 2.0),
@@ -157,11 +153,9 @@ COMPENSACION_TABLE = [
 ]
 
 def get_creditos_reales(creditos_base, cupo):
-    """Calcula créditos reales con compensación según tabla."""
     for (cb, min_est, max_est, extra) in COMPENSACION_TABLE:
         if cb == creditos_base and min_est <= cupo <= max_est:
             return float(creditos_base) + extra
-    # Si no está exactamente, buscar el máximo extra para ese rango superior
     max_extra = 0
     for (cb, min_est, max_est, extra) in COMPENSACION_TABLE:
         if cb == creditos_base and cupo >= min_est:
@@ -185,7 +179,6 @@ def str_to_mins(t_str):
     if ampm == "AM" and h == 12: h = 0
     return h * 60 + m
 
-# Patrones de días según créditos (definidos en Capítulo 4)
 PATRONES = {
     3: [
         {"name": "Lu-Mi-Vi", "days": {"Lu": 1, "Mi": 1, "Vi": 1}},
@@ -435,7 +428,6 @@ class GeneticTimetablingEngine:
                             if cap_final < 0: cap_final = cupo
                         # Redistribución si la última sección es muy pequeña (menos de 17)
                         if cap_final < 17 and i > 0:
-                            # Redistribuir equitativamente entre todas las secciones existentes de este curso
                             secciones_curso = [s for s in self.secciones if s.cod.startswith(cod_base)]
                             if secciones_curso:
                                 extra_por_seccion = cap_final // len(secciones_curso)
@@ -444,7 +436,6 @@ class GeneticTimetablingEngine:
                                     s_aux.cupo += extra_por_seccion
                                     if j < resto:
                                         s_aux.cupo += 1
-                            # No crear nueva sección
                             continue
                         self.secciones.append(Seccion(f"{cod_base}-{len(self.secciones)+1:02d}", creditos, cap_final, candidatos_raw, tipo_salon))
 
@@ -534,7 +525,7 @@ class GeneticTimetablingEngine:
                     capacidad_restante[prof] -= creditos
 
     # --------------------------------------------------------------------------
-    # Construcción del dominio de factibilidad local Ω(e) (Algoritmo 4.2)
+    # Construcción del dominio de factibilidad local Ω(e) (sin usar set con dict)
     # --------------------------------------------------------------------------
     def _construir_dominios(self):
         # Precomputar índices invertidos
@@ -542,74 +533,59 @@ class GeneticTimetablingEngine:
         for sl in self.salones:
             t = int(round(sl['TIPO'])) if not isinstance(sl['TIPO'], float) else int(round(sl['TIPO']))
             salones_por_tipo.setdefault(t, []).append(sl['CODIGO'])
-        bloques_por_duracion = {}
-        for creditos in [3,4,5]:
-            duracion_req = creditos * 50
-            bloques_por_duracion[duracion_req] = self.bloques  # todos los bloques tienen la misma duración? No exactamente, pero simplificamos
-            # En realidad la duración depende del patrón, pero aquí solo necesitamos los horarios de inicio.
-            # Lo dejamos así para simplificar.
         dominios = {}
         for idx, s in enumerate(self.secciones):
             dom = []
-            # Filtrar profesores competentes
-            profes_cand = [p for p in self.profesores if s.cod.split('-')[0] in self.profesores[p].preferencias or any(s.cod.startswith(pref) for pref in self.profesores[p].preferencias)]
-            # Si no hay, usar todos los que tengan el curso en candidatos (s.cands)
-            if not profes_cand:
-                profes_cand = [p for p in self.profesores if p in s.cands]
-            # Si aún no hay, usar todos los profesores (fallback)
+            # Filtrar profesores competentes (por candidatos o preferencias)
+            profes_cand = [p for p in self.profesores if p in s.cands]
+            # Si no hay, usar todos los profesores (fallback)
             if not profes_cand:
                 profes_cand = list(self.profesores.keys())
             # Filtrar salones
             salones_cand = salones_por_tipo.get(s.tipo_salon, [])
             salones_cand = [sl for sl in salones_cand if self.salon_capacidad[sl] >= s.cupo]
-            # Para cada profesor, cada salón, cada bloque (simplificado)
+            # Para cada profesor, cada salón, cada patrón y hora
             for prof in profes_cand:
-                for salon in salones_cand:
-                    # Verificar disponibilidad horaria (no bloqueos) y competencia real
-                    prof_obj = self.profesores.get(prof)
-                    if not prof_obj:
+                prof_obj = self.profesores.get(prof)
+                if not prof_obj:
+                    continue
+                # Verificar aceptación de grandes
+                if s.es_grande and prof_obj.acepta_grandes == 0:
+                    continue
+                for patron in PATRONES.get(s.creditos, PATRONES[3]):
+                    es_intensivo = any(c >= 3 for c in patron['days'].values())
+                    if prof_obj.cursos_intensivos == 0 and es_intensivo:
                         continue
-                    # Verificar que el profesor pueda impartir este curso (por candidatos o preferencias)
-                    if s.cod.split('-')[0] not in [p.split('-')[0] for p in prof_obj.preferencias] and prof not in s.cands:
-                        continue
-                    # Restricción de secciones grandes
-                    if s.es_grande and prof_obj.acepta_grandes == 0:
-                        continue
-                    for patron in PATRONES.get(s.creditos, PATRONES[3]):
-                        # Restricción de intensivos
-                        es_intensivo = any(c >= 3 for c in patron['days'].values())
-                        if prof_obj.cursos_intensivos == 0 and es_intensivo:
+                    if prof_obj.cursos_intensivos == 1 and not es_intensivo:
+                        # Si pidió intensivos, solo considerar intensivos
+                        if not any(c >= 3 for c in patron['days'].values()):
                             continue
-                        if prof_obj.cursos_intensivos == 1 and not es_intensivo:
-                            # Si el profesor pidió intensivos, solo considerar patrones intensivos
-                            if not any(c >= 3 for c in patron['days'].values()):
-                                continue
+                    for salon in salones_cand:
                         # Verificar horas de inicio posibles
                         for hora_ini in self.bloques:
                             valido = True
                             for dia, contrib in patron['days'].items():
                                 fin = hora_ini + int(contrib * 50)
-                                # Rango operativo
                                 if fin > self.limite_operativo[1] or hora_ini < self.limite_operativo[0]:
                                     valido = False
                                     break
-                                # Hora universal
                                 if dia in ["Ma", "Ju"] and max(hora_ini, self.hora_universal[0]) < min(fin, self.hora_universal[1]):
                                     valido = False
                                     break
-                                # Intensivo después de 3:30 pm
                                 if contrib >= 3 and hora_ini < 930:
                                     valido = False
                                     break
-                                # Bloqueos del profesor
                                 for (dias_set, start, end) in prof_obj.bloqueos:
                                     if dia in dias_set and max(hora_ini, start) < min(fin, end):
                                         valido = False
                                         break
-                                if not valido: break
+                                if not valido:
+                                    break
                             if valido:
-                                dom.append((prof, salon, patron, hora_ini))
-            dominios[idx] = list(set(dom))
+                                # Guardar como tupla (prof, salon, nombre_patron, ini)
+                                dom.append((prof, salon, patron['name'], hora_ini))
+            # Eliminar duplicados manualmente (usando un set de tuplas, pero las tuplas contienen strings, no dict)
+            dominios[idx] = list(set(dom))  # Ahora set funciona porque todos los elementos son hashables
         return dominios
 
     # --------------------------------------------------------------------------
@@ -618,19 +594,13 @@ class GeneticTimetablingEngine:
     def _construir_solucion_greedy(self):
         sol = []
         for i, s in enumerate(self.secciones):
-            prof_pre = getattr(s, 'prof_preasignado', None)
-            if prof_pre and prof_pre != "TBA" and prof_pre != "GRADUADOS":
-                # Buscar en el dominio una asignación con ese profesor
-                opciones = [x for x in self.dominios[i] if x[0] == prof_pre]
-                if opciones:
-                    prof, salon, patron, ini = random.choice(opciones)
-                else:
-                    prof, salon, patron, ini = random.choice(self.dominios[i]) if self.dominios[i] else ("TBA", "TBA", PATRONES.get(s.creditos, PATRONES[3])[0], self.bloques[0])
+            if self.dominios[i]:
+                # Elegir aleatoriamente una opción del dominio
+                prof, salon, patron_name, ini = random.choice(self.dominios[i])
+                # Obtener el patrón real a partir del nombre
+                patron = next(p for p in PATRONES.get(s.creditos, PATRONES[3]) if p['name'] == patron_name)
             else:
-                if self.dominios[i]:
-                    prof, salon, patron, ini = random.choice(self.dominios[i])
-                else:
-                    prof, salon, patron, ini = "TBA", "TBA", PATRONES.get(s.creditos, PATRONES[3])[0], self.bloques[0]
+                prof, salon, patron, ini = "TBA", "TBA", PATRONES.get(s.creditos, PATRONES[3])[0], self.bloques[0]
             sol.append({'seccion': s, 'profesor': prof, 'salon': salon, 'patron': patron, 'ini': ini})
         return sol
 
@@ -638,15 +608,14 @@ class GeneticTimetablingEngine:
     # Función de costo total (según formulación matemática)
     # --------------------------------------------------------------------------
     def _costo_total(self, sol, return_detalles=False):
-        # Pesos (ajustables)
-        w_fuerte = 1_000_000  # Para violaciones fuertes
+        w_fuerte = 1_000_000
         w_doble_rol = 2_000_000
         w_carga = 2_000_000
         lambda_pref_horas = 30
         lambda_pref_dias = 15
         lambda_compactacion = 10
         lambda_multi_salon = 2
-        mu = 0.01  # Peso de la recompensa
+        mu = 0.01
 
         conflicts = 0
         soft_penalty = 0
@@ -667,7 +636,6 @@ class GeneticTimetablingEngine:
             patron = asign['patron']
             ini = asign['ini']
 
-            # Asignaciones nulas
             if prof == "TBA" or salon == "TBA":
                 conflicts += w_fuerte
                 continue
@@ -677,26 +645,22 @@ class GeneticTimetablingEngine:
                 conflicts += w_fuerte
                 continue
 
-            # Capacidad
             if salon_info['CAPACIDAD'] < s.cupo:
                 conflicts += w_fuerte
-            # Tipo de salón
             if not compatible_tipo(s.tipo_salon, salon_info['TIPO']):
                 conflicts += w_fuerte
 
             if prof in self.profesores:
                 prof_obj = self.profesores[prof]
-                # Acepta grandes
                 if prof_obj.acepta_grandes == 0 and s.es_grande:
                     conflicts += w_fuerte
-                # Cursos intensivos
                 es_intensivo = any(c >= 3 for c in patron['days'].values())
                 puede_ser_intensivo = any(any(c >= 3 for c in p['days'].values()) for p in PATRONES.get(s.creditos, PATRONES[3]))
                 if prof_obj.cursos_intensivos == 0 and es_intensivo:
                     conflicts += w_fuerte
                 elif prof_obj.cursos_intensivos == 1 and puede_ser_intensivo and not es_intensivo:
                     conflicts += w_fuerte
-                # Preferencias horarias (suaves)
+
                 if prof_obj.pref_horas == 'AM' and ini >= 720:
                     soft_penalty += lambda_pref_horas
                 elif prof_obj.pref_horas == 'PM' and ini < 720:
@@ -705,7 +669,7 @@ class GeneticTimetablingEngine:
                     for dia in patron['days'].keys():
                         if dia not in prof_obj.pref_dias_set:
                             soft_penalty += lambda_pref_dias
-                # Bloqueos
+
                 for (dias_set, start, end) in prof_obj.bloqueos:
                     for dia in patron['days'].keys():
                         if dia in dias_set:
@@ -713,13 +677,11 @@ class GeneticTimetablingEngine:
                             if max(ini, start) < min(fin, end):
                                 conflicts += w_fuerte
 
-                # Recompensa por preferencias de curso y compensación
                 prioridad = prof_obj.prioridad_curso(s.cod.split('-')[0])
-                recompensa += prioridad * 10  # α_pref
+                recompensa += prioridad * 10
                 if prof_obj.compensacion:
-                    recompensa += get_creditos_reales(s.creditos, s.cupo) - s.creditos  # β_pref * Δ(e)
+                    recompensa += get_creditos_reales(s.creditos, s.cupo) - s.creditos
 
-            # Restricciones horarias generales
             for dia, contrib in patron['days'].items():
                 fin = ini + int(contrib * 50)
                 if dia in ["Ma", "Ju"] and max(ini, self.hora_universal[0]) < min(fin, self.hora_universal[1]):
@@ -729,7 +691,6 @@ class GeneticTimetablingEngine:
                 if fin > self.limite_operativo[1] or ini < self.limite_operativo[0]:
                     conflicts += w_fuerte
 
-                # Conflicto de profesor
                 if prof != "GRADUADOS":
                     clave = (prof, dia)
                     if clave in occ_prof:
@@ -738,7 +699,6 @@ class GeneticTimetablingEngine:
                                 conflicts += w_fuerte
                     occ_prof.setdefault(clave, []).append((ini, fin))
 
-                # Conflicto de salón
                 clave_s = (salon, dia)
                 if clave_s in occ_salon:
                     for (ini_ex, fin_ex, cupo_ex, fus_ex) in occ_salon[clave_s]:
@@ -748,15 +708,12 @@ class GeneticTimetablingEngine:
                             conflicts += w_fuerte
                 occ_salon.setdefault(clave_s, []).append((ini, fin, s.cupo, s.es_fusionable))
 
-                # Guardar para compactación
                 if prof in horarios_prof:
                     horarios_prof[prof].setdefault(dia, []).append((ini, fin))
 
-            # Carga académica
             if prof in carga_prof:
                 carga_prof[prof] += self.get_sec_creditos(s, prof)
 
-            # Doble rol
             if prof in self.graduados:
                 cursos_recibidos = self.graduados[prof]
                 for j, otro in enumerate(sol):
@@ -769,7 +726,6 @@ class GeneticTimetablingEngine:
                                     if max(ini, otro['ini']) < min(fin_actual, fin_otro):
                                         conflicts += w_doble_rol
 
-        # Cargas mínimas y máximas
         for prof, carga in carga_prof.items():
             prof_obj = self.profesores.get(prof)
             if prof_obj:
@@ -778,7 +734,6 @@ class GeneticTimetablingEngine:
                 if carga < prof_obj.carga_min - 1.5:
                     conflicts += w_carga
 
-        # Compactación de jornada (Rs4)
         for prof, horarios in horarios_prof.items():
             for dia, bloques in horarios.items():
                 bloques.sort()
@@ -787,7 +742,6 @@ class GeneticTimetablingEngine:
                     if gap > 120:
                         soft_penalty += lambda_compactacion * (gap - 120) / 120
 
-        # Penalización por múltiples salones diferentes
         salones_por_prof_tipo = {}
         for asign in sol:
             prof = asign['profesor']
@@ -811,16 +765,17 @@ class GeneticTimetablingEngine:
     # Operadores genéticos
     # --------------------------------------------------------------------------
     def _mutar_cromosoma(self, crom):
-        """Mutación asistida: cambia un gen por una opción aleatoria de su dominio."""
         nuevo = deepcopy(crom)
         idx = random.randint(0, len(nuevo)-1)
         if self.dominios[idx]:
-            prof, salon, patron, ini = random.choice(self.dominios[idx])
-            nuevo[idx] = {'seccion': nuevo[idx]['seccion'], 'profesor': prof, 'salon': salon, 'patron': patron, 'ini': ini}
+            prof, salon, patron_name, ini = random.choice(self.dominios[idx])
+            # Obtener patrón real
+            s = nuevo[idx]['seccion']
+            patron = next(p for p in PATRONES.get(s.creditos, PATRONES[3]) if p['name'] == patron_name)
+            nuevo[idx] = {'seccion': s, 'profesor': prof, 'salon': salon, 'patron': patron, 'ini': ini}
         return nuevo
 
     def _cruzar(self, padre1, padre2):
-        """Cruce uniforme: por cada gen, elige aleatoriamente de uno de los padres."""
         hijo1 = []
         hijo2 = []
         for i in range(len(padre1)):
@@ -836,10 +791,11 @@ class GeneticTimetablingEngine:
     # Reparación final exhaustiva (garantiza cero conflictos)
     # --------------------------------------------------------------------------
     def _reparar_solucion(self, sol):
-        """Intenta reasignar cada sección conflictiva usando búsqueda local."""
-        # Primero, identificar índices con conflictos fuertes
+        # Función auxiliar para verificar conflictos fuertes rápidamente
         def tiene_conflictos(sol_parcial):
-            for i, asign in enumerate(sol_parcial):
+            occ_prof = {}
+            occ_salon = {}
+            for asign in sol_parcial:
                 s = asign['seccion']
                 prof = asign['profesor']
                 salon = asign['salon']
@@ -848,36 +804,32 @@ class GeneticTimetablingEngine:
                 if prof == "TBA" or salon == "TBA":
                     return True
                 salon_info = next((sl for sl in self.salones if sl['CODIGO'] == salon), None)
-                if not salon_info: return True
-                if salon_info['CAPACIDAD'] < s.cupo: return True
-                if not compatible_tipo(s.tipo_salon, salon_info['TIPO']): return True
+                if not salon_info or salon_info['CAPACIDAD'] < s.cupo or not compatible_tipo(s.tipo_salon, salon_info['TIPO']):
+                    return True
                 if prof in self.profesores:
                     prof_obj = self.profesores[prof]
-                    if prof_obj.acepta_grandes == 0 and s.es_grande: return True
+                    if prof_obj.acepta_grandes == 0 and s.es_grande:
+                        return True
                     es_intensivo = any(c >= 3 for c in patron['days'].values())
                     puede_ser_intensivo = any(any(c >= 3 for c in p['days'].values()) for p in PATRONES.get(s.creditos, PATRONES[3]))
-                    if prof_obj.cursos_intensivos == 0 and es_intensivo: return True
-                    if prof_obj.cursos_intensivos == 1 and puede_ser_intensivo and not es_intensivo: return True
+                    if prof_obj.cursos_intensivos == 0 and es_intensivo:
+                        return True
+                    if prof_obj.cursos_intensivos == 1 and puede_ser_intensivo and not es_intensivo:
+                        return True
                     for (dias_set, start, end) in prof_obj.bloqueos:
                         for dia in patron['days'].keys():
                             if dia in dias_set:
                                 fin = ini + int(patron['days'][dia] * 50)
-                                if max(ini, start) < min(fin, end): return True
+                                if max(ini, start) < min(fin, end):
+                                    return True
                 for dia, contrib in patron['days'].items():
                     fin = ini + int(contrib * 50)
-                    if dia in ["Ma", "Ju"] and max(ini, self.hora_universal[0]) < min(fin, self.hora_universal[1]): return True
-                    if contrib >= 3 and ini < 930: return True
-                    if fin > self.limite_operativo[1] or ini < self.limite_operativo[0]: return True
-            # Verificar conflictos entre eventos
-            occ_prof = {}
-            occ_salon = {}
-            for i, asign in enumerate(sol_parcial):
-                prof = asign['profesor']
-                salon = asign['salon']
-                patron = asign['patron']
-                ini = asign['ini']
-                for dia, contrib in patron['days'].items():
-                    fin = ini + int(contrib * 50)
+                    if dia in ["Ma", "Ju"] and max(ini, self.hora_universal[0]) < min(fin, self.hora_universal[1]):
+                        return True
+                    if contrib >= 3 and ini < 930:
+                        return True
+                    if fin > self.limite_operativo[1] or ini < self.limite_operativo[0]:
+                        return True
                     if prof != "GRADUADOS":
                         clave = (prof, dia)
                         if clave in occ_prof:
@@ -889,26 +841,27 @@ class GeneticTimetablingEngine:
                     if clave_s in occ_salon:
                         for (ini_ex, fin_ex, cupo_ex, fus_ex) in occ_salon[clave_s]:
                             if max(ini, ini_ex) < min(fin, fin_ex):
-                                if not (salon in self.mega_salones and asign['seccion'].es_fusionable and fus_ex and asign['seccion'].cupo + cupo_ex <= self.salon_capacidad.get(salon, 0)):
+                                if not (salon in self.mega_salones and s.es_fusionable and fus_ex and s.cupo + cupo_ex <= salon_info['CAPACIDAD']):
                                     return True
-                    occ_salon.setdefault(clave_s, []).append((ini, fin, asign['seccion'].cupo, asign['seccion'].es_fusionable))
+                    occ_salon.setdefault(clave_s, []).append((ini, fin, s.cupo, s.es_fusionable))
             return False
 
-        # Iterar hasta que no haya conflictos o se alcance un límite
         max_iter = 500
         for _ in range(max_iter):
             if not tiene_conflictos(sol):
                 break
-            # Reasignar cada sección conflictiva
+            # Reasignar cada sección
             for i in range(len(sol)):
                 if self.dominios[i]:
-                    # Probar todas las opciones del dominio y elegir la que minimice conflictos
                     mejor_opcion = None
                     mejor_costo = float('inf')
-                    for (prof, salon, patron, ini) in self.dominios[i]:
+                    for (prof, salon, patron_name, ini) in self.dominios[i]:
                         original = sol[i]
-                        sol[i] = {'seccion': original['seccion'], 'profesor': prof, 'salon': salon, 'patron': patron, 'ini': ini}
-                        costo, _, _, _ = self._costo_total(sol, return_detalles=True)
+                        # Obtener patrón real
+                        s = original['seccion']
+                        patron = next(p for p in PATRONES.get(s.creditos, PATRONES[3]) if p['name'] == patron_name)
+                        sol[i] = {'seccion': s, 'profesor': prof, 'salon': salon, 'patron': patron, 'ini': ini}
+                        costo = self._costo_total(sol)
                         if costo < mejor_costo:
                             mejor_costo = costo
                             mejor_opcion = (prof, salon, patron, ini)
@@ -922,13 +875,11 @@ class GeneticTimetablingEngine:
     # Algoritmo Genético principal
     # --------------------------------------------------------------------------
     def optimizar(self, pop_size=200, generations=500, pc=0.8, pm=0.05, bar=None, status_text=None):
-        # Inicializar población
         poblacion = []
         for _ in range(pop_size):
             crom = self._construir_solucion_greedy()
             poblacion.append(crom)
 
-        # Evaluar fitness
         def fitness(crom):
             costo = self._costo_total(crom)
             return 10000 / (10000 + max(0, costo))
@@ -938,37 +889,29 @@ class GeneticTimetablingEngine:
         mejor_fitness = -1
 
         for gen in range(generations):
-            # Evaluar población
             fitnesses = [fitness(c) for c in poblacion]
-            # Elitismo: conservar los mejores 10%
             elite_size = max(1, pop_size // 10)
             elite_indices = np.argsort(fitnesses)[-elite_size:]
             nueva_poblacion = [deepcopy(poblacion[i]) for i in elite_indices]
 
-            # Selección por torneo (tamaño 3) para llenar el resto
             while len(nueva_poblacion) < pop_size:
-                # Seleccionar padres
                 padres = []
                 for _ in range(2):
                     torneo = random.sample(list(zip(poblacion, fitnesses)), 3)
                     mejor_torneo = max(torneo, key=lambda x: x[1])[0]
                     padres.append(deepcopy(mejor_torneo))
-                # Cruce con probabilidad pc
                 if random.random() < pc:
                     hijo1, hijo2 = self._cruzar(padres[0], padres[1])
                 else:
                     hijo1, hijo2 = deepcopy(padres[0]), deepcopy(padres[1])
-                # Mutación
                 if random.random() < pm:
                     hijo1 = self._mutar_cromosoma(hijo1)
                 if random.random() < pm:
                     hijo2 = self._mutar_cromosoma(hijo2)
                 nueva_poblacion.extend([hijo1, hijo2])
 
-            # Recortar si excede tamaño
             poblacion = nueva_poblacion[:pop_size]
 
-            # Mejor individuo de la generación
             best_idx = np.argmax(fitnesses)
             current_best_fitness = fitnesses[best_idx]
             if current_best_fitness > mejor_fitness:
@@ -976,7 +919,6 @@ class GeneticTimetablingEngine:
                 mejor_crom = deepcopy(poblacion[best_idx])
             historial_fitness.append(mejor_fitness)
 
-            # Actualizar barra de progreso
             if bar:
                 bar.progress((gen+1)/generations)
             if status_text:
@@ -984,7 +926,6 @@ class GeneticTimetablingEngine:
                 conflictos_fuertes = int(costo_mejor // 1_000_000) if costo_mejor >= 0 else 0
                 status_text.markdown(f"**🧬 Generación {gen+1}/{generations}** | Mejor Fitness: {mejor_fitness:.6f} | Conflictos Fuertes: {conflictos_fuertes}")
 
-        # Reparación final para garantizar cero conflictos
         mejor_crom = self._reparar_solucion(mejor_crom)
         costo_final = self._costo_total(mejor_crom)
         conflictos_finales = int(costo_final // 1_000_000) if costo_final >= 0 else 0
@@ -993,13 +934,13 @@ class GeneticTimetablingEngine:
 # ==============================================================================
 # 5. FUNCIONES DE VISUALIZACIÓN
 # ==============================================================================
-def generar_heatmap_ocupacion(scheduler, solucion):
+def generar_heatmap_ocupacion(engine, solucion):
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
-    inicio = scheduler.limite_operativo[0]
-    fin = scheduler.limite_operativo[1]
+    inicio = engine.limite_operativo[0]
+    fin = engine.limite_operativo[1]
     horas_del_dia = list(range(inicio, fin + 1, 30))
     matriz = np.zeros((len(dias_semana), len(horas_del_dia)))
-    total_salones = len(scheduler.salones)
+    total_salones = len(engine.salones)
     for asign in solucion:
         salon = asign['salon']
         if salon == "TBA":
@@ -1206,7 +1147,6 @@ def main():
         with t3:
             if st.session_state.conflicts > 0:
                 st.error(f"⚠️ Aún persisten {st.session_state.conflicts} conflictos. Revise los detalles a continuación.")
-                # Podríamos calcular los conflictos detallados, pero para simplificar mostramos el mensaje.
             else:
                 st.success("✅ 100% Asignación Perfecta. Cero Conflictos. Se balancearon las cargas y se respetaron los espacios y preferencias.")
 
