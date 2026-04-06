@@ -12,7 +12,7 @@ from copy import deepcopy
 # ==============================================================================
 # 1. ESTÉTICA - TEMA CLARO (BLANCO/DORADO)
 # ==============================================================================
-st.set_page_config(page_title="UPRM Scheduler Platinum AI v15 (Híbrido AG+SA)", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="UPRM Scheduler Platinum AI v16 (Híbrido AG+SA)", page_icon="🏛️", layout="wide")
 
 st.markdown("""
 <style>
@@ -215,7 +215,7 @@ def exportar_todo(df):
     return out.getvalue()
 
 # ==============================================================================
-# 3. MODELO DE DATOS (con mejoras)
+# 3. MODELO DE DATOS
 # ==============================================================================
 class Seccion:
     def __init__(self, cod, creditos, cupo, candidatos_raw, tipo_salon, es_ayudantia=False):
@@ -281,7 +281,7 @@ class Profesor:
         except:
             self.cursos_intensivos = 0
 
-        self.bloqueos = []  # lista de (dias_set, start_min, end_min)
+        self.bloqueos = []
         if bloqueo_dias and isinstance(bloqueo_dias, str) and bloqueo_dias.strip():
             dias_map = {'L': 'Lu', 'M': 'Ma', 'MI': 'Mi', 'J': 'Ju', 'V': 'Vi'}
             dias_limpios = bloqueo_dias.upper().replace(' ', '')
@@ -330,13 +330,9 @@ def compatible_tipo(curso_tipo, salon_tipo):
     return salon_cat != 2
 
 # ==============================================================================
-# 4. NUEVA LÓGICA DE DEMANDA VS CUPO (regla matemática)
+# 4. DIMENSIONAMIENTO DE SECCIONES (regla cupo/2)
 # ==============================================================================
 def dimensionar_secciones(demanda, cupo_base):
-    """
-    Retorna una lista de cupos para las secciones del curso.
-    Regla: sobrantes < cupo/2 -> se ignoran (redistribución); >= cupo/2 -> se abre una sección más.
-    """
     if demanda <= 0:
         return []
     num_completas = demanda // cupo_base
@@ -353,13 +349,13 @@ def dimensionar_secciones(demanda, cupo_base):
     return cupos
 
 # ==============================================================================
-# 5. MOTOR DE OPTIMIZACIÓN (FASE 2: SIMULATED ANNEALING MEJORADO)
+# 5. MOTOR DE OPTIMIZACIÓN (FASE 2: SIMULATED ANNEALING)
 # ==============================================================================
 class TabuScheduler:
     def __init__(self, df_cursos, df_profes, df_salones, zona):
         self.zona = zona
         
-        # Procesar Salones
+        # Salones
         df_salones.columns = [c.strip().upper() for c in df_salones.columns]
         self.salones = []
         self.mega_salones = set()
@@ -376,7 +372,7 @@ class TabuScheduler:
         self.salon_tipo = {s['CODIGO']: s['TIPO'] for s in self.salones}
         self.salon_capacidad = {s['CODIGO']: s['CAPACIDAD'] for s in self.salones}
 
-        # Procesar Profesores
+        # Profesores
         self.profesores = {}
         if df_profes is not None and not df_profes.empty:
             df_profes.columns = [c.strip().upper() for c in df_profes.columns]
@@ -398,7 +394,7 @@ class TabuScheduler:
                 )
                 self.profesores[prof.nombre] = prof
 
-        # Procesar Cursos y Secciones con nueva lógica de dimensionamiento
+        # Cursos y secciones
         self.secciones = []
         df_cursos.columns = [c.strip().upper() for c in df_cursos.columns]
         cursos_agrupados = {}
@@ -436,14 +432,14 @@ class TabuScheduler:
 
         self._preasignar_profesores_robusto()
 
-        # Límites horarios según zona
+        # Límites horarios
         if zona == "CENTRAL":
-            self.hora_universal = (630, 750)          # 10:30 - 12:30
-            self.limite_operativo = (450, 1110)       # 07:30 - 18:30
-            self.bloques = list(range(450, 1051, 60)) # 450,510,...,1050
+            self.hora_universal = (630, 750)
+            self.limite_operativo = (450, 1110)
+            self.bloques = list(range(450, 1051, 60))
         else:
-            self.hora_universal = (600, 720)          # 10:00 - 12:00
-            self.limite_operativo = (420, 1080)       # 07:00 - 18:00
+            self.hora_universal = (600, 720)
+            self.limite_operativo = (420, 1080)
             self.bloques = list(range(420, 1021, 60))
 
         self.solucion = None
@@ -461,9 +457,7 @@ class TabuScheduler:
         carga_actual["GRADUADOS"] = 0.0
         carga_actual["TBA"] = 0.0
         
-        capacidad_restante = {}
-        for p in self.profesores.values():
-            capacidad_restante[p.nombre] = p.carga_max
+        capacidad_restante = {p.nombre: p.carga_max for p in self.profesores.values()}
         
         secciones_unicas = []
         secciones_multiple = []
@@ -576,7 +570,7 @@ class TabuScheduler:
         carga_prof["GRADUADOS"] = 0.0
         carga_prof["TBA"] = 0.0
         
-        for i, asign in enumerate(sol):
+        for asign in sol:
             s = asign['seccion']
             prof = asign['profesor']
             salon = asign['salon']
@@ -690,7 +684,7 @@ class TabuScheduler:
         carga_prof["GRADUADOS"] = 0.0
         carga_prof["TBA"] = 0.0
         
-        for i, asign in enumerate(sol):
+        for asign in sol:
             s = asign['seccion']
             prof = asign['profesor']
             salon = asign['salon']
@@ -997,7 +991,7 @@ class TabuScheduler:
         return self.mejor_solucion, int(self.mejor_costo // 10000), self.historial_costos
 
 # ==============================================================================
-# 6. FASE 1: ALGORITMO GENÉTICO (SEGÚN TESIS) - CORREGIDO
+# 6. FASE 1: ALGORITMO GENÉTICO
 # ==============================================================================
 class GeneticTimetablingEngine:
     def __init__(self, scheduler, pop_size=60, generations=150, p_cross=0.8, p_mut=0.1):
@@ -1122,13 +1116,16 @@ class GeneticTimetablingEngine:
             best_idx = np.argmax(fitnesses)
             best_fitness = fitnesses[best_idx]
             if progress_callback:
-                progress_callback(gen, best_fitness)
+                # Obtener la mejor solución actual para calcular % suaves
+                _, _, best_sol = self._fitness(poblacion[best_idx])
+                soft_pct = self.sched.soft_compliance_percentage(best_sol)
+                progress_callback(gen, best_fitness, soft_pct)
         best_idx = np.argmax(fitnesses)
         best_fitness, best_costo, best_sol = self._fitness(poblacion[best_idx])
         return poblacion[best_idx], best_sol, best_costo
 
 # ==============================================================================
-# 7. CONTROLADOR HÍBRIDO (FASE 1 + FASE 2) - CORREGIDO
+# 7. CONTROLADOR HÍBRIDO
 # ==============================================================================
 class HybridTimetablingEngine:
     def __init__(self, df_cursos, df_profes, df_salones, zona,
@@ -1140,7 +1137,7 @@ class HybridTimetablingEngine:
         self.p_mut = p_mut
 
     def solve(self, iterations_sa=3000, progress_callback=None, bar=None, status_text=None):
-        # Crear el AG con los parámetros correctos
+        # Fase 1: AG
         ag_engine = GeneticTimetablingEngine(
             self.scheduler,
             pop_size=self.pop_size,
@@ -1149,9 +1146,11 @@ class HybridTimetablingEngine:
             p_mut=self.p_mut
         )
         best_individual, best_sol_ag, best_costo_ag = ag_engine.run(progress_callback)
+        # Inyectar solución del AG en el SA
         self.scheduler.solucion = best_sol_ag
         self.scheduler.mejor_solucion = deepcopy(best_sol_ag)
         self.scheduler.mejor_costo = best_costo_ag
+        # Fase 2: SA
         mejor_sol_final, conflictos_final, historial = self.scheduler.optimizar(
             iteraciones=iterations_sa, bar=bar, status_text=status_text
         )
@@ -1161,10 +1160,12 @@ class HybridTimetablingEngine:
 # 8. FUNCIONES DE VISUALIZACIÓN (CORREGIDAS)
 # ==============================================================================
 def generar_heatmap_ocupacion(scheduler, solucion):
+    # Ejes: X = días, Y = horas (transposición)
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
     inicio = scheduler.limite_operativo[0]
     fin = scheduler.limite_operativo[1]
     horas = list(range(inicio, fin + 1, 30))
+    # Matriz original: filas = días, columnas = horas
     matriz = np.zeros((len(dias_semana), len(horas)))
     total_salones = len(scheduler.salones)
     for asign in solucion:
@@ -1186,18 +1187,23 @@ def generar_heatmap_ocupacion(scheduler, solucion):
         matriz_porcentaje = (matriz / total_salones) * 100
     else:
         matriz_porcentaje = matriz
+    # Transponer para que X sean días y Y horas
+    matriz_porcentaje = matriz_porcentaje.T  # ahora filas = horas, columnas = días
     fig, ax = plt.subplots(figsize=(12, 6))
     im = ax.imshow(matriz_porcentaje, cmap='YlOrRd', aspect='auto', vmin=0, vmax=100)
-    ax.set_xticks(range(0, len(horas), max(1, len(horas)//12)))
-    ax.set_xticklabels([mins_to_str(h).replace(' AM', '').replace(' PM', '') for h in horas[::max(1, len(horas)//12)]], rotation=45, ha='right', color='#2c2c2c')
-    ax.set_yticks(range(len(dias_semana)))
-    ax.set_yticklabels(dias_semana, color='#2c2c2c')
+    # Etiquetas X (días)
+    ax.set_xticks(range(len(dias_semana)))
+    ax.set_xticklabels(dias_semana, rotation=45, ha='right', color='#2c2c2c')
+    # Etiquetas Y (horas)
+    step = max(1, len(horas) // 12)
+    ax.set_yticks(range(0, len(horas), step))
+    ax.set_yticklabels([mins_to_str(h).replace(' AM', '').replace(' PM', '') for h in horas[::step]], color='#2c2c2c')
     cbar = plt.colorbar(im, ax=ax, label='% Ocupación')
     cbar.ax.yaxis.label.set_color('#2c2c2c')
     cbar.ax.tick_params(colors='#2c2c2c')
     ax.set_title('Ocupación de Salones por Franja Horaria', color='#2c2c2c', pad=20)
-    ax.set_xlabel('Hora de Inicio', color='#2c2c2c')
-    ax.set_ylabel('Día', color='#2c2c2c')
+    ax.set_xlabel('Día', color='#2c2c2c')
+    ax.set_ylabel('Hora de Inicio', color='#2c2c2c')
     fig.patch.set_facecolor('#ffffff')
     ax.set_facecolor('#f0f0f0')
     ax.tick_params(colors='#2c2c2c')
@@ -1207,7 +1213,6 @@ def generar_heatmap_ocupacion(scheduler, solucion):
     return fig
 
 def render_calendar_view(df_master, filter_type, filter_value):
-    """Muestra una vista de calendario usando plotly, o una tabla si falla."""
     import plotly.express as px
     records = []
     for _, row in df_master.iterrows():
@@ -1243,12 +1248,11 @@ def render_calendar_view(df_master, filter_type, filter_value):
         return
     df_events = pd.DataFrame(records)
     try:
-        # Convertir a datetime para plotly
         df_events['Inicio_dt'] = pd.to_datetime(df_events['Inicio'].astype(str))
         df_events['Fin_dt'] = pd.to_datetime(df_events['Fin'].astype(str))
         fig = px.timeline(df_events, x_start='Inicio_dt', x_end='Fin_dt', y='Día', color='Curso',
                           title=f"Horario - {filter_type}: {filter_value}")
-        fig.update_xaxis(tickformat="%H:%M", title="Hora")
+        fig.update_xaxes(tickformat="%H:%M", title="Hora")
         fig.update_layout(plot_bgcolor='white', paper_bgcolor='white', font_color='#2c2c2c')
         st.plotly_chart(fig)
     except Exception as e:
@@ -1331,7 +1335,7 @@ def main():
 
     if st.button("🚀 INICIAR OPTIMIZACIÓN HÍBRIDA (AG + SA)"):
         try:
-            with st.spinner("Fase 1: Algoritmo Genético generando esqueleto... luego Fase 2: Refinamiento con Recocido Simulado."):
+            with st.spinner("Optimización en curso..."):
                 xls = pd.ExcelFile(file)
                 df_cursos = pd.read_excel(xls, 'Cursos')
                 df_profes = pd.read_excel(xls, 'Profesores')
@@ -1345,36 +1349,26 @@ def main():
                     p_mut=0.1
                 )
                 start_time = time.time()
+
+                # Elementos de progreso para las dos fases
                 bar_ag = st.progress(0)
                 status_ag = st.empty()
-
-                def ag_callback(gen, fitness):
-                    progress = (gen + 1) / generations_ag
-                    bar_ag.progress(min(1.0, progress))
-                    status_ag.markdown(f"**🧬 AG Generación {gen+1}/{generations_ag}** | Mejor Fitness: {fitness:.5f}")
-
-                # Para la Fase 2, creamos nuevos elementos (la barra se reutilizará)
-                # Primero dejamos que termine el AG, luego mostramos la Fase 2
-                mejor_sol, conflictos, historial = engine.solve(
-                    iterations_sa=iterations_sa,
-                    progress_callback=ag_callback,
-                    bar=None,  # La barra la pasaremos después de reiniciar
-                    status_text=None
-                )
-
-                # Una vez terminado el AG, reiniciamos la barra y mostramos la Fase 2
-                status_ag.empty()
                 bar_sa = st.progress(0)
                 status_sa = st.empty()
 
-                # Volvemos a ejecutar el SA con los mismos parámetros pero usando la solución del AG como inicial
-                # Nota: engine.scheduler ya tiene la solución del AG, así que llamamos a optimizar directamente
-                mejor_sol, conflictos, historial = engine.scheduler.optimizar(
-                    iteraciones=iterations_sa,
+                def ag_callback(gen, fitness, soft_pct):
+                    progress = (gen + 1) / generations_ag
+                    bar_ag.progress(min(1.0, progress))
+                    status_ag.markdown(f"**🧬 Fase 1 - AG Generación {gen+1}/{generations_ag}** | Fitness: {fitness:.5f} | Suaves cumplidas: {soft_pct:.1f}%")
+
+                # Llamar a solve con los callbacks
+                mejor_sol, conflictos, historial = engine.solve(
+                    iterations_sa=iterations_sa,
+                    progress_callback=ag_callback,
                     bar=bar_sa,
                     status_text=status_sa
                 )
-                # Ahora historial contiene los costos del SA
+
                 st.session_state.elapsed_time = time.time() - start_time
                 st.session_state.conflicts = conflictos
                 st.session_state.historial = historial
