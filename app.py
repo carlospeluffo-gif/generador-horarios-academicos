@@ -5,14 +5,14 @@ import random
 import io
 import time
 import math
-from datetime import time as dtime
+import datetime
 import matplotlib.pyplot as plt
 from copy import deepcopy
 
 # ==============================================================================
 # 1. ESTÉTICA - TEMA CLARO (BLANCO/DORADO)
 # ==============================================================================
-st.set_page_config(page_title="UPRM Scheduler Platinum AI v14 (Híbrido AG+SA)", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="UPRM Scheduler Platinum AI v15 (Híbrido AG+SA)", page_icon="🏛️", layout="wide")
 
 st.markdown("""
 <style>
@@ -346,7 +346,6 @@ def dimensionar_secciones(demanda, cupo_base):
         if resto >= cupo_base / 2:
             cupos.append(resto)
         else:
-            # redistribuir los sobrantes entre las secciones ya creadas
             if cupos:
                 extra_por_seccion = resto / len(cupos)
                 for i in range(len(cupos)):
@@ -992,9 +991,9 @@ class TabuScheduler:
                     fitness_actual = 10000 / (10000 + self.mejor_costo)
                     duros = int(self.mejor_costo // 10000)
                     soft_pct = self.soft_compliance_percentage(self.mejor_solucion)
-                    status_text.markdown(f"**🔄 Generación {it+1}/{iteraciones}** | Conflictos Duros: {duros} | Costo Total: {self.mejor_costo:.2f} | Fitness: {fitness_actual:.5f} | Suaves cumplidas: {soft_pct:.1f}%")
+                    status_text.markdown(f"**🔄 Fase 2 - Iteración {it+1}/{iteraciones}** | Conflictos Duros: {duros} | Costo Total: {self.mejor_costo:.2f} | Fitness: {fitness_actual:.5f} | Suaves cumplidas: {soft_pct:.1f}%")
                 if bar:
-                    bar.progress((it+1)/iteraciones)
+                    bar.progress(min(1.0, (it+1)/iteraciones))
         return self.mejor_solucion, int(self.mejor_costo // 10000), self.historial_costos
 
 # ==============================================================================
@@ -1140,7 +1139,7 @@ class HybridTimetablingEngine:
         self.p_cross = p_cross
         self.p_mut = p_mut
 
-    def solve(self, iterations_sa=3000, progress_callback=None):
+    def solve(self, iterations_sa=3000, progress_callback=None, bar=None, status_text=None):
         # Crear el AG con los parámetros correctos
         ag_engine = GeneticTimetablingEngine(
             self.scheduler,
@@ -1154,12 +1153,12 @@ class HybridTimetablingEngine:
         self.scheduler.mejor_solucion = deepcopy(best_sol_ag)
         self.scheduler.mejor_costo = best_costo_ag
         mejor_sol_final, conflictos_final, historial = self.scheduler.optimizar(
-            iteraciones=iterations_sa, bar=None, status_text=None
+            iteraciones=iterations_sa, bar=bar, status_text=status_text
         )
         return mejor_sol_final, conflictos_final, historial
 
 # ==============================================================================
-# 8. FUNCIONES DE VISUALIZACIÓN
+# 8. FUNCIONES DE VISUALIZACIÓN (CORREGIDAS)
 # ==============================================================================
 def generar_heatmap_ocupacion(scheduler, solucion):
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
@@ -1208,8 +1207,8 @@ def generar_heatmap_ocupacion(scheduler, solucion):
     return fig
 
 def render_calendar_view(df_master, filter_type, filter_value):
+    """Muestra una vista de calendario usando plotly, o una tabla si falla."""
     import plotly.express as px
-    import datetime
     records = []
     for _, row in df_master.iterrows():
         if filter_type == "profesor" and row['Persona'] != filter_value:
@@ -1222,33 +1221,39 @@ def render_calendar_view(df_master, filter_type, filter_value):
         for segment in horario_str.split('|'):
             if ':' not in segment:
                 continue
-            dia, horas = segment.split(':', 1)
-            start_str, end_str = horas.strip().split('-')
-            start_min = str_to_mins(start_str)
-            end_min = str_to_mins(end_str)
-            # Convertir minutos a datetime.time
-            start_time = datetime.time(start_min // 60, start_min % 60)
-            end_time = datetime.time(end_min // 60, end_min % 60)
-            records.append({
-                'Día': dia.strip(),
-                'Inicio': start_time,
-                'Fin': end_time,
-                'Curso': row['ID'],
-                'Salón': row['Salón'],
-                'Profesor': row['Persona']
-            })
+            try:
+                dia, horas = segment.split(':', 1)
+                start_str, end_str = horas.strip().split('-')
+                start_min = str_to_mins(start_str)
+                end_min = str_to_mins(end_str)
+                start_time = datetime.time(start_min // 60, start_min % 60)
+                end_time = datetime.time(end_min // 60, end_min % 60)
+                records.append({
+                    'Día': dia.strip(),
+                    'Inicio': start_time,
+                    'Fin': end_time,
+                    'Curso': row['ID'],
+                    'Salón': row['Salón'],
+                    'Profesor': row['Persona']
+                })
+            except:
+                continue
     if not records:
-        st.warning("No hay eventos para mostrar.")
+        st.info("No hay eventos para mostrar en el calendario.")
         return
     df_events = pd.DataFrame(records)
-    # Convertir las columnas de tiempo a datetime para que Plotly las entienda
-    df_events['Inicio_dt'] = pd.to_datetime(df_events['Inicio'].astype(str))
-    df_events['Fin_dt'] = pd.to_datetime(df_events['Fin'].astype(str))
-    fig = px.timeline(df_events, x_start='Inicio_dt', x_end='Fin_dt', y='Día', color='Curso',
-                      title=f"Horario - {filter_type}: {filter_value}")
-    fig.update_xaxis(tickformat="%H:%M", title="Hora")
-    fig.update_layout(plot_bgcolor='white', paper_bgcolor='white', font_color='#2c2c2c')
-    st.plotly_chart(fig)
+    try:
+        # Convertir a datetime para plotly
+        df_events['Inicio_dt'] = pd.to_datetime(df_events['Inicio'].astype(str))
+        df_events['Fin_dt'] = pd.to_datetime(df_events['Fin'].astype(str))
+        fig = px.timeline(df_events, x_start='Inicio_dt', x_end='Fin_dt', y='Día', color='Curso',
+                          title=f"Horario - {filter_type}: {filter_value}")
+        fig.update_xaxis(tickformat="%H:%M", title="Hora")
+        fig.update_layout(plot_bgcolor='white', paper_bgcolor='white', font_color='#2c2c2c')
+        st.plotly_chart(fig)
+    except Exception as e:
+        st.warning(f"No se pudo generar el gráfico. Mostrando tabla en su lugar. Error: {e}")
+        st.dataframe(df_events[['Día', 'Inicio', 'Fin', 'Curso', 'Salón']])
 
 # ==============================================================================
 # 9. GENERACIÓN DE PLANTILLA EXCEL
@@ -1340,21 +1345,36 @@ def main():
                     p_mut=0.1
                 )
                 start_time = time.time()
-                bar = st.progress(0)
-                status = st.empty()
+                bar_ag = st.progress(0)
+                status_ag = st.empty()
 
                 def ag_callback(gen, fitness):
-                    # Progreso basado en las generaciones reales del AG
                     progress = (gen + 1) / generations_ag
-                    bar.progress(min(1.0, progress))
-                    status.markdown(f"**🧬 AG Generación {gen+1}/{generations_ag}** | Mejor Fitness: {fitness:.5f}")
+                    bar_ag.progress(min(1.0, progress))
+                    status_ag.markdown(f"**🧬 AG Generación {gen+1}/{generations_ag}** | Mejor Fitness: {fitness:.5f}")
 
+                # Para la Fase 2, creamos nuevos elementos (la barra se reutilizará)
+                # Primero dejamos que termine el AG, luego mostramos la Fase 2
                 mejor_sol, conflictos, historial = engine.solve(
                     iterations_sa=iterations_sa,
-                    progress_callback=ag_callback
+                    progress_callback=ag_callback,
+                    bar=None,  # La barra la pasaremos después de reiniciar
+                    status_text=None
                 )
-                status.markdown("✅ Optimización completada. Generando resultados...")
 
+                # Una vez terminado el AG, reiniciamos la barra y mostramos la Fase 2
+                status_ag.empty()
+                bar_sa = st.progress(0)
+                status_sa = st.empty()
+
+                # Volvemos a ejecutar el SA con los mismos parámetros pero usando la solución del AG como inicial
+                # Nota: engine.scheduler ya tiene la solución del AG, así que llamamos a optimizar directamente
+                mejor_sol, conflictos, historial = engine.scheduler.optimizar(
+                    iteraciones=iterations_sa,
+                    bar=bar_sa,
+                    status_text=status_sa
+                )
+                # Ahora historial contiene los costos del SA
                 st.session_state.elapsed_time = time.time() - start_time
                 st.session_state.conflicts = conflictos
                 st.session_state.historial = historial
@@ -1382,6 +1402,8 @@ def main():
                     'Salón': a['salon']
                 } for a in mejor_sol])
                 st.session_state.detailed_conflicts = engine.scheduler._obtener_conflictos(mejor_sol)
+
+                status_sa.markdown("✅ Optimización completada. Generando resultados...")
 
         except Exception as e:
             st.error(f"Error durante la optimización: {e}")
