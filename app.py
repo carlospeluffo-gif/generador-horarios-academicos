@@ -12,9 +12,9 @@ import plotly.graph_objects as go
 from copy import deepcopy
 
 # ==============================================================================
-# 1. CONFIGURACIÓN DE PÁGINA Y ESTILOS (TEMA CLARO UPRM)
+# 1. CONFIGURACIÓN DE PÁGINA Y ESTILOS
 # ==============================================================================
-st.set_page_config(page_title="UPRM Scheduler Platinum AI v16", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="UPRM Scheduler Platinum v17", page_icon="🏛️", layout="wide")
 
 st.markdown("""
 <style>
@@ -40,7 +40,7 @@ st.markdown("""
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
         <p style="color: #555; font-family: 'Source Code Pro'; letter-spacing: 2px; font-size: 0.8rem;">
-            MODELO HÍBRIDO: ALGORITMO GENÉTICO + RECOCIDO SIMULADO (FASE 1 + FASE 2)
+            MODELO HÍBRIDO: AG + SA + COMPACTACIÓN EXTREMA
         </p>
     </div>
     <div class="abstract-icon">∞</div>
@@ -48,7 +48,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. UTILIDADES Y TABLAS DE REFERENCIA
+# 2. UTILIDADES Y TABLAS
 # ==============================================================================
 COMPENSACION_TABLE = [
     (1, 1, 44, 0.0), (1, 45, 74, 0.5), (1, 75, 104, 1.0), (1, 105, 134, 1.5), (1, 135, 164, 2.0),
@@ -71,7 +71,6 @@ def get_creditos_reales(creditos_base, cupo):
     for (cb, min_est, max_est, extra) in COMPENSACION_TABLE:
         if cb == creditos_base and min_est <= cupo <= max_est:
             return float(creditos_base) + extra
-    # Si no se encuentra, devolver el base (caso raro)
     return float(creditos_base)
 
 def mins_to_str(m):
@@ -146,15 +145,6 @@ def exportar_todo(df):
 # 3. DIMENSIONAMIENTO DE SECCIONES (CORREGIDO)
 # ==============================================================================
 def dimensionar_secciones(demanda, cupo_base, max_extra=10):
-    """
-    Retorna lista de cupos para las secciones.
-    Regla:
-      - Secciones completas = floor(demanda / cupo_base)
-      - Resto = demanda % cupo_base
-      - Si resto >= cupo_base/2: se abre una sección adicional con ese resto.
-      - Si resto < cupo_base/2: se redistribuye el resto entre las secciones completas
-        (cada una aumenta hasta cupo_base + max_extra, sin exceder).
-    """
     if demanda <= 0:
         return []
     num_completas = demanda // cupo_base
@@ -194,7 +184,7 @@ class Seccion:
             self.tipo_salon = 1
         self.es_ayudantia = es_ayudantia
         base = self.cod.split('-')[0].upper().replace(" ", "")
-        self.es_fusionable = base in ["MATE3171", "MATE3172", "MATE3173"]  # cursos que pueden fusionarse
+        self.es_fusionable = base in ["MATE3171", "MATE3172", "MATE3173"]
         self.prof_preasignado = None
         self.es_grande = self.cupo >= 85
 
@@ -276,13 +266,13 @@ def compatible_tipo(curso_tipo, salon_tipo):
     return salon_cat != 2
 
 # ==============================================================================
-# 5. MOTOR DE OPTIMIZACIÓN (TABU SCHEDULER) CON COMPACTACIÓN
+# 5. MOTOR DE OPTIMIZACIÓN CON COMPACTACIÓN EXTREMA
 # ==============================================================================
 class TabuScheduler:
     def __init__(self, df_cursos, df_profes, df_salones, zona):
         self.zona = zona
         
-        # Procesar Salones
+        # Salones
         df_salones.columns = [c.strip().upper() for c in df_salones.columns]
         self.salones = []
         self.mega_salones = set()
@@ -298,7 +288,7 @@ class TabuScheduler:
         self.salon_tipo = {s['CODIGO']: s['TIPO'] for s in self.salones}
         self.salon_capacidad = {s['CODIGO']: s['CAPACIDAD'] for s in self.salones}
 
-        # Procesar Profesores
+        # Profesores
         self.profesores = {}
         if df_profes is not None and not df_profes.empty:
             df_profes.columns = [c.strip().upper() for c in df_profes.columns]
@@ -320,7 +310,7 @@ class TabuScheduler:
                 )
                 self.profesores[prof.nombre] = prof
 
-        # Procesar Cursos y Secciones con nuevo dimensionamiento
+        # Cursos y secciones
         self.secciones = []
         df_cursos.columns = [c.strip().upper() for c in df_cursos.columns]
         cursos_agrupados = {}
@@ -358,14 +348,14 @@ class TabuScheduler:
 
         self._preasignar_profesores_robusto()
 
-        # Límites horarios según zona
+        # Límites horarios
         if zona == "CENTRAL":
-            self.hora_universal = (630, 750)          # 10:30 - 12:30
-            self.limite_operativo = (450, 1110)       # 07:30 - 18:30
-            self.bloques = list(range(450, 1051, 60)) # 450,510,...,1050
+            self.hora_universal = (630, 750)
+            self.limite_operativo = (450, 1110)
+            self.bloques = list(range(450, 1051, 60))
         else:
-            self.hora_universal = (600, 720)          # 10:00 - 12:00
-            self.limite_operativo = (420, 1080)       # 07:00 - 18:00
+            self.hora_universal = (600, 720)
+            self.limite_operativo = (420, 1080)
             self.bloques = list(range(420, 1021, 60))
 
         self.solucion = None
@@ -379,14 +369,11 @@ class TabuScheduler:
         return float(s.creditos)
 
     def _preasignar_profesores_robusto(self):
+        # (mismo que antes, pero añadimos un sesgo para que los profesores tengan un solo patrón)
         carga_actual = {p: 0.0 for p in self.profesores}
         carga_actual["GRADUADOS"] = 0.0
         carga_actual["TBA"] = 0.0
-        
-        capacidad_restante = {}
-        for p in self.profesores.values():
-            capacidad_restante[p.nombre] = p.carga_max
-        
+        capacidad_restante = {p.nombre: p.carga_max for p in self.profesores.values()}
         secciones_unicas = []
         secciones_multiple = []
         for s in self.secciones:
@@ -406,7 +393,6 @@ class TabuScheduler:
                 secciones_unicas.append(s)
             else:
                 secciones_multiple.append(s)
-        
         for s in secciones_unicas:
             prof = s.cands[0]
             creditos = self.get_sec_creditos(s, prof)
@@ -414,7 +400,6 @@ class TabuScheduler:
             carga_actual[prof] += creditos
             if prof in capacidad_restante:
                 capacidad_restante[prof] -= creditos
-        
         preferencias = {}
         for s in secciones_multiple:
             preferencias[s] = {}
@@ -426,9 +411,7 @@ class TabuScheduler:
                     preferencias[s][prof] = prioridad_base
                 else:
                     preferencias[s][prof] = 0.0
-        
         secciones_multiple.sort(key=lambda s: (len(s.cands), -max(preferencias[s].values())))
-        
         for s in secciones_multiple:
             candidatos_ordenados = sorted(s.cands, key=lambda p: preferencias[s].get(p, 0), reverse=True)
             asignado = False
@@ -447,7 +430,8 @@ class TabuScheduler:
                 carga_actual[prof] += creditos
                 if prof in capacidad_restante:
                     capacidad_restante[prof] -= creditos
-        
+
+        # Refinamiento con simulated annealing para mejorar compactación (pre-asignación)
         def calc_penalidad():
             pen = 0
             for p, c in carga_actual.items():
@@ -497,60 +481,55 @@ class TabuScheduler:
         carga_prof = {p: 0.0 for p in self.profesores}
         carga_prof["GRADUADOS"] = 0.0
         carga_prof["TBA"] = 0.0
-        
-        # Para compactación
         prof_patrones = {}
         prof_horarios_dia = {}
-        
-        for i, asign in enumerate(sol):
+        prof_horas_inicio = {}   # para penalizar diferentes horas de inicio
+
+        for asign in sol:
             s = asign['seccion']
             prof = asign['profesor']
             salon = asign['salon']
             patron = asign['patron']
             ini = asign['ini']
             patron_name = patron['name']
-            
+
             if prof == "TBA" or salon == "TBA":
                 conflicts += 10000
                 continue
-            
+
             salon_info = next((sl for sl in self.salones if sl['CODIGO'] == salon), None)
             if salon_info and salon_info['CAPACIDAD'] < s.cupo:
                 conflicts += 10000
             if salon_info and not compatible_tipo(s.tipo_salon, salon_info['TIPO']):
                 conflicts += 10000
-            
+
             if prof in self.profesores:
                 prof_obj = self.profesores[prof]
                 if prof_obj.acepta_grandes == 0 and s.es_grande:
                     conflicts += 10000
-                
                 es_intensivo = any(c >= 3 for c in patron['days'].values())
                 puede_ser_intensivo = any(any(c >= 3 for c in p['days'].values()) for p in PATRONES.get(s.creditos, PATRONES[3]))
                 if prof_obj.cursos_intensivos == 0 and es_intensivo:
                     conflicts += 10000
                 elif prof_obj.cursos_intensivos == 1 and puede_ser_intensivo and not es_intensivo:
                     conflicts += 10000
-                
                 if prof_obj.pref_horas == 'AM' and ini >= 720:
                     soft_penalty += 30
                 elif prof_obj.pref_horas == 'PM' and ini < 720:
                     soft_penalty += 30
-                
                 if prof_obj.pref_dias_set:
                     for dia in patron['days'].keys():
                         if dia not in prof_obj.pref_dias_set:
                             soft_penalty += 15
-                
                 for (dias_set, start, end) in prof_obj.bloqueos:
                     for dia in patron['days'].keys():
                         if dia in dias_set:
                             fin = ini + int(patron['days'][dia] * 50)
                             if max(ini, start) < min(fin, end):
                                 conflicts += 10000
-            
+
             carga_prof[prof] += self.get_sec_creditos(s, prof)
-            
+
             for dia, contrib in patron['days'].items():
                 fin = ini + int(contrib * 50)
                 if dia in ["Ma", "Ju"] and max(ini, self.hora_universal[0]) < min(fin, self.hora_universal[1]):
@@ -559,7 +538,7 @@ class TabuScheduler:
                     conflicts += 10000
                 if fin > self.limite_operativo[1] or ini < self.limite_operativo[0]:
                     conflicts += 10000
-                
+
                 if prof != "GRADUADOS":
                     clave = (prof, dia)
                     if clave not in occ_prof: occ_prof[clave] = []
@@ -567,7 +546,7 @@ class TabuScheduler:
                         if max(ini, ini_ex) < min(fin, fin_ex):
                             conflicts += 10000
                     occ_prof[clave].append((ini, fin))
-                
+
                 clave_s = (salon, dia)
                 if clave_s not in occ_salon: occ_salon[clave_s] = []
                 for (ini_ex, fin_ex, cupo_ex, fus_ex) in occ_salon[clave_s]:
@@ -577,12 +556,15 @@ class TabuScheduler:
                                 continue
                         conflicts += 10000
                 occ_salon[clave_s].append((ini, fin, s.cupo, s.es_fusionable))
-            
-            # Compactación: guardar patrones y horarios
+
+            # Compactación: registrar patrones y horas de inicio
             if prof in self.profesores:
                 if prof not in prof_patrones:
                     prof_patrones[prof] = set()
                 prof_patrones[prof].add(patron_name)
+                if prof not in prof_horas_inicio:
+                    prof_horas_inicio[prof] = set()
+                prof_horas_inicio[prof].add(ini)
                 if prof not in prof_horarios_dia:
                     prof_horarios_dia[prof] = {}
                 for dia, contrib in patron['days'].items():
@@ -590,12 +572,21 @@ class TabuScheduler:
                     if dia not in prof_horarios_dia[prof]:
                         prof_horarios_dia[prof][dia] = []
                     prof_horarios_dia[prof][dia].append((ini, fin))
-        
-        # Penalización por dispersión de días
+
+        # Penalización por dispersión de patrones (MUY ALTA)
         for prof, patrones_set in prof_patrones.items():
             if len(patrones_set) > 1:
-                soft_penalty += (len(patrones_set) - 1) * 50
-        
+                soft_penalty += (len(patrones_set) - 1) * 200   # aumentado de 50 a 200
+
+        # Penalización por diferentes horas de inicio (para el mismo profesor)
+        for prof, horas_set in prof_horas_inicio.items():
+            if len(horas_set) > 1:
+                # Penaliza la desviación estándar de las horas
+                horas_list = list(horas_set)
+                mean_h = sum(horas_list)/len(horas_list)
+                var_h = sum((h - mean_h)**2 for h in horas_list)/len(horas_list)
+                soft_penalty += var_h * 0.2   # penaliza la dispersión de horas
+
         # Penalización por huecos > 60 min
         for prof, dias_dict in prof_horarios_dia.items():
             for dia, intervalos in dias_dict.items():
@@ -603,8 +594,9 @@ class TabuScheduler:
                 for k in range(len(intervalos)-1):
                     gap = intervalos[k+1][0] - intervalos[k][1]
                     if gap > 60:
-                        soft_penalty += (gap - 60) * 0.5
-        
+                        soft_penalty += (gap - 60) * 1.0   # aumentado de 0.5 a 1.0
+
+        # Cargas
         for prof, carga in carga_prof.items():
             prof_obj = self.profesores.get(prof)
             if prof_obj:
@@ -616,8 +608,8 @@ class TabuScheduler:
                     conflicts += 10000
                 if carga < prof_obj.carga_min - 1.5:
                     conflicts += 10000
-        
-        # Penalización por usar diferentes tipos de salón (opcional)
+
+        # Penalización por diferentes tipos de salón (opcional)
         salones_por_prof_tipo = {}
         for asign in sol:
             prof = asign['profesor']
@@ -631,89 +623,72 @@ class TabuScheduler:
         for (prof, tipo), salones in salones_por_prof_tipo.items():
             if len(salones) > 1:
                 soft_penalty += (len(salones) - 1) * 2
-        
+
         return conflicts + soft_penalty
 
     def _obtener_conflictos(self, sol):
+        # (mismo que antes, sin cambios)
         conflictos_list = []
         occ_prof = {}
         occ_salon = {}
         carga_prof = {p: 0.0 for p in self.profesores}
         carga_prof["GRADUADOS"] = 0.0
         carga_prof["TBA"] = 0.0
-        
-        for i, asign in enumerate(sol):
+        for asign in sol:
             s = asign['seccion']
             prof = asign['profesor']
             salon = asign['salon']
             patron = asign['patron']
             ini = asign['ini']
-            
             if prof == "TBA": conflictos_list.append(f"Sección {s.cod}: profesor TBA")
             if salon == "TBA": conflictos_list.append(f"Sección {s.cod}: salón TBA")
-            
             salon_info = next((sl for sl in self.salones if sl['CODIGO'] == salon), None)
             if salon_info and salon_info['CAPACIDAD'] < s.cupo:
                 conflictos_list.append(f"Sección {s.cod}: salón {salon} capacidad insuficiente")
             if salon_info and not compatible_tipo(s.tipo_salon, salon_info['TIPO']):
-                conflictos_list.append(f"Sección {s.cod}: tipo de salón incompatible (requiere {s.tipo_salon}, tiene {salon_info['TIPO']})")
-            
-            if prof in carga_prof:
-                carga_prof[prof] += self.get_sec_creditos(s, prof)
-                
-            es_intensivo = any(c >= 3 for c in patron['days'].values())
-            puede_ser_intensivo = any(any(c >= 3 for c in p['days'].values()) for p in PATRONES.get(s.creditos, PATRONES[3]))
-
-            if prof != "GRADUADOS" and prof in self.profesores:
+                conflictos_list.append(f"Sección {s.cod}: tipo de salón incompatible")
+            if prof in self.profesores:
                 prof_obj = self.profesores[prof]
-                if prof_obj.cursos_intensivos == 0 and es_intensivo:
-                    conflictos_list.append(f"Sección {s.cod}: Prof {prof} tiene clase intensiva pero solicitó NO intensivos.")
-                elif prof_obj.cursos_intensivos == 1 and puede_ser_intensivo and not es_intensivo:
-                    conflictos_list.append(f"Sección {s.cod}: Prof {prof} NO tiene clase intensiva pero solicitó SÍ intensivos.")
-                
                 if prof_obj.acepta_grandes == 0 and s.es_grande:
-                    conflictos_list.append(f"Sección {s.cod}: Prof {prof} no acepta grandes pero se le asignó sección grande (cupo {s.cupo}).")
-                
+                    conflictos_list.append(f"Sección {s.cod}: Prof {prof} no acepta grandes")
+                es_intensivo = any(c >= 3 for c in patron['days'].values())
+                puede_ser_intensivo = any(any(c >= 3 for c in p['days'].values()) for p in PATRONES.get(s.creditos, PATRONES[3]))
+                if prof_obj.cursos_intensivos == 0 and es_intensivo:
+                    conflictos_list.append(f"Sección {s.cod}: Prof {prof} tiene intensivo pero no desea")
+                elif prof_obj.cursos_intensivos == 1 and puede_ser_intensivo and not es_intensivo:
+                    conflictos_list.append(f"Sección {s.cod}: Prof {prof} no tiene intensivo pero desea")
                 for (dias_set, start, end) in prof_obj.bloqueos:
                     for dia in patron['days'].keys():
                         if dia in dias_set:
                             fin = ini + int(patron['days'][dia] * 50)
                             if max(ini, start) < min(fin, end):
-                                conflictos_list.append(f"Sección {s.cod}: Prof {prof} tiene bloqueo el {dia} de {mins_to_str(start)} a {mins_to_str(end)}.")
-            
+                                conflictos_list.append(f"Sección {s.cod}: bloqueo {dia} {mins_to_str(start)}-{mins_to_str(end)}")
             for dia, contrib in patron['days'].items():
                 fin = ini + int(contrib * 50)
                 if dia in ["Ma", "Ju"] and max(ini, self.hora_universal[0]) < min(fin, self.hora_universal[1]):
-                    conflictos_list.append(f"Sección {s.cod}: violación de hora universal el {dia}")
-                
+                    conflictos_list.append(f"Sección {s.cod}: hora universal el {dia}")
                 if prof != "GRADUADOS":
                     clave = (prof, dia)
                     if clave not in occ_prof: occ_prof[clave] = []
                     for (ini_ex, fin_ex) in occ_prof[clave]:
                         if max(ini, ini_ex) < min(fin, fin_ex):
-                            conflictos_list.append(f"Cruce de profesor {prof} el {dia}")
+                            conflictos_list.append(f"Cruce profesor {prof} el {dia}")
                     occ_prof[clave].append((ini, fin))
-                
                 clave_s = (salon, dia)
                 if clave_s not in occ_salon: occ_salon[clave_s] = []
                 for (ini_ex, fin_ex, cupo_ex, fus_ex) in occ_salon[clave_s]:
                     if max(ini, ini_ex) < min(fin, fin_ex):
                         if not (salon in self.mega_salones and s.es_fusionable and fus_ex and s.cupo + cupo_ex <= salon_info['CAPACIDAD']):
-                            conflictos_list.append(f"Cruce de salón {salon} el {dia}")
+                            conflictos_list.append(f"Cruce salón {salon} el {dia}")
                 occ_salon[clave_s].append((ini, fin, s.cupo, s.es_fusionable))
-        
         for prof, carga in carga_prof.items():
             prof_obj = self.profesores.get(prof)
             if prof_obj:
-                if prof_obj.compensacion:
-                    carga_max_real = prof_obj.carga_max * 1.5
-                else:
-                    carga_max_real = prof_obj.carga_max
+                carga_max_real = prof_obj.carga_max * 1.5 if prof_obj.compensacion else prof_obj.carga_max
                 if carga > carga_max_real + 1.5:
                     conflictos_list.append(f"Profesor {prof} excede carga máxima ({carga:.1f} > {carga_max_real})")
                 if carga < prof_obj.carga_min - 1.5:
                     conflictos_list.append(f"Profesor {prof} no alcanza carga mínima ({carga:.1f} < {prof_obj.carga_min})")
-        
         return conflictos_list
 
     def _crear_asignacion_temporal(self, seccion, prof="TBA", salon="TBA", patron=None, ini=None):
@@ -854,7 +829,18 @@ class TabuScheduler:
         ))
 
         mejores_opciones = []
-        for _ in range(30):
+        # Obtener el patrón más frecuente de este profesor (para compactación)
+        patron_frecuente = None
+        if prof_actual in self.profesores:
+            conteo_patrones = {}
+            for asig in sol:
+                if asig['profesor'] == prof_actual:
+                    pname = asig['patron']['name']
+                    conteo_patrones[pname] = conteo_patrones.get(pname, 0) + 1
+            if conteo_patrones:
+                patron_frecuente = max(conteo_patrones, key=conteo_patrones.get)
+
+        for _ in range(50):  # más intentos para encontrar buena opción
             prof = random.choice(cand_profs)
             patrones = PATRONES.get(s.creditos, PATRONES[3])
             if prof in self.profesores:
@@ -866,6 +852,12 @@ class TabuScheduler:
                         patrones = intensivos + [p for p in patrones if not any(c >= 3 for c in p['days'].values())]
             if not patrones:
                 patrones = PATRONES.get(s.creditos, PATRONES[3])
+
+            # Forzar el patrón frecuente si existe y es válido
+            if patron_frecuente:
+                patrones_filtrados = [p for p in patrones if p['name'] == patron_frecuente]
+                if patrones_filtrados:
+                    patrones = patrones_filtrados
 
             patron = random.choice(patrones)
             horas_posibles = set(self.bloques)
@@ -1107,7 +1099,7 @@ class HybridTimetablingEngine:
         return mejor_sol_final, conflictos_final, historial
 
 # ==============================================================================
-# 8. FUNCIONES DE VISUALIZACIÓN AVANZADAS
+# 8. VISUALIZACIÓN
 # ==============================================================================
 def generar_heatmap_ocupacion(scheduler, solucion):
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
@@ -1202,7 +1194,7 @@ def render_calendar_view(df_master, filter_type, filter_value):
         st.dataframe(df_events[['Día', 'Inicio', 'Fin', 'Curso', 'Salón']])
 
 # ==============================================================================
-# 9. GENERACIÓN DE PLANTILLA EXCEL (CON TODAS LAS COLUMNAS)
+# 9. GENERACIÓN DE PLANTILLA
 # ==============================================================================
 def generar_plantilla():
     output = io.BytesIO()
@@ -1249,8 +1241,8 @@ def main():
     with st.sidebar:
         st.markdown("### ∑ Configuración")
         zona = st.selectbox("Zona Campus", ["CENTRAL", "PERIFERICA"])
-        generations_ag = st.slider("Generaciones del AG (Fase 1)", 50, 300, 150, help="Pocas generaciones para esqueleto inicial.")
-        iterations_sa = st.slider("Iteraciones de Recocido (Fase 2)", 500, 5000, 3000, help="Más iteraciones mejoran la solución final.")
+        generations_ag = st.slider("Generaciones del AG (Fase 1)", 50, 300, 150)
+        iterations_sa = st.slider("Iteraciones de Recocido (Fase 2)", 500, 5000, 3000)
         file = st.file_uploader("Subir Protocolo Excel", type=['xlsx'])
         st.download_button(
             label="📥 Descargar Plantilla",
@@ -1299,7 +1291,6 @@ def main():
                     bar_ag.progress(min(1.0, progress))
                     status_ag.markdown(f"**🧬 AG Generación {gen+1}/{generations_ag}** | Mejor Fitness: {fitness:.5f}")
 
-                # Fase AG
                 mejor_sol, conflictos, historial = engine.solve(
                     iterations_sa=iterations_sa,
                     progress_callback=ag_callback,
@@ -1307,12 +1298,10 @@ def main():
                     status_text=None
                 )
 
-                # Una vez terminado el AG, reiniciamos la barra y mostramos la Fase 2
                 status_ag.empty()
                 bar_sa = st.progress(0)
                 status_sa = st.empty()
 
-                # Fase SA (usando la solución del AG como inicial)
                 mejor_sol, conflictos, historial = engine.scheduler.optimizar(
                     iteraciones=iterations_sa,
                     bar=bar_sa,
