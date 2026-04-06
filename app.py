@@ -350,7 +350,7 @@ def dimensionar_secciones(demanda, cupo_base):
             if cupos:
                 extra_por_seccion = resto / len(cupos)
                 for i in range(len(cupos)):
-                    cupos[i] = min(cupo_base + 10, cupos[i] + extra_por_seccion)  # límite suave
+                    cupos[i] = min(cupo_base + 10, cupos[i] + extra_por_seccion)
     return cupos
 
 # ==============================================================================
@@ -431,7 +431,6 @@ class TabuScheduler:
             candidatos = datos['candidatos']
             creditos = datos['creditos']
             tipo_salon = datos['tipo_salon']
-            # Aplicar dimensionamiento
             cupos_secciones = dimensionar_secciones(demanda_total, cupo_tipico)
             for i, cupo in enumerate(cupos_secciones):
                 self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", creditos, cupo, candidatos, tipo_salon))
@@ -448,7 +447,6 @@ class TabuScheduler:
             self.limite_operativo = (420, 1080)       # 07:00 - 18:00
             self.bloques = list(range(420, 1021, 60))
 
-        # Solución inicial (se construirá después, pero dejamos espacio)
         self.solucion = None
         self.mejor_solucion = None
         self.mejor_costo = float('inf')
@@ -471,7 +469,6 @@ class TabuScheduler:
         secciones_unicas = []
         secciones_multiple = []
         for s in self.secciones:
-            # Filtrar candidatos que aceptan grandes si la sección es grande
             if s.es_grande:
                 cands_validos = [c for c in s.cands if c in self.profesores and self.profesores[c].acepta_grandes == 1]
             else:
@@ -602,7 +599,6 @@ class TabuScheduler:
                 if prof_obj.acepta_grandes == 0 and s.es_grande:
                     conflicts += 10000
             
-            # Carga real (con compensación)
             carga_prof[prof] += self.get_sec_creditos(s, prof)
             
             es_intensivo = any(c >= 3 for c in patron['days'].values())
@@ -615,7 +611,6 @@ class TabuScheduler:
                 elif prof_obj.cursos_intensivos == 1 and puede_ser_intensivo and not es_intensivo:
                     conflicts += 10000
 
-                # Suaves
                 if prof_obj.pref_horas == 'AM' and ini >= 720:
                     soft_penalty += 30
                 elif prof_obj.pref_horas == 'PM' and ini < 720:
@@ -626,7 +621,6 @@ class TabuScheduler:
                         if dia not in prof_obj.pref_dias_set:
                             soft_penalty += 15
 
-                # Bloqueos
                 for (dias_set, start, end) in prof_obj.bloqueos:
                     for dia in patron['days'].keys():
                         if dia in dias_set:
@@ -661,7 +655,6 @@ class TabuScheduler:
                         conflicts += 10000
                 occ_salon[clave_s].append((ini, fin, s.cupo, s.es_fusionable))
         
-        # Verificación de carga con compensación
         for prof, carga in carga_prof.items():
             prof_obj = self.profesores.get(prof)
             if prof_obj:
@@ -674,7 +667,6 @@ class TabuScheduler:
                 if carga < prof_obj.carga_min - 1.5:
                     conflicts += 10000
         
-        # Penalización suave por consistencia de salón por profesor
         salones_por_prof_tipo = {}
         for asign in sol:
             prof = asign['profesor']
@@ -957,7 +949,6 @@ class TabuScheduler:
             if prof not in self.profesores:
                 continue
             prof_obj = self.profesores[prof]
-            # Preferencia horaria
             total_possible += 1
             if prof_obj.pref_horas == 'ANY':
                 total_achieved += 1
@@ -965,13 +956,11 @@ class TabuScheduler:
                 total_achieved += 1
             elif prof_obj.pref_horas == 'PM' and asign['ini'] >= 720:
                 total_achieved += 1
-            # Preferencia de días
             if prof_obj.pref_dias_set:
                 total_possible += len(asign['patron']['days'])
                 for dia in asign['patron']['days']:
                     if dia in prof_obj.pref_dias_set:
                         total_achieved += 1
-        # Aquí podrías agregar más métricas de suaves (distribución, eficiencia, compactación)
         return (total_achieved / total_possible) * 100 if total_possible > 0 else 100.0
 
     def optimizar(self, iteraciones=3000, bar=None, status_text=None, solucion_inicial=None):
@@ -1009,7 +998,7 @@ class TabuScheduler:
         return self.mejor_solucion, int(self.mejor_costo // 10000), self.historial_costos
 
 # ==============================================================================
-# 6. FASE 1: ALGORITMO GENÉTICO (SEGÚN TESIS)
+# 6. FASE 1: ALGORITMO GENÉTICO (SEGÚN TESIS) - CORREGIDO
 # ==============================================================================
 class GeneticTimetablingEngine:
     def __init__(self, scheduler, pop_size=60, generations=150, p_cross=0.8, p_mut=0.1):
@@ -1032,24 +1021,41 @@ class GeneticTimetablingEngine:
                 if prof_obj.cursos_intensivos == 0:
                     patrones = [p for p in patrones if not any(c >= 3 for c in p['days'].values())]
                 for patron in patrones:
+                    # Calcular horas posibles comunes a todos los días del patrón
+                    horas_posibles = set(self.sched.bloques)
+                    valido = True
                     for dia, contrib in patron['days'].items():
                         duracion = contrib * 50
-                        horas_posibles = self.sched.bloques[:]
-                        horas_posibles = [h for h in horas_posibles if h >= self.sched.limite_operativo[0] and h+duracion <= self.sched.limite_operativo[1]]
+                        horas_dia = [h for h in self.sched.bloques if h >= self.sched.limite_operativo[0] and h + duracion <= self.sched.limite_operativo[1]]
                         if dia in ["Ma","Ju"]:
-                            horas_posibles = [h for h in horas_posibles if not (max(h, self.sched.hora_universal[0]) < min(h+duracion, self.sched.hora_universal[1]))]
+                            horas_dia = [h for h in horas_dia if not (max(h, self.sched.hora_universal[0]) < min(h+duracion, self.sched.hora_universal[1]))]
                         if sec.creditos == 3 and contrib >= 3:
-                            horas_posibles = [h for h in horas_posibles if h >= 930]
-                        for ini in horas_posibles:
-                            salones_cand = [s for s in self.sched.salones if compatible_tipo(sec.tipo_salon, s['TIPO']) and s['CAPACIDAD'] >= sec.cupo]
-                            for salon in salones_cand:
-                                bloqueado = False
+                            horas_dia = [h for h in horas_dia if h >= 930]
+                        if not horas_dia:
+                            valido = False
+                            break
+                        horas_posibles = horas_posibles.intersection(set(horas_dia))
+                        if not horas_posibles:
+                            valido = False
+                            break
+                    if not valido:
+                        continue
+                    # Para cada hora posible, probar salones
+                    for ini in horas_posibles:
+                        salones_cand = [s for s in self.sched.salones if compatible_tipo(sec.tipo_salon, s['TIPO']) and s['CAPACIDAD'] >= sec.cupo]
+                        for salon in salones_cand:
+                            # Verificar bloqueos del profesor en cada día del patrón
+                            bloqueado = False
+                            for dia, contrib in patron['days'].items():
+                                duracion = contrib * 50
                                 for (dias_set, start, end) in prof_obj.bloqueos:
                                     if dia in dias_set and max(ini, start) < min(ini+duracion, end):
                                         bloqueado = True
                                         break
-                                if not bloqueado:
-                                    opciones.append((prof, salon['CODIGO'], patron, ini))
+                                if bloqueado:
+                                    break
+                            if not bloqueado:
+                                opciones.append((prof, salon['CODIGO'], patron, ini))
             dominios.append(opciones)
         return dominios
 
@@ -1134,13 +1140,10 @@ class HybridTimetablingEngine:
         self.ag_engine = GeneticTimetablingEngine(self.scheduler)
 
     def solve(self, generations_ag=150, iterations_sa=3000, progress_callback=None):
-        # FASE 1: AG
         best_individual, best_sol_ag, best_costo_ag = self.ag_engine.run(progress_callback)
-        # Inyectar solución élite en el SA
         self.scheduler.solucion = best_sol_ag
         self.scheduler.mejor_solucion = deepcopy(best_sol_ag)
         self.scheduler.mejor_costo = best_costo_ag
-        # FASE 2: SA
         mejor_sol_final, conflictos_final, historial = self.scheduler.optimizar(
             iteraciones=iterations_sa, bar=None, status_text=None
         )
@@ -1318,7 +1321,6 @@ def main():
                 bar = st.progress(0)
                 status = st.empty()
 
-                # Callback para mostrar progreso del AG
                 def ag_callback(gen, fitness):
                     status.markdown(f"**🧬 AG Generación {gen+1}/{generations_ag}** | Mejor Fitness: {fitness:.5f}")
                     bar.progress((gen+1)/generations_ag)
@@ -1328,7 +1330,6 @@ def main():
                     iterations_sa=iterations_sa,
                     progress_callback=ag_callback
                 )
-                # Después de AG, el SA se ejecuta internamente; mostramos mensaje final
                 status.markdown("✅ Optimización completada. Generando resultados...")
 
                 st.session_state.elapsed_time = time.time() - start_time
@@ -1362,6 +1363,8 @@ def main():
         except Exception as e:
             st.error(f"Error durante la optimización: {e}")
             st.info("Revise que los datos de entrada sean consistentes (profesores candidatos, salones compatibles, etc.)")
+            import traceback
+            st.code(traceback.format_exc())
             return
 
     if 'master' in st.session_state:
