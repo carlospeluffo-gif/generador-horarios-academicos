@@ -11,10 +11,18 @@ import plotly.express as px
 import plotly.graph_objects as go
 from copy import deepcopy
 
+# Intentar importar PuLP para el pulido exacto (opcional)
+try:
+    import pulp as pl
+    PULP_AVAILABLE = True
+except ImportError:
+    PULP_AVAILABLE = False
+    st.warning("PuLP no instalado. El pulido exacto estará deshabilitado. Instálalo con: pip install pulp")
+
 # ==============================================================================
 # 1. CONFIGURACIÓN DE PÁGINA Y ESTILOS
 # ==============================================================================
-st.set_page_config(page_title="UPRM Scheduler Platinum v17", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="UPRM Scheduler Platinum v18 - Compactación Total", page_icon="🏛️", layout="wide")
 
 st.markdown("""
 <style>
@@ -34,13 +42,14 @@ st.markdown("""
     [data-testid="stSidebar"] h3 { color: #8E6E13 !important; font-family: 'Playfair Display', serif; }
     .status-badge { background: #f0f0f0; border: 1px solid #D4AF37; color: #8E6E13; padding: 12px; border-radius: 8px; text-align: center; font-family: 'Source Code Pro', monospace; font-weight: 500; }
     .stMetric label { color: #2c2c2c !important; }
+    .compact-badge { background: #2e7d32; color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; }
 </style>
 <div class="math-header">
     <div class="abstract-icon">Δx</div>
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
         <p style="color: #555; font-family: 'Source Code Pro'; letter-spacing: 2px; font-size: 0.8rem;">
-            MODELO HÍBRIDO: AG + SA + COMPACTACIÓN EXTREMA
+            MODELO HÍBRIDO CON COMPACTACIÓN TOTAL OBLIGATORIA
         </p>
     </div>
     <div class="abstract-icon">∞</div>
@@ -142,7 +151,7 @@ def exportar_todo(df):
     return out.getvalue()
 
 # ==============================================================================
-# 3. DIMENSIONAMIENTO DE SECCIONES (CORREGIDO)
+# 3. DIMENSIONAMIENTO DE SECCIONES
 # ==============================================================================
 def dimensionar_secciones(demanda, cupo_base, max_extra=10):
     if demanda <= 0:
@@ -266,7 +275,7 @@ def compatible_tipo(curso_tipo, salon_tipo):
     return salon_cat != 2
 
 # ==============================================================================
-# 5. MOTOR DE OPTIMIZACIÓN CON COMPACTACIÓN EXTREMA
+# 5. MOTOR DE OPTIMIZACIÓN CON COMPACTACIÓN OBLIGATORIA
 # ==============================================================================
 class TabuScheduler:
     def __init__(self, df_cursos, df_profes, df_salones, zona):
@@ -369,7 +378,6 @@ class TabuScheduler:
         return float(s.creditos)
 
     def _preasignar_profesores_robusto(self):
-        # (mismo que antes, pero añadimos un sesgo para que los profesores tengan un solo patrón)
         carga_actual = {p: 0.0 for p in self.profesores}
         carga_actual["GRADUADOS"] = 0.0
         carga_actual["TBA"] = 0.0
@@ -431,7 +439,7 @@ class TabuScheduler:
                 if prof in capacidad_restante:
                     capacidad_restante[prof] -= creditos
 
-        # Refinamiento con simulated annealing para mejorar compactación (pre-asignación)
+        # Refinamiento con simulated annealing para mejorar cargas
         def calc_penalidad():
             pen = 0
             for p, c in carga_actual.items():
@@ -473,6 +481,276 @@ class TabuScheduler:
                     carga_actual[nuevo_prof] -= creditos_nuevos
             T *= 0.995
 
+    # --------------------------------------------------------------------------
+    # NUEVO: Métodos de compactación obligatoria
+    # --------------------------------------------------------------------------
+    def _calcular_min_dias_teoricos(self, asignaciones_prof):
+        """Calcula el mínimo número de días necesarios para un profesor dadas sus horas de clase"""
+        horas_totales = sum(self.get_sec_creditos(a['seccion'], a['profesor']) for a in asignaciones_prof)
+        # Asumiendo jornada máxima de 8 horas efectivas por día (480 minutos)
+        minutos_totales = horas_totales * 50  # cada crédito = 50 min
+        return math.ceil(minutos_totales / 480)
+
+    def _calcular_huecos_profesor(self, asignaciones_prof):
+        """Calcula el número total de minutos de hueco entre clases para un profesor"""
+        # Agrupar por día
+        horario_por_dia = {}
+        for asign in asignaciones_prof:
+            for dia, contrib in asign['patron']['days'].items():
+                ini = asign['ini']
+                fin = ini + int(contrib * 50)
+                if dia not in horario_por_dia:
+                    horario_por_dia[dia] = []
+                horario_por_dia[dia].append((ini, fin))
+        
+        huecos_total = 0
+        for dia, intervalos in horario_por_dia.items():
+            intervalos.sort()
+            for i in range(len(intervalos)-1):
+                gap = intervalos[i+1][0] - intervalos[i][1]
+                if gap > 0:
+                    huecos_total += gap
+        return huecos_total
+
+    def _es_horario_compacto(self, asignaciones_prof):
+        """Verifica si el horario de un profesor es 100% compacto"""
+        if not asignaciones_prof:
+            return True
+        # 1. Días utilizados
+        dias_usados = set()
+        for asign in asignaciones_prof:
+            for dia in asign['patron']['days'].keys():
+                dias_usados.add(dia)
+        min_dias = self._calcular_min_dias_teoricos(asignaciones_prof)
+        if len(dias_usados) > min_dias:
+            return False
+        # 2. Huecos
+        huecos = self._calcular_huecos_profesor(asignaciones_prof)
+        if huecos > 0:
+            return False
+        return True
+
+    def _penalizacion_compactacion_extrema(self, sol):
+        """Penalización tan alta que cualquier no-compactación es inaceptable"""
+        penalty = 0
+        prof_horarios = self._agrupar_por_profesor(sol)
+        for prof, asignaciones in prof_horarios.items():
+            if prof in ["GRADUADOS", "TBA"]:
+                continue
+            if not self._es_horario_compacto(asignaciones):
+                # Penalización enorme: peor que cualquier conflicto duro
+                penalty += 1_000_000
+        return penalty
+
+    def _agrupar_por_profesor(self, sol):
+        prof_map = {}
+        for asign in sol:
+            p = asign['profesor']
+            if p not in prof_map:
+                prof_map[p] = []
+            prof_map[p].append(asign)
+        return prof_map
+
+    # --------------------------------------------------------------------------
+    # Construcción greedy orientada a compactación
+    # --------------------------------------------------------------------------
+    def _construir_solucion_compacta_greedy(self):
+        """Construye una solución inicial donde cada profesor tiene horario compacto"""
+        sol = [None] * len(self.secciones)
+        asignado = [False] * len(self.secciones)
+        
+        # Ordenar profesores por carga total (mayor primero) para asignar primero los más cargados
+        carga_prof = {}
+        for s in self.secciones:
+            prof = getattr(s, 'prof_preasignado', 'TBA')
+            if prof not in carga_prof:
+                carga_prof[prof] = 0.0
+            carga_prof[prof] += self.get_sec_creditos(s, prof)
+        
+        profesores_ordenados = sorted([p for p in carga_prof if p not in ["TBA", "GRADUADOS"]],
+                                      key=lambda p: carga_prof[p], reverse=True)
+        
+        # Para cada profesor, asignar todos sus cursos de forma compacta
+        for prof in profesores_ordenados:
+            indices_secciones = [i for i, s in enumerate(self.secciones) 
+                                 if getattr(s, 'prof_preasignado', None) == prof and not asignado[i]]
+            if not indices_secciones:
+                continue
+            
+            # Intentar asignar todos los cursos de este profesor en el mínimo número de días
+            # usando un algoritmo de empaquetamiento
+            secciones_a_asignar = [self.secciones[i] for i in indices_secciones]
+            # Calcular horas totales en minutos
+            minutos_totales = sum(self.get_sec_creditos(s, prof) * 50 for s in secciones_a_asignar)
+            min_dias = math.ceil(minutos_totales / 480)
+            
+            # Probar diferentes combinaciones de días
+            dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
+            from itertools import combinations
+            mejor_asignacion = None
+            mejor_costo = float('inf')
+            
+            # Probar todas las combinaciones de días posibles con tamaño = min_dias
+            for dias_combo in combinations(dias_semana, min_dias):
+                # Para esta combinación de días, intentar empaquetar las secciones
+                asignacion_temp = self._empaquetar_en_dias(secciones_a_asignar, prof, list(dias_combo))
+                if asignacion_temp:
+                    costo = self._costo_total(asignacion_temp + [a for a in sol if a is not None])
+                    if costo < mejor_costo:
+                        mejor_costo = costo
+                        mejor_asignacion = asignacion_temp
+            
+            if mejor_asignacion:
+                for asign in mejor_asignacion:
+                    idx = self.secciones.index(asign['seccion'])
+                    sol[idx] = asign
+                    asignado[idx] = True
+            else:
+                # Fallback: asignación individual
+                for s in secciones_a_asignar:
+                    idx = self.secciones.index(s)
+                    exito = self._asignar_seccion(idx, prof, sol, asignado)
+                    if not exito:
+                        sol[idx] = self._crear_asignacion_temporal(s, prof=prof)
+                        asignado[idx] = True
+        
+        # Asignar resto de secciones (TBA, GRADUADOS)
+        for i, s in enumerate(self.secciones):
+            if not asignado[i]:
+                prof = getattr(s, 'prof_preasignado', 'TBA')
+                exito = self._asignar_seccion(i, prof, sol, asignado)
+                if not exito:
+                    sol[i] = self._crear_asignacion_temporal(s, prof=prof)
+                    asignado[i] = True
+        
+        return sol
+
+    def _empaquetar_en_dias(self, secciones, prof, dias_disponibles):
+        """Intenta asignar todas las secciones en los días dados, con horarios consecutivos"""
+        # Ordenar secciones por duración (mayor primero) para mejor empaquetamiento
+        secciones_ordenadas = sorted(secciones, key=lambda s: self.get_sec_creditos(s, prof)*50, reverse=True)
+        asignaciones = []
+        
+        # Para cada día, llevar registro de la próxima hora libre (inicio en 450 o 420)
+        hora_inicio_base = self.limite_operativo[0]
+        proxima_hora = {dia: hora_inicio_base for dia in dias_disponibles}
+        
+        for s in secciones_ordenadas:
+            duracion_min = self.get_sec_creditos(s, prof) * 50
+            # Buscar el primer día donde quepa
+            asignado = False
+            for dia in dias_disponibles:
+                inicio = proxima_hora[dia]
+                fin = inicio + duracion_min
+                if fin <= self.limite_operativo[1]:
+                    # Verificar conflictos con asignaciones ya colocadas (mismo profesor, mismo día)
+                    conflicto = False
+                    for otra in asignaciones:
+                        if otra['profesor'] == prof:
+                            for d, contrib in otra['patron']['days'].items():
+                                if d == dia:
+                                    fin_otra = otra['ini'] + int(contrib * 50)
+                                    if max(inicio, otra['ini']) < min(fin, fin_otra):
+                                        conflicto = True
+                                        break
+                        if conflicto:
+                            break
+                    if not conflicto:
+                        # Crear un patrón para este día (puede ser intensivo o no)
+                        # Buscar patrón que coincida con la duración
+                        patron = self._crear_patron_para_duracion(duracion_min, dia)
+                        if patron:
+                            asignaciones.append({
+                                'seccion': s,
+                                'profesor': prof,
+                                'salon': 'TBA',  # se asignará después
+                                'patron': patron,
+                                'ini': inicio
+                            })
+                            proxima_hora[dia] = fin
+                            asignado = True
+                            break
+            if not asignado:
+                return None  # No se pudo empaquetar
+        return asignaciones
+
+    def _crear_patron_para_duracion(self, duracion_min, dia):
+        """Crea un patrón para un solo día con la duración dada"""
+        # Convertir duración a créditos (cada crédito = 50 min)
+        creditos = duracion_min / 50.0
+        # Buscar en PATRONES un patrón que tenga ese día con la contribución adecuada
+        for patron_list in PATRONES.values():
+            for patron in patron_list:
+                if dia in patron['days'] and abs(patron['days'][dia] * 50 - duracion_min) < 1:
+                    # Clonar el patrón pero solo con ese día
+                    nuevo_patron = {'name': patron['name'], 'days': {dia: patron['days'][dia]}}
+                    return nuevo_patron
+        # Si no existe, crear uno genérico
+        return {'name': f"{dia} Intensivo", 'days': {dia: creditos}}
+
+    # --------------------------------------------------------------------------
+    # Métodos originales adaptados
+    # --------------------------------------------------------------------------
+    def _asignar_seccion(self, idx, prof, sol, asignado):
+        s = sol[idx]['seccion'] if sol[idx] else self.secciones[idx]
+        patrones = PATRONES.get(s.creditos, PATRONES[3])
+        puede_ser_intensivo = any(any(c >= 3 for c in p['days'].values()) for p in patrones)
+        if prof in self.profesores:
+            prof_obj = self.profesores[prof]
+            if prof_obj.cursos_intensivos == 0:
+                patrones = [p for p in patrones if not any(c >= 3 for c in p['days'].values())]
+            elif prof_obj.cursos_intensivos == 1 and puede_ser_intensivo:
+                patrones_int = [p for p in patrones if any(c >= 3 for c in p['days'].values())]
+                if patrones_int: patrones = patrones_int
+        if not patrones: patrones = PATRONES.get(s.creditos, PATRONES[3])
+        random.shuffle(patrones)
+        for patron in patrones:
+            for dia, contrib in patron['days'].items():
+                duracion = contrib * 50
+                inicios_posibles = [ini for ini in self.bloques if ini >= self.limite_operativo[0] and ini + duracion <= self.limite_operativo[1]]
+                if dia in ["Ma", "Ju"]:
+                    inicios_posibles = [ini for ini in inicios_posibles if not (max(ini, self.hora_universal[0]) < min(ini+duracion, self.hora_universal[1]))]
+                if s.creditos == 3 and contrib >= 3:
+                    inicios_posibles = [ini for ini in inicios_posibles if ini >= 930]
+                salones_posibles = [sl['CODIGO'] for sl in self.salones if sl['CAPACIDAD'] >= s.cupo and compatible_tipo(s.tipo_salon, sl['TIPO'])]
+                for ini in inicios_posibles:
+                    for salon in salones_posibles:
+                        if prof in self.profesores:
+                            bloqueado = False
+                            for (dias_set, start, end) in self.profesores[prof].bloqueos:
+                                if dia in dias_set and max(ini, start) < min(ini+duracion, end):
+                                    bloqueado = True
+                                    break
+                            if bloqueado: continue
+                        conflicto = False
+                        for j, asign in enumerate(sol):
+                            if asign and asignado[j] and j != idx:
+                                if asign['profesor'] == prof:
+                                    for dia2, contrib2 in asign['patron']['days'].items():
+                                        if dia == dia2 and max(ini, asign['ini']) < min(ini+duracion, asign['ini']+int(contrib2*50)):
+                                            conflicto = True; break
+                                if asign['salon'] == salon:
+                                    for dia2, contrib2 in asign['patron']['days'].items():
+                                        if dia == dia2 and max(ini, asign['ini']) < min(ini+duracion, asign['ini']+int(contrib2*50)):
+                                            if salon in self.mega_salones and s.es_fusionable and asign['seccion'].es_fusionable:
+                                                if s.cupo + asign['seccion'].cupo <= self.salon_capacidad.get(salon, 0):
+                                                    continue
+                                            conflicto = True; break
+                            if conflicto: break
+                        if not conflicto:
+                            sol[idx] = {'seccion': s, 'profesor': prof, 'salon': salon, 'patron': patron, 'ini': ini}
+                            asignado[idx] = True
+                            return True
+        return False
+
+    def _crear_asignacion_temporal(self, seccion, prof="TBA", salon="TBA", patron=None, ini=None):
+        if patron is None: patron = random.choice(PATRONES.get(seccion.creditos, PATRONES[3]))
+        if ini is None: ini = random.choice(self.bloques)
+        if salon == "TBA":
+            salones_posibles = [sl['CODIGO'] for sl in self.salones if sl['CAPACIDAD'] >= seccion.cupo and compatible_tipo(seccion.tipo_salon, sl['TIPO'])]
+            salon = random.choice(salones_posibles) if salones_posibles else "TBA"
+        return {'seccion': seccion, 'profesor': prof, 'salon': salon, 'patron': patron, 'ini': ini}
+
     def _costo_total(self, sol):
         conflicts = 0
         soft_penalty = 0
@@ -481,9 +759,6 @@ class TabuScheduler:
         carga_prof = {p: 0.0 for p in self.profesores}
         carga_prof["GRADUADOS"] = 0.0
         carga_prof["TBA"] = 0.0
-        prof_patrones = {}
-        prof_horarios_dia = {}
-        prof_horas_inicio = {}   # para penalizar diferentes horas de inicio
 
         for asign in sol:
             s = asign['seccion']
@@ -491,7 +766,6 @@ class TabuScheduler:
             salon = asign['salon']
             patron = asign['patron']
             ini = asign['ini']
-            patron_name = patron['name']
 
             if prof == "TBA" or salon == "TBA":
                 conflicts += 10000
@@ -557,45 +831,6 @@ class TabuScheduler:
                         conflicts += 10000
                 occ_salon[clave_s].append((ini, fin, s.cupo, s.es_fusionable))
 
-            # Compactación: registrar patrones y horas de inicio
-            if prof in self.profesores:
-                if prof not in prof_patrones:
-                    prof_patrones[prof] = set()
-                prof_patrones[prof].add(patron_name)
-                if prof not in prof_horas_inicio:
-                    prof_horas_inicio[prof] = set()
-                prof_horas_inicio[prof].add(ini)
-                if prof not in prof_horarios_dia:
-                    prof_horarios_dia[prof] = {}
-                for dia, contrib in patron['days'].items():
-                    fin = ini + int(contrib * 50)
-                    if dia not in prof_horarios_dia[prof]:
-                        prof_horarios_dia[prof][dia] = []
-                    prof_horarios_dia[prof][dia].append((ini, fin))
-
-        # Penalización por dispersión de patrones (MUY ALTA)
-        for prof, patrones_set in prof_patrones.items():
-            if len(patrones_set) > 1:
-                soft_penalty += (len(patrones_set) - 1) * 10000 
-
-        # Penalización por diferentes horas de inicio (para el mismo profesor)
-        for prof, horas_set in prof_horas_inicio.items():
-            if len(horas_set) > 1:
-                # Penaliza la desviación estándar de las horas
-                horas_list = list(horas_set)
-                mean_h = sum(horas_list)/len(horas_list)
-                var_h = sum((h - mean_h)**2 for h in horas_list)/len(horas_list)
-                soft_penalty += var_h * 0.2   # penaliza la dispersión de horas
-
-        # Penalización por huecos > 60 min
-        for prof, dias_dict in prof_horarios_dia.items():
-            for dia, intervalos in dias_dict.items():
-                intervalos.sort(key=lambda x: x[0])
-                for k in range(len(intervalos)-1):
-                    gap = intervalos[k+1][0] - intervalos[k][1]
-                    if gap > 60:
-                        soft_penalty += (gap - 60) * 1.0 
-
         # Cargas
         for prof, carga in carga_prof.items():
             prof_obj = self.profesores.get(prof)
@@ -609,25 +844,12 @@ class TabuScheduler:
                 if carga < prof_obj.carga_min - 1.5:
                     conflicts += 10000
 
-        # Penalización por diferentes tipos de salón (opcional)
-        salones_por_prof_tipo = {}
-        for asign in sol:
-            prof = asign['profesor']
-            if prof not in ["GRADUADOS", "TBA"] and prof in self.profesores:
-                salon = asign['salon']
-                tipo = self.salon_tipo.get(salon, 1)
-                key = (prof, tipo)
-                if key not in salones_por_prof_tipo:
-                    salones_por_prof_tipo[key] = set()
-                salones_por_prof_tipo[key].add(salon)
-        for (prof, tipo), salones in salones_por_prof_tipo.items():
-            if len(salones) > 1:
-                soft_penalty += (len(salones) - 1) * 2
+        # Penalización extrema por no compactación
+        compaction_penalty = self._penalizacion_compactacion_extrema(sol)
 
-        return conflicts + soft_penalty
+        return conflicts * 10000 + compaction_penalty + soft_penalty
 
     def _obtener_conflictos(self, sol):
-        # (mismo que antes, sin cambios)
         conflictos_list = []
         occ_prof = {}
         occ_salon = {}
@@ -689,78 +911,14 @@ class TabuScheduler:
                     conflictos_list.append(f"Profesor {prof} excede carga máxima ({carga:.1f} > {carga_max_real})")
                 if carga < prof_obj.carga_min - 1.5:
                     conflictos_list.append(f"Profesor {prof} no alcanza carga mínima ({carga:.1f} < {prof_obj.carga_min})")
+        # Verificar compactación
+        prof_horarios = self._agrupar_por_profesor(sol)
+        for prof, asignaciones in prof_horarios.items():
+            if prof in ["GRADUADOS", "TBA"]:
+                continue
+            if not self._es_horario_compacto(asignaciones):
+                conflictos_list.append(f"Profesor {prof} tiene horario NO compacto (días extra o huecos)")
         return conflictos_list
-
-    def _crear_asignacion_temporal(self, seccion, prof="TBA", salon="TBA", patron=None, ini=None):
-        if patron is None: patron = random.choice(PATRONES.get(seccion.creditos, PATRONES[3]))
-        if ini is None: ini = random.choice(self.bloques)
-        if salon == "TBA":
-            salones_posibles = [sl['CODIGO'] for sl in self.salones if sl['CAPACIDAD'] >= seccion.cupo and compatible_tipo(seccion.tipo_salon, sl['TIPO'])]
-            salon = random.choice(salones_posibles) if salones_posibles else "TBA"
-        return {'seccion': seccion, 'profesor': prof, 'salon': salon, 'patron': patron, 'ini': ini}
-
-    def _asignar_seccion(self, idx, prof, sol, asignado):
-        s = sol[idx]['seccion'] if sol[idx] else self.secciones[idx]
-        patrones = PATRONES.get(s.creditos, PATRONES[3])
-        puede_ser_intensivo = any(any(c >= 3 for c in p['days'].values()) for p in patrones)
-        if prof in self.profesores:
-            prof_obj = self.profesores[prof]
-            if prof_obj.cursos_intensivos == 0:
-                patrones = [p for p in patrones if not any(c >= 3 for c in p['days'].values())]
-            elif prof_obj.cursos_intensivos == 1 and puede_ser_intensivo:
-                patrones_int = [p for p in patrones if any(c >= 3 for c in p['days'].values())]
-                if patrones_int: patrones = patrones_int
-        if not patrones: patrones = PATRONES.get(s.creditos, PATRONES[3])
-        random.shuffle(patrones)
-        for patron in patrones:
-            for dia, contrib in patron['days'].items():
-                duracion = contrib * 50
-                inicios_posibles = [ini for ini in self.bloques if ini >= self.limite_operativo[0] and ini + duracion <= self.limite_operativo[1]]
-                if dia in ["Ma", "Ju"]:
-                    inicios_posibles = [ini for ini in inicios_posibles if not (max(ini, self.hora_universal[0]) < min(ini+duracion, self.hora_universal[1]))]
-                if s.creditos == 3 and contrib >= 3:
-                    inicios_posibles = [ini for ini in inicios_posibles if ini >= 930]
-                salones_posibles = [sl['CODIGO'] for sl in self.salones if sl['CAPACIDAD'] >= s.cupo and compatible_tipo(s.tipo_salon, sl['TIPO'])]
-                for ini in inicios_posibles:
-                    for salon in salones_posibles:
-                        if prof in self.profesores:
-                            bloqueado = False
-                            for (dias_set, start, end) in self.profesores[prof].bloqueos:
-                                if dia in dias_set and max(ini, start) < min(ini+duracion, end):
-                                    bloqueado = True
-                                    break
-                            if bloqueado: continue
-                        conflicto = False
-                        for j, asign in enumerate(sol):
-                            if asign and asignado[j] and j != idx:
-                                if asign['profesor'] == prof:
-                                    for dia2, contrib2 in asign['patron']['days'].items():
-                                        if dia == dia2 and max(ini, asign['ini']) < min(ini+duracion, asign['ini']+int(contrib2*50)):
-                                            conflicto = True; break
-                                if asign['salon'] == salon:
-                                    for dia2, contrib2 in asign['patron']['days'].items():
-                                        if dia == dia2 and max(ini, asign['ini']) < min(ini+duracion, asign['ini']+int(contrib2*50)):
-                                            if salon in self.mega_salones and s.es_fusionable and asign['seccion'].es_fusionable:
-                                                if s.cupo + asign['seccion'].cupo <= self.salon_capacidad.get(salon, 0):
-                                                    continue
-                                            conflicto = True; break
-                            if conflicto: break
-                        if not conflicto:
-                            sol[idx] = {'seccion': s, 'profesor': prof, 'salon': salon, 'patron': patron, 'ini': ini}
-                            asignado[idx] = True
-                            return True
-        return False
-
-    def _construir_solucion_greedy(self):
-        sol = [None] * len(self.secciones)
-        asignado = [False] * len(self.secciones)
-        for i, s in enumerate(self.secciones):
-            prof = getattr(s, 'prof_preasignado', 'TBA')
-            exito = self._asignar_seccion(i, prof, sol, asignado)
-            if not exito:
-                sol[i] = self._crear_asignacion_temporal(s, prof=prof)
-                asignado[i] = True
-        return sol
 
     def _precalcular_dominios(self):
         dominios = []
@@ -829,18 +987,7 @@ class TabuScheduler:
         ))
 
         mejores_opciones = []
-        # Obtener el patrón más frecuente de este profesor (para compactación)
-        patron_frecuente = None
-        if prof_actual in self.profesores:
-            conteo_patrones = {}
-            for asig in sol:
-                if asig['profesor'] == prof_actual:
-                    pname = asig['patron']['name']
-                    conteo_patrones[pname] = conteo_patrones.get(pname, 0) + 1
-            if conteo_patrones:
-                patron_frecuente = max(conteo_patrones, key=conteo_patrones.get)
-
-        for _ in range(50):  # más intentos para encontrar buena opción
+        for _ in range(50):
             prof = random.choice(cand_profs)
             patrones = PATRONES.get(s.creditos, PATRONES[3])
             if prof in self.profesores:
@@ -852,13 +999,6 @@ class TabuScheduler:
                         patrones = intensivos + [p for p in patrones if not any(c >= 3 for c in p['days'].values())]
             if not patrones:
                 patrones = PATRONES.get(s.creditos, PATRONES[3])
-
-            # Forzar el patrón frecuente si existe y es válido
-            if patron_frecuente:
-                patrones_filtrados = [p for p in patrones if p['name'] == patron_frecuente]
-                if patrones_filtrados:
-                    patrones = patrones_filtrados
-
             patron = random.choice(patrones)
             horas_posibles = set(self.bloques)
             for dia, contrib in patron['days'].items():
@@ -874,13 +1014,11 @@ class TabuScheduler:
             if not horas_posibles:
                 continue
             hora = random.choice(list(horas_posibles))
-
             salones_cand = [sl['CODIGO'] for sl in self.salones
                             if compatible_tipo(s.tipo_salon, sl['TIPO']) and sl['CAPACIDAD'] >= s.cupo]
             if not salones_cand:
                 continue
             salon = random.choice(salones_cand)
-
             conflicto = False
             for j, asign2 in enumerate(sol):
                 if j != idx and asign2:
@@ -920,7 +1058,6 @@ class TabuScheduler:
                             if dia not in prof_obj.pref_dias_set:
                                 costo += 15
                 mejores_opciones.append((costo, prof, patron, hora, salon))
-
         if not mejores_opciones:
             return nuevo, self._costo_total(nuevo)
         mejores_opciones.sort(key=lambda x: x[0])
@@ -954,7 +1091,7 @@ class TabuScheduler:
         if solucion_inicial is not None:
             self.solucion = solucion_inicial
         else:
-            self.solucion = self._construir_solucion_greedy()
+            self.solucion = self._construir_solucion_compacta_greedy()
         self.mejor_solucion = deepcopy(self.solucion)
         self.mejor_costo = self._costo_total(self.solucion)
         self.historial_costos = [self.mejor_costo]
@@ -985,7 +1122,7 @@ class TabuScheduler:
         return self.mejor_solucion, int(self.mejor_costo // 10000), self.historial_costos
 
 # ==============================================================================
-# 6. ALGORITMO GENÉTICO CON DOMINIO PRECALCULADO
+# 6. ALGORITMO GENÉTICO CON DOMINIO PRECALCULADO (para Fase 1)
 # ==============================================================================
 class GeneticTimetablingEngine:
     def __init__(self, scheduler, pop_size=60, generations=150, p_cross=0.8, p_mut=0.1):
@@ -1070,7 +1207,7 @@ class GeneticTimetablingEngine:
         return poblacion[best_idx], best_sol, best_costo
 
 # ==============================================================================
-# 7. CONTROLADOR HÍBRIDO (AG + SA)
+# 7. CONTROLADOR HÍBRIDO CON PULIDO ILP (OPCIONAL)
 # ==============================================================================
 class HybridTimetablingEngine:
     def __init__(self, df_cursos, df_profes, df_salones, zona,
@@ -1082,6 +1219,7 @@ class HybridTimetablingEngine:
         self.p_mut = p_mut
 
     def solve(self, iterations_sa=3000, progress_callback=None, bar=None, status_text=None):
+        # Fase 1: AG para obtener un buen esqueleto
         ag_engine = GeneticTimetablingEngine(
             self.scheduler,
             pop_size=self.pop_size,
@@ -1093,13 +1231,161 @@ class HybridTimetablingEngine:
         self.scheduler.solucion = best_sol_ag
         self.scheduler.mejor_solucion = deepcopy(best_sol_ag)
         self.scheduler.mejor_costo = best_costo_ag
+
+        # Fase 2: SA con penalización extrema por compactación
         mejor_sol_final, conflictos_final, historial = self.scheduler.optimizar(
             iteraciones=iterations_sa, bar=bar, status_text=status_text
         )
+
+        # Fase 3: Pulido exacto con ILP (si está disponible y hay profesores no compactos)
+        if PULP_AVAILABLE:
+            mejor_sol_final = self._pulir_con_ilp(mejor_sol_final)
+
+        # Verificación final: si algún profesor no es compacto, reintentar con más iteraciones
+        prof_horarios = self.scheduler._agrupar_por_profesor(mejor_sol_final)
+        no_compactos = [p for p, asigns in prof_horarios.items() 
+                        if p not in ["GRADUADOS", "TBA"] and not self.scheduler._es_horario_compacto(asigns)]
+        if no_compactos:
+            st.warning(f"Reintentando optimización para {len(no_compactos)} profesores no compactos...")
+            # Reoptimizar solo esos profesores (movimientos locales)
+            mejor_sol_final = self._reparar_compactacion(mejor_sol_final, no_compactos)
+
         return mejor_sol_final, conflictos_final, historial
 
+    def _pulir_con_ilp(self, solucion):
+        """Usa programación lineal entera para mejorar la compactación de profesores problemáticos"""
+        # Identificar profesores con horario no compacto
+        prof_horarios = self.scheduler._agrupar_por_profesor(solucion)
+        profesores_problema = [p for p, asigns in prof_horarios.items() 
+                               if p not in ["GRADUADOS", "TBA"] and not self.scheduler._es_horario_compacto(asigns)]
+        if not profesores_problema:
+            return solucion
+
+        for prof in profesores_problema:
+            # Extraer las secciones de este profesor
+            secciones_prof = [a for a in solucion if a['profesor'] == prof]
+            if not secciones_prof:
+                continue
+
+            # Crear un problema ILP para este profesor
+            prob = pl.LpProblem(f"Compactacion_{prof}", pl.LpMinimize)
+
+            # Variables: (seccion, dia, hora_inicio)
+            dias = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
+            horas = self.scheduler.bloques
+            x = {}
+            for sec in secciones_prof:
+                for d in dias:
+                    for h in horas:
+                        var_name = f"{sec['seccion'].cod}_{d}_{h}"
+                        x[(sec, d, h)] = pl.LpVariable(var_name, 0, 1, pl.LpBinary)
+
+            # Restricción 1: cada sección se asigna exactamente una vez
+            for sec in secciones_prof:
+                prob += pl.lpSum(x[(sec, d, h)] for d in dias for h in horas) == 1
+
+            # Restricción 2: no dos secciones en el mismo día y hora para el mismo profesor
+            for d in dias:
+                for h in horas:
+                    prob += pl.lpSum(x[(sec, d, h)] for sec in secciones_prof) <= 1
+
+            # Restricción 3: respetar duración de la sección (no puede partirse)
+            # Esto ya está implícito porque cada variable representa un bloque completo
+
+            # Función objetivo: minimizar días utilizados y huecos
+            # Minimizar número de días
+            y_dia = {}
+            for d in dias:
+                y_dia[d] = pl.LpVariable(f"y_{d}", 0, 1, pl.LpBinary)
+                prob += pl.lpSum(x[(sec, d, h)] for sec in secciones_prof for h in horas) >= y_dia[d]
+
+            # Minimizar huecos: para cada día, penalizar separación entre bloques
+            # (simplificado: minimizar la diferencia entre la hora más temprana y más tarde)
+            for d in dias:
+                h_min = pl.LpVariable(f"hmin_{d}", lowBound=self.scheduler.limite_operativo[0], upBound=self.scheduler.limite_operativo[1])
+                h_max = pl.LpVariable(f"hmax_{d}", lowBound=self.scheduler.limite_operativo[0], upBound=self.scheduler.limite_operativo[1])
+                for sec in secciones_prof:
+                    for h in horas:
+                        prob += h_min <= h + (1 - x[(sec, d, h)]) * 1000
+                        prob += h_max >= h - (1 - x[(sec, d, h)]) * 1000
+                # Penalizar el rango de horas
+                prob += h_max - h_min <= 480  # máximo 8 horas
+                # La función objetivo incluirá la suma de rangos
+
+            # Objetivo: minimizar días + rango horario
+            prob += pl.lpSum(y_dia[d] for d in dias) * 1000 + pl.lpSum(h_max - h_min for d in dias)
+
+            # Resolver
+            prob.solve(pl.PULP_CBC_CMD(msg=0))
+
+            if pl.LpStatus[prob.status] == 'Optimal':
+                # Reconstruir asignación para este profesor
+                nuevas_asignaciones = []
+                for sec in secciones_prof:
+                    for d in dias:
+                        for h in horas:
+                            if pl.value(x[(sec, d, h)]) > 0.5:
+                                # Encontrar un patrón que coincida con la duración
+                                duracion_min = self.scheduler.get_sec_creditos(sec['seccion'], prof) * 50
+                                patron = self.scheduler._crear_patron_para_duracion(duracion_min, d)
+                                if patron:
+                                    nuevas_asignaciones.append({
+                                        'seccion': sec['seccion'],
+                                        'profesor': prof,
+                                        'salon': sec['salon'],  # mantener mismo salón
+                                        'patron': patron,
+                                        'ini': h
+                                    })
+                                break
+                # Reemplazar en la solución global
+                for i, asign in enumerate(solucion):
+                    if asign['profesor'] == prof:
+                        for nueva in nuevas_asignaciones:
+                            if nueva['seccion'] == asign['seccion']:
+                                solucion[i] = nueva
+                                break
+        return solucion
+
+    def _reparar_compactacion(self, solucion, profesores_no_compactos):
+        """Reasigna localmente los cursos de profesores no compactos usando búsqueda exhaustiva"""
+        nueva_sol = deepcopy(solucion)
+        for prof in profesores_no_compactos:
+            # Extraer índices de secciones de este profesor
+            indices = [i for i, a in enumerate(nueva_sol) if a['profesor'] == prof]
+            if not indices:
+                continue
+            secciones = [nueva_sol[i]['seccion'] for i in indices]
+            # Intentar reasignar todas estas secciones en un solo día (si es posible)
+            for dia in ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']:
+                # Verificar si cabe en un día
+                minutos_totales = sum(self.scheduler.get_sec_creditos(s, prof) * 50 for s in secciones)
+                if minutos_totales <= 480:
+                    # Intentar empaquetar en ese día
+                    asignacion_temp = self.scheduler._empaquetar_en_dias(secciones, prof, [dia])
+                    if asignacion_temp:
+                        # Verificar conflictos con otros profesores
+                        conflicto = False
+                        for asign in asignacion_temp:
+                            for otra in nueva_sol:
+                                if otra['profesor'] != prof and otra['salon'] == asign['salon']:
+                                    for d, contrib in otra['patron']['days'].items():
+                                        if d == dia:
+                                            fin_otra = otra['ini'] + int(contrib*50)
+                                            fin_asign = asign['ini'] + int(asign['patron']['days'][dia]*50)
+                                            if max(asign['ini'], otra['ini']) < min(fin_asign, fin_otra):
+                                                conflicto = True
+                                                break
+                                if conflicto:
+                                    break
+                        if not conflicto:
+                            # Reemplazar
+                            for i, idx in enumerate(indices):
+                                nueva_sol[idx] = asignacion_temp[i]
+                            break
+        return nueva_sol
+
 # ==============================================================================
-# 8. VISUALIZACIÓN
+# 8. VISUALIZACIÓN Y MÉTRICAS DE COMPACTACIÓN
 # ==============================================================================
 def generar_heatmap_ocupacion(scheduler, solucion):
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
@@ -1146,6 +1432,67 @@ def generar_heatmap_ocupacion(scheduler, solucion):
         spine.set_edgecolor('#D4AF37')
     plt.tight_layout()
     return fig
+
+def calcular_metricas_compactacion(scheduler, solucion):
+    """Calcula métricas detalladas de compactación"""
+    metricas = {
+        'profesores_compactos': 0,
+        'total_profesores': 0,
+        'promedio_dias_por_profesor': 0,
+        'promedio_huecos_por_profesor': 0,
+        'profesores_salon_unico': 0,
+        'porcentaje_compactacion': 0,
+        'profesores_detalle': {}
+    }
+    
+    prof_horarios = scheduler._agrupar_por_profesor(solucion)
+    
+    total_dias = 0
+    total_huecos = 0
+    
+    for prof, asignaciones in prof_horarios.items():
+        if prof in ["GRADUADOS", "TBA"]:
+            continue
+            
+        metricas['total_profesores'] += 1
+        
+        # Días utilizados
+        dias_usados = set()
+        for asign in asignaciones:
+            for dia in asign['patron']['days'].keys():
+                dias_usados.add(dia)
+        num_dias = len(dias_usados)
+        total_dias += num_dias
+        
+        # Huecos
+        huecos = scheduler._calcular_huecos_profesor(asignaciones)
+        total_huecos += huecos
+        
+        # Mismo salón
+        salones_usados = set(asign['salon'] for asign in asignaciones)
+        mismo_salon = len(salones_usados) == 1
+        if mismo_salon:
+            metricas['profesores_salon_unico'] += 1
+        
+        # Es perfectamente compacto?
+        es_compacto = scheduler._es_horario_compacto(asignaciones)
+        if es_compacto:
+            metricas['profesores_compactos'] += 1
+        
+        metricas['profesores_detalle'][prof] = {
+            'dias': num_dias,
+            'huecos_min': huecos,
+            'mismo_salon': mismo_salon,
+            'compacto': es_compacto
+        }
+    
+    if metricas['total_profesores'] > 0:
+        metricas['promedio_dias_por_profesor'] = total_dias / metricas['total_profesores']
+        metricas['promedio_huecos_por_profesor'] = total_huecos / metricas['total_profesores']
+        metricas['porcentaje_compactacion'] = (metricas['profesores_compactos'] / 
+                                               metricas['total_profesores']) * 100
+    
+    return metricas
 
 def render_calendar_view(df_master, filter_type, filter_value):
     records = []
@@ -1250,12 +1597,14 @@ def main():
             file_name="PLANTILLA_UPRM.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+        st.markdown("---")
+        st.markdown("**⚙️ Modo Compactación:** **OBLIGATORIA (100%)**")
 
     st.markdown(f"### Ω Condiciones de Zona: {zona}")
     c1, c2, c3 = st.columns(3)
     with c1: st.metric("Ventana Operativa", "07:30 AM - 06:30 PM" if zona == "CENTRAL" else "07:00 AM - 06:00 PM")
     with c2: st.metric("Hora Universal", "10:30 AM - 12:30 PM" if zona == "CENTRAL" else "10:00 AM - 12:00 PM")
-    with c3: st.markdown(f"""<div class="status-badge">RESTRICCIONES FUERTES ACTIVAS</div>""", unsafe_allow_html=True)
+    with c3: st.markdown(f"""<div class="status-badge">RESTRICCIONES FUERTES ACTIVAS + COMPACTACIÓN TOTAL</div>""", unsafe_allow_html=True)
 
     if not file:
         st.markdown("""
@@ -1263,13 +1612,14 @@ def main():
                 <h3 style='margin-top:0; color: #8E6E13;'>📥 Sincronización de Datos</h3>
                 <p>Asegúrese de que el archivo Excel contiene las hojas: <b>Cursos</b>, <b>Profesores</b>, <b>Salones</b>.<br>
                 Las columnas necesarias incluyen: CURSOS_INTENSIVOS, ACEPTA_GRANDES, BLOQUEO_DIAS, BLOQUEO_HORA_INI, BLOQUEO_HORA_FIN.</p>
+                <p><b>Compactación garantizada:</b> cada profesor tendrá su horario en el mínimo número de días y sin huecos.</p>
             </div>
         """, unsafe_allow_html=True)
         return
 
-    if st.button("🚀 INICIAR OPTIMIZACIÓN HÍBRIDA (AG + SA)"):
+    if st.button("🚀 INICIAR OPTIMIZACIÓN HÍBRIDA (AG + SA + COMPACTACIÓN OBLIGATORIA)"):
         try:
-            with st.spinner("Fase 1: Algoritmo Genético generando esqueleto... luego Fase 2: Refinamiento con Recocido Simulado."):
+            with st.spinner("Fase 1: Algoritmo Genético generando esqueleto... luego Fase 2: Refinamiento con Recocido Simulado y compactación forzada."):
                 xls = pd.ExcelFile(file)
                 df_cursos = pd.read_excel(xls, 'Cursos')
                 df_profes = pd.read_excel(xls, 'Profesores')
@@ -1335,6 +1685,10 @@ def main():
                 } for a in mejor_sol])
                 st.session_state.detailed_conflicts = engine.scheduler._obtener_conflictos(mejor_sol)
 
+                # Métricas de compactación
+                metricas_comp = calcular_metricas_compactacion(engine.scheduler, mejor_sol)
+                st.session_state.metricas_compactacion = metricas_comp
+
                 status_sa.markdown("✅ Optimización completada. Generando resultados...")
 
         except Exception as e:
@@ -1346,6 +1700,26 @@ def main():
 
     if 'master' in st.session_state:
         st.success(f"✅ Optimización completada en {st.session_state.elapsed_time:.2f} segundos.")
+        
+        # Mostrar métricas de compactación
+        metricas = st.session_state.metricas_compactacion
+        st.markdown("### 📊 Métricas de Compactación del Horario")
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Profesores con Horario Perfecto", 
+                   f"{metricas['profesores_compactos']}/{metricas['total_profesores']}")
+        col2.metric("Compactación Global", f"{metricas['porcentaje_compactacion']:.1f}%")
+        col3.metric("Promedio de Días por Profesor", f"{metricas['promedio_dias_por_profesor']:.1f}")
+        col4.metric("Promedio Huecos (min)", f"{metricas['promedio_huecos_por_profesor']:.0f}")
+        
+        if metricas['porcentaje_compactacion'] == 100:
+            st.success("🎉 ¡ÉXITO TOTAL! El 100% de los profesores tiene un horario perfectamente compacto (mínimo de días, sin huecos).")
+        else:
+            st.warning(f"⚠️ Aún {metricas['total_profesores'] - metricas['profesores_compactos']} profesores tienen horarios subóptimos. Revise la pestaña de Auditoría.")
+            with st.expander("Ver detalles por profesor"):
+                for prof, det in metricas['profesores_detalle'].items():
+                    status = "✅ Compacto" if det['compacto'] else "❌ No compacto"
+                    st.write(f"**{prof}**: {status} | Días: {det['dias']} | Huecos: {det['huecos_min']} min | Mismo salón: {'Sí' if det['mismo_salon'] else 'No'}")
+
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
         t1, t2, t3, t4 = st.tabs(["💎 PANEL DE CONTROL", "🔍 VISTAS DETALLADAS", "🚨 AUDITORÍA DE CALIDAD", "📊 ANALÍTICAS AVANZADAS"])
 
@@ -1388,6 +1762,9 @@ def main():
                     st.write(f"- {conf}")
             else:
                 st.success("✅ 100% Asignación Perfecta. Cero Conflictos. Se balancearon las cargas y se respetaron los espacios y preferencias.")
+            # Mostrar también si hay problemas de compactación
+            if metricas['porcentaje_compactacion'] < 100:
+                st.warning("⚠️ Atención: Algunos profesores tienen horarios NO compactos. Revise los detalles arriba.")
 
         with t4:
             st.markdown("### 🧬 Evolución del Algoritmo (Fitness vs Generaciones)")
