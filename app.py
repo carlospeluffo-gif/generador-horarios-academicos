@@ -576,7 +576,7 @@ class TabuScheduler:
         # Penalización por dispersión de patrones (MUY ALTA)
         for prof, patrones_set in prof_patrones.items():
             if len(patrones_set) > 1:
-                soft_penalty += (len(patrones_set) - 1) * 200   # aumentado de 50 a 200
+                soft_penalty += (len(patrones_set) - 1) * 10000 
 
         # Penalización por diferentes horas de inicio (para el mismo profesor)
         for prof, horas_set in prof_horas_inicio.items():
@@ -594,7 +594,7 @@ class TabuScheduler:
                 for k in range(len(intervalos)-1):
                     gap = intervalos[k+1][0] - intervalos[k][1]
                     if gap > 60:
-                        soft_penalty += (gap - 60) * 1.0   # aumentado de 0.5 a 1.0
+                        soft_penalty += (gap - 60) * 1.0 
 
         # Cargas
         for prof, carga in carga_prof.items():
