@@ -174,14 +174,12 @@ st.markdown("""
 
 <div class="rum-header">
     <div class="header-logo">
-        <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/24/2016/04/upr_rum.jpg" alt="logo_uprm.png">
+        <img src="https://www.uprm.edu/wdt/resources/seal-rum.png" alt="Sello UPRM">
+        <img src="https://www.uprm.edu/wdt/resources/logo-rum-horizontal.png" alt="UPRM Logo">
     </div>
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
         <p><span class="subtitle-accent">COLEGIO DE ARTES Y CIENCIAS</span> · OPTIMIZACIÓN ACADÉMICA v13</p>
-    </div>
-     <div class="header-logo">
-        <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/24/2023/08/logo-rum-200x200-1-150x150.png" alt="otro_uprm.png">
     </div>
     <div style="width:150px;"></div> <!-- Espaciador para simetría -->
 </div>
@@ -1178,16 +1176,15 @@ class TabuScheduler:
         return self.mejor_solucion, int(self.mejor_costo // 10000), self.historial_costos
 
 # ==============================================================================
-# 5. NUEVAS FUNCIONES DE VISUALIZACIÓN (MEJORADAS)
+# 5. FUNCIONES DE VISUALIZACIÓN (SIN CAMBIOS)
 # ==============================================================================
 def generar_heatmap_plotly(scheduler, solucion):
-    """Heatmap interactivo: días en X, horas en Y."""
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
     inicio = scheduler.limite_operativo[0]
     fin = scheduler.limite_operativo[1]
     horas_del_dia = list(range(inicio, fin + 1, 30))
     
-    matriz = np.zeros((len(horas_del_dia), len(dias_semana)))  # invertido
+    matriz = np.zeros((len(horas_del_dia), len(dias_semana)))
     total_salones = len(scheduler.salones)
     
     for asign in solucion:
@@ -1233,7 +1230,6 @@ def generar_heatmap_plotly(scheduler, solucion):
     return fig
 
 def generar_barras_apiladas_profesor(sol, scheduler):
-    """Gráfico de barras apiladas: distribución de clases por día para cada profesor."""
     df_asign = pd.DataFrame([{
         'Profesor': a['profesor'],
         'Dia': dia,
@@ -1279,16 +1275,15 @@ def generar_barras_apiladas_profesor(sol, scheduler):
     return fig
 
 def generar_evolucion_fitness_plotly(historial):
-    """Gráfico de líneas estilizado para la evolución del fitness."""
     fitness = [10000 / (10000 + c) for c in historial]
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         y=fitness,
         mode='lines+markers',
-        line=dict(color='#D4AF37', width=3),
-        marker=dict(size=4, color='#8E6E13'),
+        line=dict(color='#004B23', width=3),
+        marker=dict(size=4, color='#C69214'),
         fill='tozeroy',
-        fillcolor='rgba(212, 175, 55, 0.2)',
+        fillcolor='rgba(0, 75, 35, 0.1)',
         name='Fitness'
     ))
     fig.update_layout(
@@ -1306,9 +1301,7 @@ def generar_evolucion_fitness_plotly(historial):
     return fig
 
 def generar_calendario_visual(sol, scheduler, filtro_prof=None, filtro_salon=None, filtro_curso=None):
-    """Calendario tipo Gantt realista: días en Y, horas en X, bloques rectangulares."""
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
-    # Preparar datos
     eventos = []
     for a in sol:
         if filtro_prof and a['profesor'] != filtro_prof:
@@ -1405,8 +1398,8 @@ def generar_reporte_pdf_html(scheduler, sol, cargas_finales, master_df):
         <title>Reporte Ejecutivo - UPRM Scheduler</title>
         <style>
             body {{ font-family: 'Segoe UI', Arial, sans-serif; margin: 40px; background: white; color: #1a1a1a; }}
-            h1 {{ color: #1a1a1a; border-bottom: 2px solid #D4AF37; padding-bottom: 10px; }}
-            h2 {{ color: #1a1a1a; margin-top: 30px; }}
+            h1 {{ color: #004B23; border-bottom: 2px solid #C69214; padding-bottom: 10px; }}
+            h2 {{ color: #004B23; margin-top: 30px; }}
             .stats {{ display: flex; gap: 20px; margin-bottom: 30px; }}
             .stat-card {{ background: #f8f9fa; border: 1px solid #ddd; border-radius: 8px; padding: 15px; flex: 1; }}
             table {{ border-collapse: collapse; width: 100%; margin-bottom: 20px; }}
@@ -1456,7 +1449,6 @@ def generar_reporte_pdf_html(scheduler, sol, cargas_finales, master_df):
     return html
 
 def generar_figura_cientifica_carga(cargas_finales, scheduler):
-    """Figura científica unificada con todos los profesores."""
     profesores = list(cargas_finales.keys())
     profesores.sort(key=lambda p: cargas_finales[p], reverse=True)
     carga_asignada = [cargas_finales[p] for p in profesores]
@@ -1467,7 +1459,6 @@ def generar_figura_cientifica_carga(cargas_finales, scheduler):
     
     fig = go.Figure()
     
-    # Barras (carga asignada)
     fig.add_trace(go.Bar(
         x=x_vals,
         y=carga_asignada,
@@ -1475,23 +1466,21 @@ def generar_figura_cientifica_carga(cargas_finales, scheduler):
         marker=dict(color='lightgray', line=dict(color='black', width=1))
     ))
     
-    # Línea carga mínima
     fig.add_trace(go.Scatter(
         x=x_vals,
         y=carga_min,
         mode='lines+markers',
         name='Carga Mínima',
-        line=dict(color='blue', width=2, dash='dot'),
+        line=dict(color='#004B23', width=2, dash='dot'),
         marker=dict(size=6)
     ))
     
-    # Línea carga máxima
     fig.add_trace(go.Scatter(
         x=x_vals,
         y=carga_max,
         mode='lines+markers',
         name='Carga Máxima',
-        line=dict(color='orange', width=2, dash='dot'),
+        line=dict(color='#C69214', width=2, dash='dot'),
         marker=dict(size=6)
     ))
     
@@ -1556,38 +1545,41 @@ def generar_plantilla():
     return output.getvalue()
 
 # ==============================================================================
-# 8. UI PRINCIPAL
+# 8. UI PRINCIPAL (CON IDENTIDAD UPRM)
 # ==============================================================================
 def main():
     with st.sidebar:
-        st.markdown("### ∑ Configuración")
-        zona = st.selectbox("Zona Campus", ["CENTRAL", "PERIFERICA"])
-        iteraciones = st.slider("Iteraciones Fase 1 (Factibilidad)", 500, 5000, 3000)
-        file = st.file_uploader("Subir Protocolo Excel", type=['xlsx'])
+        st.markdown("### ⚙️ Configuración del Sistema")
+        zona = st.selectbox("📍 Zona Campus", ["CENTRAL", "PERIFÉRICA"])
+        iteraciones = st.slider("🔁 Iteraciones Fase 1", 500, 5000, 3000)
+        file = st.file_uploader("📂 Subir Protocolo Excel", type=['xlsx'])
         st.download_button(
-            label="📥 Descargar Plantilla",
+            label="📥 Descargar Plantilla Oficial",
             data=generar_plantilla(),
-            file_name="PLANTILLA.xlsx",
+            file_name="PLANTILLA_UPRM.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+        st.markdown("---")
+        st.markdown("<small style='color: #004B23;'>© UPRM · Decanato de Asuntos Académicos</small>", unsafe_allow_html=True)
 
-    st.markdown(f"### Ω Condiciones de Zona: {zona}")
+    st.markdown(f"### 🏛️ Condiciones de Zona: {zona}")
     c1, c2, c3 = st.columns(3)
-    with c1: st.metric("Ventana Operativa", "07:30 AM - 06:30 PM" if zona == "CENTRAL" else "07:00 AM - 06:00 PM")
-    with c2: st.metric("Hora Universal", "10:30 AM - 12:30 PM" if zona == "CENTRAL" else "10:00 AM - 12:00 PM")
-    with c3: st.markdown(f"""<div class="status-badge">RESTRICCIONES FUERTES ACTIVAS</div>""", unsafe_allow_html=True)
+    with c1: st.metric("⏰ Ventana Operativa", "07:30 AM - 06:30 PM" if zona == "CENTRAL" else "07:00 AM - 06:00 PM")
+    with c2: st.metric("📚 Hora Universal", "10:30 AM - 12:30 PM" if zona == "CENTRAL" else "10:00 AM - 12:00 PM")
+    with c3: st.markdown(f"""<div class="status-badge">🔒 RESTRICCIONES ACTIVAS</div>""", unsafe_allow_html=True)
 
     if not file:
         st.markdown("""
             <div class='glass-card' style='text-align: center;'>
-                <h3 style='margin-top:0; color: #D4AF37;'>📥 Sincronización de Datos</h3>
-                <p>Asegúrese de que el archivo Excel contiene las hojas: <b>Cursos</b>, <b>Profesores</b>, <b>Salones</b>.</p>
+                <h3 style='margin-top:0; color: #004B23;'>📋 Sincronización de Datos</h3>
+                <p>El archivo Excel debe contener las hojas: <b>Cursos</b>, <b>Profesores</b>, <b>Salones</b>.</p>
+                <p style='color: #C69214;'>Descargue la plantilla oficial para comenzar.</p>
             </div>
         """, unsafe_allow_html=True)
     else:
-        if st.button("🚀 INICIAR OPTIMIZACIÓN ABSOLUTA"):
+        if st.button("🚀 INICIAR OPTIMIZACIÓN"):
             try:
-                with st.spinner("Balanceando cargas, consolidando secciones y resolviendo..."):
+                with st.spinner("⚡ Procesando datos y aplicando algoritmo genético..."):
                     xls = pd.ExcelFile(file)
                     df_cursos = pd.read_excel(xls, 'Cursos')
                     df_profes = pd.read_excel(xls, 'Profesores')
@@ -1629,20 +1621,20 @@ def main():
                     st.session_state.detailed_conflicts = scheduler._obtener_conflictos(mejor_sol)
 
             except Exception as e:
-                st.error(f"Error durante la optimización: {e}")
+                st.error(f"❌ Error durante la optimización: {e}")
                 return
 
     if 'master' in st.session_state:
         st.success(f"✅ Optimización completada en {st.session_state.elapsed_time:.2f} segundos.")
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-        t1, t2, t3, t4 = st.tabs(["💎 PANEL DE CONTROL", "🔍 VISTAS DETALLADAS", "🚨 AUDITORÍA DE CALIDAD", "📊 ANALÍTICAS AVANZADAS"])
+        t1, t2, t3, t4 = st.tabs(["📋 PANEL DE CONTROL", "🔍 VISTAS DETALLADAS", "⚠️ AUDITORÍA", "📊 ANALÍTICAS"])
         
         with t1:
             edited = st.data_editor(st.session_state.master, use_container_width=True, height=500)
-            st.download_button("💾 EXPORTAR EXCEL PLATINUM", exportar_todo(edited), "Horario_Final_UPRM.xlsx", use_container_width=True)
+            st.download_button("💾 EXPORTAR EXCEL", exportar_todo(edited), "Horario_UPRM_Final.xlsx", use_container_width=True)
             
         with t2:
-            f1, f2, f3 = st.tabs(["Por Profesor", "Por Curso", "Por Salón"])
+            f1, f2, f3 = st.tabs(["👤 Por Profesor", "📖 Por Curso", "🚪 Por Salón"])
             df_master = st.session_state.master
             with f1:
                 lista_profes = sorted([p for p in df_master['Persona'].unique() if p != "GRADUADOS"])
@@ -1682,7 +1674,7 @@ def main():
                 fig_heat = generar_heatmap_plotly(st.session_state.scheduler, st.session_state.mejor_sol)
                 st.plotly_chart(fig_heat, use_container_width=True)
                 
-                st.markdown("#### Distribución de Clases por Profesor y Día")
+                st.markdown("#### Distribución de Clases por Profesor")
                 fig_barras = generar_barras_apiladas_profesor(st.session_state.mejor_sol, st.session_state.scheduler)
                 st.plotly_chart(fig_barras, use_container_width=True)
                 
@@ -1711,7 +1703,7 @@ def main():
             
             with subtab3:
                 st.markdown("#### Exportar Reporte Ejecutivo en PDF")
-                if st.button("📑 Generar Reporte PDF (Imprimir)"):
+                if st.button("📑 Generar Reporte PDF"):
                     html_reporte = generar_reporte_pdf_html(
                         st.session_state.scheduler,
                         st.session_state.mejor_sol,
@@ -1719,7 +1711,7 @@ def main():
                         st.session_state.master
                     )
                     st.components.v1.html(html_reporte, height=600, scrolling=True)
-                st.info("Haz clic en el botón para generar el reporte y luego usa la opción 'Imprimir' de tu navegador para guardar como PDF.")
+                st.info("Haz clic en el botón y luego usa 'Imprimir' → 'Guardar como PDF'.")
             
             with subtab4:
                 st.markdown("#### Análisis Científico de Carga Académica")
