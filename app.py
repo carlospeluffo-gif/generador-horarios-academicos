@@ -13,16 +13,22 @@ from plotly.subplots import make_subplots
 from copy import deepcopy
 
 # ==============================================================================
-# 1. ESTÉTICA (IDENTIDAD UPRM - DISEÑO PREMIUM)
+# 1. ESTÉTICA (IDENTIDAD UPRM - DISEÑO PREMIUM) + FONDO CONDICIONAL CON IMAGEN
 # ==============================================================================
 st.set_page_config(page_title="UPRM Scheduler Platinum v14", page_icon="🏛️", layout="wide")
 
-st.markdown("""
+BACKGROUND_IMAGE_URL = "https://i.ytimg.com/vi/1u7-TSJ5mvA/maxresdefault.jpg"  # <-- PON AQUÍ TU LINK
+
+# Determinamos si ya se generó el horario (existe la variable 'master' en session_state)
+horario_generado = 'master' in st.session_state
+
+# --- CSS BASE (SIEMPRE PRESENTE) ---
+base_css = """
 <style>
     /* Importamos fuentes elegantes */
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Source+Sans+Pro:wght@300;400;600&display=swap');
     
-    /* Fondo general con degradado y patrón sutil */
+    /* Fondo general con degradado y patrón sutil (se usará si NO hay imagen o después de generar) */
     .stApp {
         background: linear-gradient(135deg, #f5f7fa 0%, #e9f0e8 100%);
         background-attachment: fixed;
@@ -316,9 +322,58 @@ st.markdown("""
     
     /* Pie de página invisible pero presente */
     footer {visibility: hidden;}
-    
-</style>
+"""
 
+# --- CSS CONDICIONAL PARA LA IMAGEN DE FONDO (SOLO SI NO SE HA GENERADO HORARIO) ---
+background_image_css = ""
+if not horario_generado and BACKGROUND_IMAGE_URL.strip() != "":
+    background_image_css = f"""
+    <style>
+        /* Sobrescribimos el fondo de .stApp con la imagen (opaca) */
+        .stApp {{
+            background: transparent !important;  /* Eliminamos el gradiente base */
+        }}
+        
+        /* Creamos un pseudo-elemento con la imagen de fondo y opacidad */
+        .stApp::after {{
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url("{BACKGROUND_IMAGE_URL}");
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+            opacity: 0.25;  /* AJUSTA LA OPACIDAD AQUÍ (0.0 - 1.0) */
+            z-index: -1;     /* Detrás de todo el contenido */
+            pointer-events: none;
+        }}
+        
+        /* Aseguramos que el patrón geométrico no interfiera */
+        .stApp::before {{
+            opacity: 0.3;    /* Reducimos un poco el patrón para que no compita */
+        }}
+        
+        /* Damos un ligero sombreado al contenido para mejorar legibilidad */
+        .main > div {{
+            background-color: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(2px);
+            border-radius: 12px;
+            padding: 10px;
+        }}
+    </style>
+    """
+
+# Cerramos el style del base_css y añadimos el condicional si existe
+full_css = base_css + background_image_css + "\n</style>"
+
+st.markdown(full_css, unsafe_allow_html=True)
+
+# Encabezado HTML (sin cambios)
+st.markdown("""
 <div class="rum-header">
     <div class="header-logo">
         <img src="https://www.uprm.edu/portales/wp-content/uploads/sites/55/2022/05/Tarzan_7896.png" alt="UPRM Logo">
@@ -333,6 +388,7 @@ st.markdown("""
     <div style="width:150px;"></div> <!-- Espaciador para simetría -->
 </div>
 """, unsafe_allow_html=True)
+
 
 # ==============================================================================
 # 2. UTILIDADES Y TABLAS DE REFERENCIA (SIN CAMBIOS)
