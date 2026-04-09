@@ -13,206 +13,131 @@ from plotly.subplots import make_subplots
 from copy import deepcopy
 
 # ==============================================================================
-# 1. ESTÉTICA INSTITUCIONAL UPRM (VERDE OSCURO + DORADO + BLANCO)
+# 1. ESTÉTICA (TEMA CLARO) - SIN CAMBIOS
 # ==============================================================================
-st.set_page_config(page_title="UPRM Scheduler Platinum AI v13", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="UPRM Scheduler Platinum AI v13 Compact", page_icon="🏛️", layout="wide")
 
-# --- URLs DE LOS LOGOS (REEMPLAZAR CON LOS ENLACES REALES) ---
-URL_ESCUDO_UPRM = "logo_uprm.png"
-URL_SELLO_UPR = "otro_uprm.png"
-
-# --- ESTILOS CSS INSTITUCIONALES ---
-st.markdown(f"""
+st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Source+Code+Pro:wght@300;500&display=swap');
     
-    /* Fondo principal con textura ligera tipo papel */
-    .stApp {{ 
-        background-color: #F8F9FA;
+    .stApp { 
+        background-color: #f8f9fa;
         background-image: 
-            linear-gradient(rgba(31, 61, 43, 0.02) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(31, 61, 43, 0.02) 1px, transparent 1px);
+            linear-gradient(rgba(212, 175, 55, 0.05) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(212, 175, 55, 0.05) 1px, transparent 1px);
         background-size: 40px 40px, 40px 40px;
         background-attachment: fixed;
-        color: #1F3D2B;
-    }}
+        color: #1a1a1a; 
+    }
 
-    /* Header institucional */
-    .uprm-header {{
+    .math-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 20px 40px;
-        background: white;
-        border-bottom: 4px solid #D4AF37;
-        margin-bottom: 30px;
-        border-radius: 0 0 20px 20px;
-        box-shadow: 0 8px 20px rgba(0,0,0,0.05);
-    }}
+        padding: 30px 60px;
+        background: rgba(255, 255, 255, 0.95);
+        border-bottom: 3px solid #D4AF37;
+        margin-bottom: 40px;
+        border-radius: 0 0 30px 30px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+        position: relative;
+        overflow: hidden;
+    }
 
-    .header-logo {{
-        flex: 1;
-        text-align: center;
-    }}
-    .header-logo img {{
-        height: 70px;
-        max-width: 100%;
-        object-fit: contain;
-    }}
+    .math-header::before { content: '∑'; position: absolute; left: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.1); font-family: serif; }
+    .math-header::after { content: '∫'; position: absolute; right: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.1); font-family: serif; }
 
-    .header-title {{
-        flex: 3;
-        text-align: center;
-    }}
-    .header-title h1 {{
-        font-family: 'Playfair Display', serif;
-        color: #1F3D2B;
-        font-size: 2.8rem;
-        margin: 0;
-        letter-spacing: 3px;
-        font-weight: 700;
-    }}
-    .header-title p {{
-        color: #555;
-        font-family: 'Source Code Pro', monospace;
-        letter-spacing: 3px;
-        font-size: 0.8rem;
-        margin-top: 5px;
-    }}
+    .title-box { text-align: center; z-index: 2; }
 
-    /* Sidebar */
-    [data-testid="stSidebar"] {{
-        background-color: #ffffff;
-        border-right: 1px solid #D4AF37;
-        padding-top: 20px;
-    }}
-    [data-testid="stSidebar"] .stMarkdown h3 {{
-        color: #1F3D2B !important;
-        font-family: 'Playfair Display', serif;
-        border-bottom: 1px solid #D4AF37;
-        padding-bottom: 10px;
-    }}
-
-    /* Tarjetas Glass */
-    .glass-card {{
-        background: rgba(255, 255, 255, 0.85);
-        border-radius: 20px;
-        padding: 25px;
-        border: 1px solid rgba(212, 175, 55, 0.3);
-        backdrop-filter: blur(10px);
-        margin-bottom: 25px;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.05);
-        color: #1F3D2B;
-    }}
-
-    /* Botones dorados/verdes */
-    .stButton > button {{
-        background: linear-gradient(135deg, #1F3D2B 0%, #2E4A3C 50%, #1F3D2B 100%) !important;
-        color: white !important;
-        font-weight: bold !important;
-        border-radius: 30px !important;
-        width: 100%;
-        border: 1px solid #D4AF37 !important;
-        height: 50px;
-        font-size: 1.1rem;
-        transition: all 0.3s;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-    }}
-    .stButton > button:hover {{
-        transform: translateY(-2px);
-        box-shadow: 0 8px 16px rgba(212, 175, 55, 0.3);
-        border-color: #D4AF37 !important;
-    }}
-
-    .stDownloadButton > button {{
-        background: linear-gradient(135deg, #D4AF37 0%, #F5D76E 50%, #D4AF37 100%) !important;
-        color: #1F3D2B !important;
-        font-weight: 800 !important;
-        border: 1px solid #1F3D2B !important;
-        border-radius: 30px !important;
-    }}
-
-    /* Badge de estado */
-    .status-badge {{
-        background: rgba(31, 61, 43, 0.08);
-        border: 1px solid #D4AF37;
-        color: #1F3D2B;
-        padding: 12px 18px;
-        border-radius: 40px;
-        text-align: center;
-        font-family: 'Source Code Pro', monospace;
-        font-weight: 600;
-        font-size: 0.9rem;
-        backdrop-filter: blur(5px);
-    }}
-
-    /* Métricas */
-    .stMetric {{
-        background: white;
-        padding: 10px 20px;
-        border-radius: 15px;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.05);
-        border-left: 4px solid #D4AF37;
-    }}
-
-    /* Footer institucional */
-    .uprm-footer {{
-        margin-top: 50px;
-        padding: 25px 30px;
-        background: #1F3D2B;
-        border-radius: 30px 30px 0 0;
-        color: #F8F9FA;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        border-top: 3px solid #D4AF37;
-    }}
-    .footer-logos {{
-        display: flex;
-        gap: 30px;
-        align-items: center;
-    }}
-    .footer-logos img {{
-        height: 45px;
-        filter: brightness(0) invert(1);
-        opacity: 0.9;
-    }}
-    .footer-text {{
-        font-family: 'Playfair Display', serif;
-        font-size: 1rem;
-        letter-spacing: 2px;
-    }}
-    .footer-decor {{
-        display: flex;
-        gap: 10px;
+    .abstract-icon {
+        font-size: 3rem;
         color: #D4AF37;
-        font-size: 1.5rem;
-    }}
+        border: 2px solid #D4AF37;
+        padding: 10px 20px;
+        border-radius: 50% 0% 50% 0%;
+        background: rgba(212, 175, 55, 0.05);
+        box-shadow: 0 0 15px rgba(212, 175, 55, 0.1);
+    }
 
-    /* Ajustes de tipografía */
-    h1, h2, h3 {{
+    h1 { 
+        font-family: 'Playfair Display', serif !important; 
+        color: #1a1a1a !important; 
+        font-size: 3.2rem !important;
+        margin: 10px 0 !important;
+        text-shadow: 0 0 10px rgba(212, 175, 55, 0.2);
+        letter-spacing: 2px;
+    }
+
+    .glass-card { 
+        background: rgba(255, 255, 255, 0.9); 
+        border-radius: 15px; 
+        padding: 25px; 
+        border: 1px solid rgba(212, 175, 55, 0.3); 
+        backdrop-filter: blur(10px); 
+        margin-bottom: 20px; 
+        box-shadow: 0 8px 20px rgba(0,0,0,0.05);
+        color: #1a1a1a;
+    }
+
+    .stButton>button { 
+        background: linear-gradient(135deg, #8E6E13 0%, #D4AF37 50%, #8E6E13 100%) !important; 
+        color: white !important; font-weight: bold !important; border-radius: 4px !important; 
+        width: 100%; border: none !important; height: 55px; font-size: 1.1rem;
+        transition: 0.4s;
+    }
+    .stButton>button:hover { transform: scale(1.02); box-shadow: 0 0 25px rgba(212, 175, 55, 0.4); }
+
+    .stDownloadButton>button {
+        background: linear-gradient(135deg, #B8860B 0%, #FFD700 50%, #B8860B 100%) !important;
+        color: #000 !important;
+        font-weight: 800 !important;
+        border: 1px solid #D4AF37 !important;
+    }
+
+    [data-testid="stSidebar"] { 
+        background-color: #ffffff; 
+        border-right: 1px solid #D4AF37; 
+    }
+    
+    [data-testid="stSidebar"] h3 {
+        color: #1a1a1a !important;
+        text-shadow: none;
         font-family: 'Playfair Display', serif;
-        color: #1F3D2B;
-    }}
-    .stMarkdown, .stDataFrame, .stTable {{
-        color: #1F3D2B;
-    }}
-</style>
-""", unsafe_allow_html=True)
+    }
 
-# --- ENCABEZADO INSTITUCIONAL ---
-st.markdown(f"""
-<div class="uprm-header">
-    <div class="header-logo">
-        <img src="{URL_ESCUDO_UPRM}" alt="Escudo UPRM">
-    </div>
-    <div class="header-title">
+    .status-badge { 
+        background: rgba(212, 175, 55, 0.1); 
+        border: 1px solid #D4AF37; 
+        color: #1a1a1a; 
+        padding: 12px; 
+        border-radius: 8px; 
+        text-align: center;
+        font-family: 'Source Code Pro', monospace;
+        font-weight: 500;
+    }
+
+    .stMarkdown, .stDataFrame, .stTable {
+        color: #1a1a1a;
+    }
+    .stDataFrame table, .stTable table {
+        background-color: white;
+        color: #1a1a1a;
+    }
+    .stMetric {
+        color: #1a1a1a;
+    }
+</style>
+
+<div class="math-header">
+    <div class="abstract-icon">Δx</div>
+    <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
-        <p>OPTIMIZATION ENGINE v13 · COMPACTACIÓN POST-FACTIBILIDAD</p>
+        <p style="color: #555; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
+            UPRM MATHEMATICAL OPTIMIZATION ENGINE v13 + COMPACTACIÓN POST-FACTIBILIDAD
+        </p>
     </div>
-    <div class="header-logo">
-        <img src="{URL_SELLO_UPR}" alt="Sello Universidad de Puerto Rico">
-    </div>
+    <div class="abstract-icon">∞</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -1207,23 +1132,27 @@ class TabuScheduler:
         return self.mejor_solucion, int(self.mejor_costo // 10000), self.historial_costos
 
 # ==============================================================================
-# 5. VISUALIZACIONES (SIN CAMBIOS)
+# 5. NUEVAS FUNCIONES DE VISUALIZACIÓN (MEJORADAS)
 # ==============================================================================
 def generar_heatmap_plotly(scheduler, solucion):
+    """Heatmap interactivo: días en X, horas en Y."""
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
     inicio = scheduler.limite_operativo[0]
     fin = scheduler.limite_operativo[1]
     horas_del_dia = list(range(inicio, fin + 1, 30))
-    matriz = np.zeros((len(horas_del_dia), len(dias_semana)))
+    
+    matriz = np.zeros((len(horas_del_dia), len(dias_semana)))  # invertido
     total_salones = len(scheduler.salones)
     
     for asign in solucion:
         salon = asign['salon']
-        if salon == "TBA": continue
+        if salon == "TBA":
+            continue
         patron = asign['patron']
         ini = asign['ini']
         for dia, contrib in patron['days'].items():
-            if dia not in dias_semana: continue
+            if dia not in dias_semana:
+                continue
             dia_idx = dias_semana.index(dia)
             duracion = int(contrib * 50)
             for minuto in range(ini, ini + duracion, 30):
@@ -1237,52 +1166,112 @@ def generar_heatmap_plotly(scheduler, solucion):
         matriz_porcentaje = matriz
     
     etiquetas_horas = [mins_to_str(h).replace(' AM', '').replace(' PM', '') for h in horas_del_dia]
-    fig = px.imshow(matriz_porcentaje, labels=dict(x="Día", y="Hora de Inicio", color="% Ocupación"),
-                    x=dias_semana, y=etiquetas_horas, color_continuous_scale='Greens', aspect='auto', zmin=0, zmax=100)
-    fig.update_layout(title="Ocupación de Salones por Día y Hora", font=dict(color='#1F3D2B'),
-                      paper_bgcolor='white', plot_bgcolor='white', height=600)
+    
+    fig = px.imshow(
+        matriz_porcentaje,
+        labels=dict(x="Día", y="Hora de Inicio", color="% Ocupación"),
+        x=dias_semana,
+        y=etiquetas_horas,
+        color_continuous_scale='YlOrRd',
+        aspect='auto',
+        zmin=0,
+        zmax=100
+    )
+    fig.update_layout(
+        title="Ocupación de Salones por Día y Hora",
+        font=dict(color='#1a1a1a'),
+        paper_bgcolor='white',
+        plot_bgcolor='white',
+        height=600
+    )
     return fig
 
 def generar_barras_apiladas_profesor(sol, scheduler):
-    df_asign = pd.DataFrame([{'Profesor': a['profesor'], 'Dia': dia, 'Cantidad': 1}
-                             for a in sol if a['profesor'] not in ['TBA', 'GRADUADOS']
-                             for dia in a['patron']['days'].keys()])
-    if df_asign.empty: return go.Figure()
+    """Gráfico de barras apiladas: distribución de clases por día para cada profesor."""
+    df_asign = pd.DataFrame([{
+        'Profesor': a['profesor'],
+        'Dia': dia,
+        'Cantidad': 1
+    } for a in sol if a['profesor'] not in ['TBA', 'GRADUADOS']
+      for dia in a['patron']['days'].keys()])
+    
+    if df_asign.empty:
+        return go.Figure()
+    
     pivot = df_asign.groupby(['Profesor', 'Dia']).size().reset_index(name='Clases')
     carga_prof = {p: 0.0 for p in pivot['Profesor'].unique()}
     for a in sol:
         if a['profesor'] in carga_prof:
             carga_prof[a['profesor']] += scheduler.get_sec_creditos(a['seccion'], a['profesor'])
     profes_ordenados = sorted(carga_prof.keys(), key=lambda x: carga_prof[x], reverse=True)
+    
     fig = go.Figure()
     dias_unicos = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
     colores = px.colors.qualitative.Set2[:len(dias_unicos)]
+    
     for i, dia in enumerate(dias_unicos):
         data_dia = pivot[pivot['Dia'] == dia]
         y_vals = [data_dia[data_dia['Profesor'] == p]['Clases'].sum() if p in data_dia['Profesor'].values else 0 for p in profes_ordenados]
-        fig.add_trace(go.Bar(name=dia, x=profes_ordenados, y=y_vals, marker_color=colores[i]))
-    fig.update_layout(barmode='stack', title="Distribución de Clases por Profesor y Día",
-                      xaxis_title="Profesor", yaxis_title="Número de Clases", font=dict(color='#1F3D2B'),
-                      paper_bgcolor='white', plot_bgcolor='white', legend_title="Día", height=500)
+        fig.add_trace(go.Bar(
+            name=dia,
+            x=profes_ordenados,
+            y=y_vals,
+            marker_color=colores[i]
+        ))
+    
+    fig.update_layout(
+        barmode='stack',
+        title="Distribución de Clases por Profesor y Día",
+        xaxis_title="Profesor",
+        yaxis_title="Número de Clases",
+        font=dict(color='#1a1a1a'),
+        paper_bgcolor='white',
+        plot_bgcolor='white',
+        legend_title="Día",
+        height=500
+    )
     return fig
 
 def generar_evolucion_fitness_plotly(historial):
+    """Gráfico de líneas estilizado para la evolución del fitness."""
     fitness = [10000 / (10000 + c) for c in historial]
     fig = go.Figure()
-    fig.add_trace(go.Scatter(y=fitness, mode='lines+markers', line=dict(color='#D4AF37', width=3),
-                             marker=dict(size=4, color='#1F3D2B'), fill='tozeroy', fillcolor='rgba(212, 175, 55, 0.2)', name='Fitness'))
-    fig.update_layout(title="Evolución del Fitness durante la Optimización", xaxis_title="Iteración",
-                      yaxis_title="Fitness (1.0 = Óptimo)", font=dict(color='#1F3D2B', size=12),
-                      paper_bgcolor='white', plot_bgcolor='white', height=450, hovermode='x unified')
+    fig.add_trace(go.Scatter(
+        y=fitness,
+        mode='lines+markers',
+        line=dict(color='#D4AF37', width=3),
+        marker=dict(size=4, color='#8E6E13'),
+        fill='tozeroy',
+        fillcolor='rgba(212, 175, 55, 0.2)',
+        name='Fitness'
+    ))
+    fig.update_layout(
+        title="Evolución del Fitness durante la Optimización",
+        xaxis_title="Iteración",
+        yaxis_title="Fitness (1.0 = Óptimo)",
+        font=dict(color='#1a1a1a', size=12),
+        paper_bgcolor='white',
+        plot_bgcolor='white',
+        height=450,
+        hovermode='x unified'
+    )
+    fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+    fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
     return fig
 
 def generar_calendario_visual(sol, scheduler, filtro_prof=None, filtro_salon=None, filtro_curso=None):
+    """Calendario tipo Gantt realista: días en Y, horas en X, bloques rectangulares."""
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
+    # Preparar datos
     eventos = []
     for a in sol:
-        if filtro_prof and a['profesor'] != filtro_prof: continue
-        if filtro_salon and a['salon'] != filtro_salon: continue
-        if filtro_curso and filtro_curso not in a['seccion'].cod: continue
+        if filtro_prof and a['profesor'] != filtro_prof:
+            continue
+        if filtro_salon and a['salon'] != filtro_salon:
+            continue
+        if filtro_curso and filtro_curso not in a['seccion'].cod:
+            continue
+        
         for dia, contrib in a['patron']['days'].items():
             inicio = a['ini']
             duracion = contrib * 50
@@ -1290,32 +1279,72 @@ def generar_calendario_visual(sol, scheduler, filtro_prof=None, filtro_salon=Non
             hora_inicio = mins_to_str(inicio)
             hora_fin = mins_to_str(fin)
             texto = f"<b>{a['profesor']}</b><br>{a['seccion'].cod}<br>{a['salon']}<br>{hora_inicio} - {hora_fin}"
-            eventos.append({'Dia': dia, 'Inicio': inicio, 'Fin': fin, 'Profesor': a['profesor'],
-                            'Seccion': a['seccion'].cod, 'Salon': a['salon'], 'Texto': texto})
-    if not eventos: return go.Figure()
+            eventos.append({
+                'Dia': dia,
+                'Inicio': inicio,
+                'Fin': fin,
+                'Profesor': a['profesor'],
+                'Seccion': a['seccion'].cod,
+                'Salon': a['salon'],
+                'Texto': texto
+            })
+    
+    if not eventos:
+        return go.Figure()
+    
     df = pd.DataFrame(eventos)
     dia_a_idx = {d: i for i, d in enumerate(dias_semana)}
     df['Dia_idx'] = df['Dia'].map(dia_a_idx)
+    
     profes = df['Profesor'].unique()
     colores = px.colors.qualitative.Plotly[:len(profes)]
     color_map = {p: colores[i % len(colores)] for i, p in enumerate(profes)}
+    
     fig = go.Figure()
     for _, row in df.iterrows():
-        fig.add_trace(go.Scatter(x=[row['Inicio'], row['Fin'], row['Fin'], row['Inicio'], row['Inicio']],
-                                 y=[row['Dia_idx']-0.4, row['Dia_idx']-0.4, row['Dia_idx']+0.4, row['Dia_idx']+0.4, row['Dia_idx']-0.4],
-                                 fill='toself', fillcolor=color_map[row['Profesor']], line=dict(width=1, color='black'),
-                                 name=row['Profesor'], legendgroup=row['Profesor'], showlegend=False,
-                                 hoverinfo='text', hovertext=row['Texto']))
+        fig.add_trace(go.Scatter(
+            x=[row['Inicio'], row['Fin'], row['Fin'], row['Inicio'], row['Inicio']],
+            y=[row['Dia_idx']-0.4, row['Dia_idx']-0.4, row['Dia_idx']+0.4, row['Dia_idx']+0.4, row['Dia_idx']-0.4],
+            fill='toself',
+            fillcolor=color_map[row['Profesor']],
+            line=dict(width=1, color='black'),
+            name=row['Profesor'],
+            legendgroup=row['Profesor'],
+            showlegend=False,
+            hoverinfo='text',
+            hovertext=row['Texto']
+        ))
+    
     for prof, color in color_map.items():
-        fig.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(size=10, color=color),
-                                 name=prof, legendgroup=prof, showlegend=True))
-    fig.update_layout(title="Horario Semanal - Vista Calendario",
-                      xaxis=dict(title="Hora del día", tickvals=list(range(420, 1140, 60)),
-                                 ticktext=[mins_to_str(m).replace(' AM', '').replace(' PM', '') for m in range(420, 1140, 60)],
-                                 range=[scheduler.limite_operativo[0]-30, scheduler.limite_operativo[1]+30]),
-                      yaxis=dict(title="Día", tickvals=list(range(len(dias_semana))), ticktext=dias_semana),
-                      font=dict(color='#1F3D2B'), paper_bgcolor='white', plot_bgcolor='white', height=600,
-                      hovermode='closest', legend=dict(title="Profesor", orientation='h', yanchor='bottom', y=1.02))
+        fig.add_trace(go.Scatter(
+            x=[None], y=[None],
+            mode='markers',
+            marker=dict(size=10, color=color),
+            name=prof,
+            legendgroup=prof,
+            showlegend=True
+        ))
+    
+    fig.update_layout(
+        title="Horario Semanal - Vista Calendario",
+        xaxis=dict(
+            title="Hora del día",
+            tickvals=list(range(420, 1140, 60)),
+            ticktext=[mins_to_str(m).replace(' AM', '').replace(' PM', '') for m in range(420, 1140, 60)],
+            range=[scheduler.limite_operativo[0]-30, scheduler.limite_operativo[1]+30]
+        ),
+        yaxis=dict(
+            title="Día",
+            tickvals=list(range(len(dias_semana))),
+            ticktext=dias_semana
+        ),
+        font=dict(color='#1a1a1a'),
+        paper_bgcolor='white',
+        plot_bgcolor='white',
+        height=600,
+        hovermode='closest',
+        legend=dict(title="Profesor", orientation='h', yanchor='bottom', y=1.02)
+    )
     return fig
 
 def generar_reporte_pdf_html(scheduler, sol, cargas_finales, master_df):
@@ -1323,104 +1352,214 @@ def generar_reporte_pdf_html(scheduler, sol, cargas_finales, master_df):
     secciones_tba = sum(1 for a in sol if a['profesor'] == 'TBA')
     carga_total = sum(cargas_finales.values())
     profesores_con_carga = len([c for c in cargas_finales.values() if c > 0])
+    
     html = f"""
-    <html><head><title>Reporte Ejecutivo - UPRM Scheduler</title>
-    <style>body{{font-family:'Segoe UI',sans-serif;margin:40px;background:white;color:#1F3D2B;}}
-    h1{{color:#1F3D2B;border-bottom:2px solid #D4AF37;padding-bottom:10px;}}
-    h2{{color:#1F3D2B;margin-top:30px;}}.stats{{display:flex;gap:20px;margin-bottom:30px;}}
-    .stat-card{{background:#f8f9fa;border:1px solid #ddd;border-radius:8px;padding:15px;flex:1;}}
-    table{{border-collapse:collapse;width:100%;margin-bottom:20px;}}th,td{{border:1px solid #ddd;padding:8px;text-align:left;}}
-    th{{background-color:#f2f2f2;}}.footer{{margin-top:40px;font-size:0.9em;color:#666;text-align:center;}}</style>
-    </head><body><h1>UPRM Scheduler - Reporte Ejecutivo</h1><p>Generado el: {time.strftime('%Y-%m-%d %H:%M:%S')}</p>
-    <div class="stats"><div class="stat-card"><h3>Total Secciones</h3><p style="font-size:24px;font-weight:bold;">{total_secciones}</p></div>
-    <div class="stat-card"><h3>Secciones TBA</h3><p style="font-size:24px;font-weight:bold;">{secciones_tba} ({secciones_tba/total_secciones*100:.1f}%)</p></div>
-    <div class="stat-card"><h3>Carga Total (Créditos)</h3><p style="font-size:24px;font-weight:bold;">{carga_total:.1f}</p></div>
-    <div class="stat-card"><h3>Profesores Activos</h3><p style="font-size:24px;font-weight:bold;">{profesores_con_carga}</p></div></div>
-    <h2>Listado de Secciones TBA</h2>{master_df[master_df['Persona'] == 'TBA'][['ID', 'Asignatura', 'Estudiantes (Cupo)', 'Días', 'Horario', 'Salón']].to_html(index=False) if secciones_tba > 0 else '<p>No hay secciones TBA.</p>'}
-    <h2>Horarios por Profesor</h2>{''.join([f'<h3>{p}</h3>{master_df[master_df["Persona"]==p][["ID", "Asignatura", "Días", "Horario", "Salón"]].to_html(index=False)}' for p in sorted(master_df['Persona'].unique()) if p not in ['TBA', 'GRADUADOS']])}
-    <div class="footer">Reporte generado automáticamente por UPRM Timetable System.</div>
-    <script>window.onload = function(){{window.print();}}</script></body></html>"""
+    <html>
+    <head>
+        <title>Reporte Ejecutivo - UPRM Scheduler</title>
+        <style>
+            body {{ font-family: 'Segoe UI', Arial, sans-serif; margin: 40px; background: white; color: #1a1a1a; }}
+            h1 {{ color: #1a1a1a; border-bottom: 2px solid #D4AF37; padding-bottom: 10px; }}
+            h2 {{ color: #1a1a1a; margin-top: 30px; }}
+            .stats {{ display: flex; gap: 20px; margin-bottom: 30px; }}
+            .stat-card {{ background: #f8f9fa; border: 1px solid #ddd; border-radius: 8px; padding: 15px; flex: 1; }}
+            table {{ border-collapse: collapse; width: 100%; margin-bottom: 20px; }}
+            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+            th {{ background-color: #f2f2f2; }}
+            .footer {{ margin-top: 40px; font-size: 0.9em; color: #666; text-align: center; }}
+        </style>
+    </head>
+    <body>
+        <h1>UPRM Scheduler - Reporte Ejecutivo</h1>
+        <p>Generado el: {time.strftime('%Y-%m-%d %H:%M:%S')}</p>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <h3>Total Secciones</h3>
+                <p style="font-size: 24px; font-weight: bold;">{total_secciones}</p>
+            </div>
+            <div class="stat-card">
+                <h3>Secciones TBA</h3>
+                <p style="font-size: 24px; font-weight: bold;">{secciones_tba} ({secciones_tba/total_secciones*100:.1f}%)</p>
+            </div>
+            <div class="stat-card">
+                <h3>Carga Total (Créditos)</h3>
+                <p style="font-size: 24px; font-weight: bold;">{carga_total:.1f}</p>
+            </div>
+            <div class="stat-card">
+                <h3>Profesores Activos</h3>
+                <p style="font-size: 24px; font-weight: bold;">{profesores_con_carga}</p>
+            </div>
+        </div>
+        
+        <h2>Listado de Secciones TBA (Contrataciones Pendientes)</h2>
+        {master_df[master_df['Persona'] == 'TBA'][['ID', 'Asignatura', 'Estudiantes (Cupo)', 'Días', 'Horario', 'Salón']].to_html(index=False) if secciones_tba > 0 else '<p>No hay secciones TBA.</p>'}
+        
+        <h2>Horarios por Profesor</h2>
+        {''.join([f'<h3>{p}</h3>{master_df[master_df["Persona"]==p][["ID", "Asignatura", "Días", "Horario", "Salón"]].to_html(index=False)}' for p in sorted(master_df['Persona'].unique()) if p not in ['TBA', 'GRADUADOS']])}
+        
+        <div class="footer">
+            Reporte generado automáticamente por UPRM Timetable System.
+        </div>
+        <script>
+            window.onload = function() {{ window.print(); }}
+        </script>
+    </body>
+    </html>
+    """
     return html
 
 def generar_figura_cientifica_carga(cargas_finales, scheduler):
+    """Figura científica unificada con todos los profesores."""
     profesores = list(cargas_finales.keys())
     profesores.sort(key=lambda p: cargas_finales[p], reverse=True)
     carga_asignada = [cargas_finales[p] for p in profesores]
     carga_min = [scheduler.profesores[p].carga_min for p in profesores]
     carga_max = [scheduler.profesores[p].carga_max for p in profesores]
+    
     x_vals = list(range(len(profesores)))
+    
     fig = go.Figure()
-    fig.add_trace(go.Bar(x=x_vals, y=carga_asignada, name='Carga Asignada', marker=dict(color='lightgray', line=dict(color='black', width=1))))
-    fig.add_trace(go.Scatter(x=x_vals, y=carga_min, mode='lines+markers', name='Carga Mínima', line=dict(color='blue', width=2, dash='dot'), marker=dict(size=6)))
-    fig.add_trace(go.Scatter(x=x_vals, y=carga_max, mode='lines+markers', name='Carga Máxima', line=dict(color='orange', width=2, dash='dot'), marker=dict(size=6)))
-    fig.update_layout(title="Análisis de Carga Académica por Profesor",
-                      xaxis=dict(title="Profesores (índice)", tickvals=x_vals, ticktext=[f"P{i+1}" for i in x_vals]),
-                      yaxis=dict(title="Cantidad de Créditos Semanales"), font=dict(color='#1F3D2B'),
-                      paper_bgcolor='white', plot_bgcolor='white', legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5), height=500)
+    
+    # Barras (carga asignada)
+    fig.add_trace(go.Bar(
+        x=x_vals,
+        y=carga_asignada,
+        name='Carga Asignada',
+        marker=dict(color='lightgray', line=dict(color='black', width=1))
+    ))
+    
+    # Línea carga mínima
+    fig.add_trace(go.Scatter(
+        x=x_vals,
+        y=carga_min,
+        mode='lines+markers',
+        name='Carga Mínima',
+        line=dict(color='blue', width=2, dash='dot'),
+        marker=dict(size=6)
+    ))
+    
+    # Línea carga máxima
+    fig.add_trace(go.Scatter(
+        x=x_vals,
+        y=carga_max,
+        mode='lines+markers',
+        name='Carga Máxima',
+        line=dict(color='orange', width=2, dash='dot'),
+        marker=dict(size=6)
+    ))
+    
+    fig.update_layout(
+        title="Análisis de Carga Académica por Profesor",
+        xaxis=dict(
+            title="Profesores (índice)",
+            tickvals=x_vals,
+            ticktext=[f"P{i+1}" for i in x_vals]
+        ),
+        yaxis=dict(title="Cantidad de Créditos Semanales"),
+        font=dict(color='#1a1a1a'),
+        paper_bgcolor='white',
+        plot_bgcolor='white',
+        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5),
+        height=500
+    )
+    fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+    fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+    
     return fig
 
 def generar_plantilla():
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        pd.DataFrame({'CODIGO': ['MATE3171', 'MATE3172'], 'CREDITOS': [3, 3], 'DEMANDA': [120, 150], 'CUPO': [30, 30],
-                      'CANDIDATOS': ['PEREZ, GONZALEZ', 'RODRIGUEZ'], 'TIPO_SALON': [1, 1]}).to_excel(writer, sheet_name='Cursos', index=False)
-        pd.DataFrame({'NOMBRE': ['PEREZ', 'GONZALEZ'], 'CARGA_MIN': [9, 6], 'CARGA_MAX': [15, 12], 'PREF_DIAS': ['LMV', 'MJ'],
-                      'PREF_HORAS': ['AM', 'PM'], 'BLOQUEO_DIAS': ['', ''], 'BLOQUEO_HORA_INI': ['', ''], 'BLOQUEO_HORA_FIN': ['', ''],
-                      'PREF1': ['MATE3171', 'MATE3172'], 'PREF2': ['', ''], 'PREF3': ['', ''], 'COMPENSACION': ['NO', 'SI'],
-                      'ACEPTA_GRANDES': [0, 1], 'CURSOS_INTENSIVOS': [0, 1]}).to_excel(writer, sheet_name='Profesores', index=False)
-        pd.DataFrame({'CODIGO': ['S-101', 'S-102'], 'CAPACIDAD': [30, 40], 'TIPO': [1, 2]}).to_excel(writer, sheet_name='Salones', index=False)
+        df_cursos = pd.DataFrame({
+            'CODIGO': ['MATE3171', 'MATE3172'],
+            'CREDITOS': [3, 3],
+            'DEMANDA': [120, 150],
+            'CUPO': [30, 30],
+            'CANDIDATOS': ['PEREZ, GONZALEZ', 'RODRIGUEZ'],
+            'TIPO_SALON': [1, 1]
+        })
+        df_cursos.to_excel(writer, sheet_name='Cursos', index=False)
+        
+        df_profes = pd.DataFrame({
+            'NOMBRE': ['PEREZ', 'GONZALEZ'],
+            'CARGA_MIN': [9, 6],
+            'CARGA_MAX': [15, 12],
+            'PREF_DIAS': ['LMV', 'MJ'],
+            'PREF_HORAS': ['AM', 'PM'],
+            'BLOQUEO_DIAS': ['', ''],
+            'BLOQUEO_HORA_INI': ['', ''],
+            'BLOQUEO_HORA_FIN': ['', ''],
+            'PREF1': ['MATE3171', 'MATE3172'],
+            'PREF2': ['', ''],
+            'PREF3': ['', ''],
+            'COMPENSACION': ['NO', 'SI'],
+            'ACEPTA_GRANDES': [0, 1],
+            'CURSOS_INTENSIVOS': [0, 1]
+        })
+        df_profes.to_excel(writer, sheet_name='Profesores', index=False)
+        
+        df_salones = pd.DataFrame({
+            'CODIGO': ['S-101', 'S-102'],
+            'CAPACIDAD': [30, 40],
+            'TIPO': [1, 2]
+        })
+        df_salones.to_excel(writer, sheet_name='Salones', index=False)
+    
     output.seek(0)
     return output.getvalue()
 
 # ==============================================================================
-# 6. UI PRINCIPAL
+# 8. UI PRINCIPAL
 # ==============================================================================
 def main():
-    # Sidebar
     with st.sidebar:
-        st.image(URL_ESCUDO_UPRM, width=150)
-        st.markdown("### ⚙️ CONFIGURACIÓN")
+        st.markdown("### ∑ Configuración")
         zona = st.selectbox("Zona Campus", ["CENTRAL", "PERIFERICA"])
         iteraciones = st.slider("Iteraciones Fase 1 (Factibilidad)", 500, 5000, 3000)
         file = st.file_uploader("Subir Protocolo Excel", type=['xlsx'])
-        st.download_button(label="📥 DESCARGAR PLANTILLA", data=generar_plantilla(),
-                           file_name="PLANTILLA_UPRM.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button(
+            label="📥 Descargar Plantilla",
+            data=generar_plantilla(),
+            file_name="PLANTILLA.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
-    # Condiciones de zona
     st.markdown(f"### Ω Condiciones de Zona: {zona}")
     c1, c2, c3 = st.columns(3)
-    with c1:
-        st.metric("Ventana Operativa", "07:30 AM - 06:30 PM" if zona == "CENTRAL" else "07:00 AM - 06:00 PM")
-    with c2:
-        st.metric("Hora Universal", "10:30 AM - 12:30 PM" if zona == "CENTRAL" else "10:00 AM - 12:00 PM")
-    with c3:
-        st.markdown('<div class="status-badge">🔒 RESTRICCIONES FUERTES ACTIVAS</div>', unsafe_allow_html=True)
+    with c1: st.metric("Ventana Operativa", "07:30 AM - 06:30 PM" if zona == "CENTRAL" else "07:00 AM - 06:00 PM")
+    with c2: st.metric("Hora Universal", "10:30 AM - 12:30 PM" if zona == "CENTRAL" else "10:00 AM - 12:00 PM")
+    with c3: st.markdown(f"""<div class="status-badge">RESTRICCIONES FUERTES ACTIVAS</div>""", unsafe_allow_html=True)
 
     if not file:
         st.markdown("""
             <div class='glass-card' style='text-align: center;'>
-                <h3 style='margin-top:0; color: #D4AF37;'>📂 SINCRONIZACIÓN DE DATOS</h3>
+                <h3 style='margin-top:0; color: #D4AF37;'>📥 Sincronización de Datos</h3>
                 <p>Asegúrese de que el archivo Excel contiene las hojas: <b>Cursos</b>, <b>Profesores</b>, <b>Salones</b>.</p>
             </div>
         """, unsafe_allow_html=True)
     else:
-        if st.button("🚀 INICIAR OPTIMIZACIÓN"):
+        if st.button("🚀 INICIAR OPTIMIZACIÓN ABSOLUTA"):
             try:
                 with st.spinner("Balanceando cargas, consolidando secciones y resolviendo..."):
                     xls = pd.ExcelFile(file)
                     df_cursos = pd.read_excel(xls, 'Cursos')
                     df_profes = pd.read_excel(xls, 'Profesores')
                     df_salones = pd.read_excel(xls, 'Salones')
+
                     scheduler = TabuScheduler(df_cursos, df_profes, df_salones, zona)
+                    
                     start_time = time.time()
                     bar = st.progress(0)
                     status = st.empty()
                     mejor_sol, conflictos, historial = scheduler.optimizar(iteraciones, bar, status)
+                    
                     st.session_state.elapsed_time = time.time() - start_time
                     st.session_state.conflicts = conflictos
                     st.session_state.historial = historial
                     st.session_state.scheduler = scheduler
                     st.session_state.mejor_sol = mejor_sol
+                    
                     cargas_finales = {}
                     for asign in mejor_sol:
                         p = asign['profesor']
@@ -1430,13 +1569,19 @@ def main():
                         if p not in cargas_finales:
                             cargas_finales[p] = 0.0
                     st.session_state.cargas_finales = cargas_finales
+
                     st.session_state.master = pd.DataFrame([{
-                        'ID': a['seccion'].cod, 'Asignatura': a['seccion'].cod.split('-')[0],
-                        'Estudiantes (Cupo)': a['seccion'].cupo, 'Créditos Reales': scheduler.get_sec_creditos(a['seccion'], a['profesor']),
-                        'Persona': a['profesor'], 'Días': a['patron']['name'],
-                        'Horario': format_horario(a['patron'], a['ini']), 'Salón': a['salon']
+                        'ID': a['seccion'].cod, 
+                        'Asignatura': a['seccion'].cod.split('-')[0],
+                        'Estudiantes (Cupo)': a['seccion'].cupo,
+                        'Créditos Reales': scheduler.get_sec_creditos(a['seccion'], a['profesor']),
+                        'Persona': a['profesor'], 
+                        'Días': a['patron']['name'], 
+                        'Horario': format_horario(a['patron'], a['ini']), 
+                        'Salón': a['salon']
                     } for a in mejor_sol])
                     st.session_state.detailed_conflicts = scheduler._obtener_conflictos(mejor_sol)
+
             except Exception as e:
                 st.error(f"Error durante la optimización: {e}")
                 return
@@ -1445,9 +1590,11 @@ def main():
         st.success(f"✅ Optimización completada en {st.session_state.elapsed_time:.2f} segundos.")
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
         t1, t2, t3, t4 = st.tabs(["💎 PANEL DE CONTROL", "🔍 VISTAS DETALLADAS", "🚨 AUDITORÍA DE CALIDAD", "📊 ANALÍTICAS AVANZADAS"])
+        
         with t1:
             edited = st.data_editor(st.session_state.master, use_container_width=True, height=500)
-            st.download_button("💾 EXPORTAR EXCEL", exportar_todo(edited), "Horario_Final_UPRM.xlsx", use_container_width=True)
+            st.download_button("💾 EXPORTAR EXCEL PLATINUM", exportar_todo(edited), "Horario_Final_UPRM.xlsx", use_container_width=True)
+            
         with t2:
             f1, f2, f3 = st.tabs(["Por Profesor", "Por Curso", "Por Salón"])
             df_master = st.session_state.master
@@ -1469,6 +1616,7 @@ def main():
                     sl = st.selectbox("Seleccionar Salón", lista_salones)
                     subset = df_master[df_master['Salón'] == sl]
                     st.table(subset[['ID', 'Asignatura', 'Persona', 'Días', 'Horario']])
+                
         with t3:
             conflictos = st.session_state.conflicts
             if conflictos > 0:
@@ -1477,17 +1625,27 @@ def main():
                     st.write(f"- {conf}")
             else:
                 st.success("✅ 100% Asignación Perfecta. Cero Conflictos Duros.")
+                
         with t4:
             st.markdown("### 📈 Analíticas Avanzadas")
+            
             subtab1, subtab2, subtab3, subtab4 = st.tabs(["📊 Visualizaciones", "🗓️ Calendario", "📄 Reporte PDF", "📈 Carga Científica"])
+            
             with subtab1:
+                st.markdown("#### Mapa de Calor de Ocupación")
                 fig_heat = generar_heatmap_plotly(st.session_state.scheduler, st.session_state.mejor_sol)
                 st.plotly_chart(fig_heat, use_container_width=True)
+                
+                st.markdown("#### Distribución de Clases por Profesor y Día")
                 fig_barras = generar_barras_apiladas_profesor(st.session_state.mejor_sol, st.session_state.scheduler)
                 st.plotly_chart(fig_barras, use_container_width=True)
+                
+                st.markdown("#### Evolución del Fitness")
                 fig_fitness = generar_evolucion_fitness_plotly(st.session_state.historial)
                 st.plotly_chart(fig_fitness, use_container_width=True)
+            
             with subtab2:
+                st.markdown("#### Calendario Visual Interactivo")
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     filtro_prof = st.selectbox("Filtrar por Profesor", ['Todos'] + sorted(st.session_state.master['Persona'].unique()))
@@ -1495,37 +1653,34 @@ def main():
                     filtro_salon = st.selectbox("Filtrar por Salón", ['Todos'] + sorted(st.session_state.master['Salón'].unique()))
                 with col3:
                     filtro_curso = st.selectbox("Filtrar por Curso", ['Todos'] + sorted(st.session_state.master['Asignatura'].unique()))
-                fig_cal = generar_calendario_visual(st.session_state.mejor_sol, st.session_state.scheduler,
-                                                    filtro_prof if filtro_prof != 'Todos' else None,
-                                                    filtro_salon if filtro_salon != 'Todos' else None,
-                                                    filtro_curso if filtro_curso != 'Todos' else None)
+                
+                fig_cal = generar_calendario_visual(
+                    st.session_state.mejor_sol,
+                    st.session_state.scheduler,
+                    filtro_prof if filtro_prof != 'Todos' else None,
+                    filtro_salon if filtro_salon != 'Todos' else None,
+                    filtro_curso if filtro_curso != 'Todos' else None
+                )
                 st.plotly_chart(fig_cal, use_container_width=True)
+            
             with subtab3:
-                if st.button("📑 Generar Reporte PDF"):
-                    html_reporte = generar_reporte_pdf_html(st.session_state.scheduler, st.session_state.mejor_sol,
-                                                            st.session_state.cargas_finales, st.session_state.master)
+                st.markdown("#### Exportar Reporte Ejecutivo en PDF")
+                if st.button("📑 Generar Reporte PDF (Imprimir)"):
+                    html_reporte = generar_reporte_pdf_html(
+                        st.session_state.scheduler,
+                        st.session_state.mejor_sol,
+                        st.session_state.cargas_finales,
+                        st.session_state.master
+                    )
                     st.components.v1.html(html_reporte, height=600, scrolling=True)
-                st.info("Haz clic para generar el reporte y luego usa 'Imprimir' de tu navegador para guardar como PDF.")
+                st.info("Haz clic en el botón para generar el reporte y luego usa la opción 'Imprimir' de tu navegador para guardar como PDF.")
+            
             with subtab4:
+                st.markdown("#### Análisis Científico de Carga Académica")
                 fig_carga = generar_figura_cientifica_carga(st.session_state.cargas_finales, st.session_state.scheduler)
                 st.plotly_chart(fig_carga, use_container_width=True)
+            
         st.markdown("</div>", unsafe_allow_html=True)
-
-    # Footer institucional
-    st.markdown(f"""
-    <div class="uprm-footer">
-        <div class="footer-logos">
-            <img src="{URL_ESCUDO_UPRM}" alt="UPRM">
-            <img src="{URL_SELLO_UPR}" alt="UPR">
-        </div>
-        <div class="footer-text">
-            Colegio de Mayagüez · Universidad de Puerto Rico
-        </div>
-        <div class="footer-decor">
-            <span>🌿</span><span>✨</span><span>🌿</span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
