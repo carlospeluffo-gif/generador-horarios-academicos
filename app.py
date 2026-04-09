@@ -12,333 +12,180 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from copy import deepcopy
 
-# Reemplaza desde la línea "st.set_page_config..." y el bloque st.markdown de estilos y header con esto:
-
-st.set_page_config(page_title="UPRM Scheduler | v15 LUX", page_icon="✨", layout="wide")
+# ==============================================================================
+# 1. ESTÉTICA (IDENTIDAD UPRM - SIN SÍMBOLOS MATEMÁTICOS)
+# ==============================================================================
+st.set_page_config(page_title="UPRM Scheduler Platinum v13", page_icon="🏛️", layout="wide")
 
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700;800&family=Cinzel:wght@500;700;900&display=swap');
-
-    /* Fondo de lujo: gradiente oscuro con partículas doradas */
-    .stApp {
-        background: radial-gradient(circle at 20% 30%, #0A1C10 0%, #061208 100%);
-        background-attachment: fixed;
-        color: #FFFFFF;
-    }
-
-    /* Partículas animadas superpuestas (efecto brillo) */
-    .stApp::before {
-        content: "";
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Source+Code+Pro:wght@300;500&display=swap');
+    
+    .stApp { 
+        background-color: #f8f9fa;
         background-image: 
-            radial-gradient(circle at 30% 40%, rgba(198, 146, 20, 0.08) 0%, transparent 30%),
-            radial-gradient(circle at 80% 70%, rgba(0, 200, 100, 0.06) 0%, transparent 40%),
-            repeating-linear-gradient(45deg, rgba(255,215,0,0.02) 0px, rgba(255,215,0,0.02) 2px, transparent 2px, transparent 6px);
-        pointer-events: none;
-        z-index: 0;
-        animation: shimmer 15s infinite alternate;
+            linear-gradient(rgba(0, 75, 35, 0.03) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0, 75, 35, 0.03) 1px, transparent 1px);
+        background-size: 40px 40px, 40px 40px;
+        background-attachment: fixed;
+        color: #1a1a1a; 
     }
 
-    @keyframes shimmer {
-        0% { opacity: 0.5; }
-        100% { opacity: 1; }
-    }
-
-    .main > div {
-        position: relative;
-        z-index: 2;
-    }
-
-    /* HEADER IMPACTANTE CON VIDRIO OSCURO Y BORDES DORADOS */
+    /* ENCABEZADO INSTITUCIONAL */
     .rum-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 20px 60px;
-        background: rgba(5, 20, 10, 0.65);
-        backdrop-filter: blur(25px) saturate(200%);
-        -webkit-backdrop-filter: blur(25px) saturate(200%);
-        border-bottom: 2px solid #D4AF37;
-        margin-bottom: 40px;
-        border-radius: 0 0 50px 50px;
-        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 30px rgba(212, 175, 55, 0.3) inset;
+        padding: 20px 40px;
+        background: rgba(255, 255, 255, 0.98);
+        border-bottom: 4px solid #004B23;  /* Verde UPRM */
+        margin-bottom: 30px;
+        border-radius: 0 0 20px 20px;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.05);
         position: relative;
-        z-index: 15;
     }
 
-    .rum-header::after {
-        content: "";
-        position: absolute;
-        bottom: -6px;
-        left: 10%;
-        width: 80%;
-        height: 4px;
-        background: linear-gradient(90deg, transparent, #FFD700, #FFA500, #FFD700, transparent);
-        border-radius: 50%;
-        filter: blur(2px);
-        box-shadow: 0 0 20px #FFD700;
+    .header-logo {
+        display: flex;
+        align-items: center;
+        gap: 15px;
     }
 
     .header-logo img {
-        height: 100px;
+        height: 70px;
         width: auto;
-        filter: drop-shadow(0 0 15px rgba(255, 215, 0, 0.6));
-        transition: all 0.4s ease;
     }
-    .header-logo img:hover {
-        transform: scale(1.08);
-        filter: drop-shadow(0 0 25px #FFD700);
+
+    .title-box {
+        text-align: center;
+        z-index: 2;
     }
 
     .title-box h1 {
-        font-family: 'Cinzel', serif !important;
-        background: linear-gradient(145deg, #FFFFFF 0%, #FFD700 40%, #D4AF37 80%);
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent !important;
-        font-size: 3.8rem !important;
+        font-family: 'Playfair Display', serif !important; 
+        color: #004B23 !important;  /* Verde institucional */
+        font-size: 2.8rem !important;
         margin: 5px 0 !important;
-        letter-spacing: 6px;
-        font-weight: 900;
-        text-shadow: 0 0 30px rgba(212, 175, 55, 0.7), 0 0 10px #000;
+        letter-spacing: 2px;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.05);
     }
 
     .title-box p {
-        color: #FFFFFF !important;
-        font-family: 'Montserrat', sans-serif;
-        letter-spacing: 5px;
-        font-size: 0.9rem;
-        font-weight: 400;
-        text-transform: uppercase;
-        background: rgba(0, 40, 20, 0.5);
-        padding: 8px 25px;
-        border-radius: 40px;
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(255,215,0,0.4);
-        box-shadow: 0 0 15px rgba(0,0,0,0.3);
+        color: #2c3e50 !important;
+        font-family: 'Source Code Pro', monospace;
+        letter-spacing: 3px;
+        font-size: 0.85rem;
+        font-weight: 500;
     }
 
     .subtitle-accent {
-        color: #FFD700;
-        font-weight: 800;
+        color: #C69214;  /* Dorado UPRM */
+        font-weight: bold;
     }
 
-    /* TARJETAS DE CRISTAL OSCURO CON BORDES BRILLANTES */
-    .glass-card {
-        background: rgba(10, 30, 20, 0.5);
-        backdrop-filter: blur(20px) saturate(180%);
-        -webkit-backdrop-filter: blur(20px) saturate(180%);
-        border-radius: 40px;
-        padding: 30px;
-        border: 1px solid rgba(212, 175, 55, 0.5);
-        box-shadow: 0 25px 40px -12px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255,215,0,0.2) inset, 0 0 30px rgba(0,0,0,0.2) inset;
-        margin-bottom: 30px;
-        transition: all 0.3s ease;
-        color: #F0F0F0;
-    }
-    .glass-card:hover {
-        box-shadow: 0 30px 50px -10px #000000, 0 0 0 2px #D4AF37 inset, 0 0 40px rgba(255,215,0,0.2);
-        background: rgba(15, 40, 25, 0.55);
-        transform: translateY(-5px);
+    /* TARJETAS ESTILO UPRM */
+    .glass-card { 
+        background: rgba(255, 255, 255, 0.95); 
+        border-radius: 12px; 
+        padding: 25px; 
+        border-left: 5px solid #004B23;
+        border-right: 1px solid rgba(0, 75, 35, 0.2);
+        border-top: 1px solid rgba(0, 75, 35, 0.1);
+        border-bottom: 1px solid rgba(0, 75, 35, 0.1);
+        backdrop-filter: blur(8px); 
+        margin-bottom: 20px; 
+        box-shadow: 0 10px 25px rgba(0, 75, 35, 0.08);
+        color: #1a1a1a;
     }
 
-    /* BOTONES CON EFECTO DE PULSO Y NEÓN */
-    .stButton > button {
-        background: linear-gradient(145deg, #003D1A 0%, #006B2F 100%) !important;
-        color: #FFFFFF !important;
-        font-weight: 700 !important;
-        border-radius: 60px !important;
-        width: 100%;
-        border: 2px solid #D4AF37 !important;
-        height: 60px;
-        font-size: 1.3rem;
-        letter-spacing: 3px;
-        transition: all 0.3s ease;
-        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.7), 0 0 15px #00A859, 0 0 5px #FFD700 inset;
-        text-transform: uppercase;
-        font-family: 'Montserrat', sans-serif;
-        position: relative;
-        overflow: hidden;
+    /* BOTONES PRINCIPALES */
+    .stButton>button { 
+        background: linear-gradient(135deg, #004B23 0%, #0A6B3A 50%, #004B23 100%) !important; 
+        color: white !important; 
+        font-weight: bold !important; 
+        border-radius: 6px !important; 
+        width: 100%; 
+        border: none !important; 
+        height: 55px; 
+        font-size: 1.1rem;
+        transition: 0.3s;
+        box-shadow: 0 4px 8px rgba(0, 75, 35, 0.2);
     }
-    .stButton > button:hover {
-        transform: translateY(-5px) scale(1.02);
-        box-shadow: 0 18px 35px rgba(0, 0, 0, 0.9), 0 0 30px #00C96B, 0 0 15px #FFD700 inset;
-        background: linear-gradient(145deg, #005A24 0%, #008A3C 100%) !important;
-        border-color: #FFD700 !important;
-        animation: pulseGlow 1.5s infinite;
-    }
-    @keyframes pulseGlow {
-        0% { box-shadow: 0 18px 35px rgba(0,0,0,0.9), 0 0 30px #00C96B, 0 0 15px #FFD700 inset; }
-        50% { box-shadow: 0 18px 45px rgba(0,0,0,0.9), 0 0 45px #00FF80, 0 0 25px #FFD700 inset; }
-        100% { box-shadow: 0 18px 35px rgba(0,0,0,0.9), 0 0 30px #00C96B, 0 0 15px #FFD700 inset; }
+    .stButton>button:hover { 
+        transform: scale(1.01); 
+        box-shadow: 0 6px 18px rgba(0, 75, 35, 0.4); 
+        background: linear-gradient(135deg, #0A6B3A 0%, #118B4A 50%, #0A6B3A 100%) !important;
     }
 
-    /* BOTÓN DORADO */
-    .stDownloadButton > button {
-        background: linear-gradient(145deg, #B8860B 0%, #FFD700 100%) !important;
-        color: #000000 !important;
+    .stDownloadButton>button {
+        background: linear-gradient(135deg, #C69214 0%, #E6B422 50%, #C69214 100%) !important;
+        color: #000 !important;
         font-weight: 800 !important;
-        border-radius: 60px !important;
-        border: 2px solid #FFF8DC !important;
-        box-shadow: 0 10px 25px #000000, 0 0 25px #FFD700;
-        transition: all 0.3s;
-        height: 55px;
-        text-transform: uppercase;
-        font-family: 'Montserrat', sans-serif;
-    }
-    .stDownloadButton > button:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 20px 35px #000000, 0 0 40px #FFD700, 0 0 20px #FFA500 inset;
-        background: linear-gradient(145deg, #D4AF37 0%, #FFF0A0 100%) !important;
+        border: 1px solid #C69214 !important;
     }
 
-    /* SIDEBAR FUTURISTA */
-    [data-testid="stSidebar"] {
-        background: rgba(5, 20, 10, 0.75);
-        backdrop-filter: blur(30px);
-        border-right: 2px solid #D4AF37;
-        box-shadow: 10px 0 40px rgba(0,0,0,0.6);
+    /* SIDEBAR */
+    [data-testid="stSidebar"] { 
+        background-color: #ffffff; 
+        border-right: 3px solid #004B23; 
     }
-    [data-testid="stSidebar"] * {
-        color: #FFFFFF !important;
-    }
-    [data-testid="stSidebar"] .stMarkdown h3 {
-        color: #FFD700 !important;
-        font-family: 'Cinzel', serif;
-        border-bottom: 3px solid #D4AF37;
-        padding-bottom: 15px;
-        text-shadow: 0 0 10px #FFD700;
+    
+    [data-testid="stSidebar"] h3 {
+        color: #004B23 !important;
+        font-family: 'Playfair Display', serif;
+        border-bottom: 2px solid #C69214;
+        padding-bottom: 8px;
     }
 
-    /* MÉTRICAS CON EFECTO VIDRIO */
-    .stMetric {
-        background: rgba(0, 30, 15, 0.6);
-        backdrop-filter: blur(15px);
-        padding: 18px 25px;
-        border-radius: 30px;
-        border: 1px solid rgba(255,215,0,0.4);
-        box-shadow: 0 8px 20px #000000, 0 0 15px rgba(0,255,100,0.2);
-    }
-    .stMetric label {
-        color: #CCCCCC !important;
-        font-weight: 500;
-    }
-    .stMetric [data-testid="stMetricValue"] {
-        font-size: 2.5rem !important;
-        font-weight: 800 !important;
-        color: #FFD700 !important;
-        font-family: 'Cinzel', serif;
-        text-shadow: 0 0 15px #FFD700;
-    }
-
-    /* TABLAS DE LUJO */
-    .stDataFrame, .stTable {
-        border-radius: 30px !important;
-        overflow: hidden;
-        box-shadow: 0 15px 30px #000000, 0 0 0 1px #D4AF37 inset;
-        background: rgba(0, 20, 10, 0.5);
-        backdrop-filter: blur(8px);
-    }
-    .stDataFrame th, .stTable th {
-        background: #003D1A !important;
-        color: #FFD700 !important;
-        font-weight: 700;
-        padding: 16px 12px !important;
-        border-bottom: 3px solid #D4AF37 !important;
-    }
-    .stDataFrame td, .stTable td {
-        background: rgba(255,255,255,0.05);
-        color: #F0F0F0 !important;
-        border-bottom: 1px solid rgba(212,175,55,0.2) !important;
-    }
-
-    /* TABS BRILLANTES */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 15px;
-        background: transparent;
-    }
-    .stTabs [data-baseweb="tab"] {
-        border-radius: 50px 50px 0 0 !important;
-        padding: 14px 30px !important;
-        background: rgba(20, 50, 30, 0.6);
-        backdrop-filter: blur(12px);
-        border: 1px solid rgba(212,175,55,0.5);
+    /* BADGES */
+    .status-badge { 
+        background: rgba(0, 75, 35, 0.08); 
+        border: 1px solid #004B23; 
+        color: #004B23; 
+        padding: 12px; 
+        border-radius: 8px; 
+        text-align: center;
+        font-family: 'Source Code Pro', monospace;
         font-weight: 600;
-        color: #DDDDDD;
-        transition: 0.2s;
-    }
-    .stTabs [aria-selected="true"] {
-        background: #0A2A1A !important;
-        border-bottom: 6px solid #FFD700 !important;
-        color: #FFD700 !important;
-        font-weight: 800;
-        box-shadow: 0 -5px 15px rgba(0,0,0,0.5), 0 0 20px #FFD700 inset;
     }
 
-    /* INPUTS Y SELECTS */
-    .stSelectbox > div > div {
-        border-radius: 40px !important;
-        border: 2px solid #D4AF37 !important;
-        background: rgba(0,0,0,0.3) !important;
-        color: white !important;
+    /* MÉTRICAS */
+    .stMetric {
+        background-color: rgba(255,255,255,0.8);
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid #ddd;
     }
 
-    /* SCROLLBAR DORADA */
-    ::-webkit-scrollbar {
-        width: 10px;
-    }
-    ::-webkit-scrollbar-track {
-        background: #0A1C10;
-    }
-    ::-webkit-scrollbar-thumb {
-        background: #D4AF37;
-        border-radius: 10px;
-        border: 2px solid #0A1C10;
-        box-shadow: inset 0 0 6px #000;
+    /* TABLAS */
+    .stDataFrame table, .stTable table {
+        background-color: white;
+        color: #1a1a1a;
+        border-radius: 8px;
+        overflow: hidden;
     }
 
-    /* ANIMACIONES PARA GRÁFICOS */
-    .js-plotly-plot .plotly .modebar {
-        background: rgba(0,0,0,0.4) !important;
-        border-radius: 30px;
-        backdrop-filter: blur(5px);
-    }
-
-    footer {visibility: hidden;}
-    .reportview-container .main footer {visibility: hidden;}
-    
-    /* Ajuste de texto general */
-    p, li, span, div:not(.title-box):not(.glass-card) {
-        color: #E0E0E0;
-    }
+    /* ENCABEZADOS DE SECCIÓN */
     h2, h3 {
-        color: #FFD700 !important;
-        font-family: 'Cinzel', serif !important;
-        text-shadow: 0 0 10px #000, 0 0 5px #D4AF37;
+        color: #004B23 !important;
+        font-family: 'Playfair Display', serif !important;
     }
-    
 </style>
 
 <div class="rum-header">
     <div class="header-logo">
-        <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/24/2016/04/upr_rum.jpg" alt="UPRM">
+        <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/24/2016/04/upr_rum.jpg" alt="logo_uprm.png">
     </div>
     <div class="title-box">
-        <h1>UPRM TIMETABLE · LUX</h1>
-        <p><span class="subtitle-accent">COLEGIO DE ARTES Y CIENCIAS</span> · OPTIMIZACIÓN ABSOLUTA v15</p>
+        <h1>UPRM TIMETABLE SYSTEM</h1>
+        <p><span class="subtitle-accent">COLEGIO DE ARTES Y CIENCIAS</span> · OPTIMIZACIÓN ACADÉMICA v13</p>
     </div>
-    <div class="header-logo">
-        <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/24/2023/08/logo-rum-200x200-1-150x150.png" alt="Sello UPRM">
+     <div class="header-logo">
+        <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/24/2023/08/logo-rum-200x200-1-150x150.png" alt="otro_uprm.png">
     </div>
-    <div style="width:150px;"></div>
+    <div style="width:150px;"></div> <!-- Espaciador para simetría -->
 </div>
 """, unsafe_allow_html=True)
-
 
 # ==============================================================================
 # 2. UTILIDADES Y TABLAS DE REFERENCIA (SIN CAMBIOS)
