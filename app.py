@@ -15,6 +15,23 @@ from copy import deepcopy
 # ==============================================================================
 # 1. ESTÉTICA (IDENTIDAD UPRM - SIN SÍMBOLOS MATEMÁTICOS)
 # ==============================================================================
+import streamlit as st
+import pandas as pd
+import numpy as np
+import random
+import io
+import time
+import math
+from datetime import time as dtime
+import matplotlib.pyplot as plt
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from copy import deepcopy
+
+# ==============================================================================
+# 1. ESTÉTICA (IDENTIDAD UPRM - SIN SÍMBOLOS MATEMÁTICOS)
+# ==============================================================================
 st.set_page_config(page_title="UPRM Scheduler Platinum v13", page_icon="🏛️", layout="wide")
 
 st.markdown("""
@@ -48,17 +65,20 @@ st.markdown("""
     .header-logo {
         display: flex;
         align-items: center;
-        gap: 15px;
+        justify-content: center;
+        flex: 1; /* Permite equilibrar los lados */
     }
 
     .header-logo img {
-        height: 70px;
+        height: 120px; /* <-- AUMENTAMOS EL TAMAÑO (antes era 70px) */
         width: auto;
+        object-fit: contain;
     }
 
     .title-box {
         text-align: center;
         z-index: 2;
+        flex: 3; /* El título toma más espacio en el centro */
     }
 
     .title-box h1 {
@@ -176,14 +196,15 @@ st.markdown("""
     <div class="header-logo">
         <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/24/2016/04/upr_rum.jpg" alt="logo_uprm.png">
     </div>
+    
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
         <p><span class="subtitle-accent">COLEGIO DE ARTES Y CIENCIAS</span> · OPTIMIZACIÓN ACADÉMICA v13</p>
     </div>
-     <div class="header-logo">
+    
+    <div class="header-logo">
         <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/24/2023/08/logo-rum-200x200-1-150x150.png" alt="otro_uprm.png">
     </div>
-    <div style="width:150px;"></div> <!-- Espaciador para simetría -->
 </div>
 """, unsafe_allow_html=True)
 
