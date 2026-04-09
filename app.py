@@ -13,34 +13,24 @@ from plotly.subplots import make_subplots
 from copy import deepcopy
 
 # ==============================================================================
-# 1. ESTÉTICA (IDENTIDAD UPRM - DISEÑO PREMIUM)
+# 1. ESTÉTICA (IDENTIDAD UPRM - DISEÑO PREMIUM CORREGIDO)
 # ==============================================================================
 st.set_page_config(page_title="UPRM Scheduler Platinum v14", page_icon="🏛️", layout="wide")
 
 st.markdown("""
 <style>
     /* Importamos fuentes premium */
-    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
-    
-    /* Variables de color */
-    :root {
-        --verde-oscuro: #004B23;
-        --verde-medio: #0A6B3A;
-        --verde-claro: #e6f2e9;
-        --dorado: #C69214;
-        --dorado-brillante: #E6B422;
-        --gris-fondo: #f4f7f2;
-    }
+    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap');
 
-    /* Fondo general: degradado radial suave y patrón orgánico */
+    /* Fondo dinámico con gradiente y patrón SVG */
     .stApp {
-        background: radial-gradient(circle at 10% 20%, rgba(230, 242, 233, 0.8) 0%, rgba(255, 255, 255, 0.95) 60%, rgba(245, 240, 230, 0.7) 100%);
+        background: radial-gradient(circle at 10% 20%, rgba(230, 245, 230, 0.4) 0%, rgba(248, 250, 248, 0.9) 90%),
+                    linear-gradient(145deg, #e8f0e8 0%, #ffffff 100%);
         background-attachment: fixed;
         color: #1a1a1a;
-        position: relative;
     }
-    
-    /* Overlay con patrón de ruido y cuadrícula */
+
+    /* Patrón geométrico muy sutil (puntos) */
     .stApp::before {
         content: "";
         position: fixed;
@@ -48,71 +38,63 @@ st.markdown("""
         left: 0;
         width: 100%;
         height: 100%;
-        background-image: 
-            url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><circle cx="20" cy="30" r="1.5" fill="%23004B23" opacity="0.05"/><circle cx="80" cy="70" r="2" fill="%23C69214" opacity="0.04"/><circle cx="45" cy="15" r="1" fill="%23004B23" opacity="0.03"/></svg>'),
-            repeating-linear-gradient(0deg, rgba(0,75,35,0.01) 0px, transparent 1px, transparent 40px),
-            repeating-linear-gradient(90deg, rgba(0,75,35,0.01) 0px, transparent 1px, transparent 40px);
+        background-image: url('data:image/svg+xml;utf8,<svg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg"><circle cx="30" cy="30" r="1.5" fill="%23004B23" opacity="0.04"/></svg>');
         pointer-events: none;
         z-index: 0;
     }
-    
-    /* Contenedor principal con elevación */
+
+    /* Contenedor principal por encima del fondo */
     .main > div {
         position: relative;
         z-index: 1;
     }
 
-    /* ENCABEZADO INSTITUCIONAL - CRISTAL LÍQUIDO */
+    /* ENCABEZADO INSTITUCIONAL DE CRISTAL */
     .rum-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 20px 60px;
-        background: rgba(255, 255, 255, 0.5);
+        padding: 20px 50px;
+        background: rgba(255, 255, 255, 0.65);
         backdrop-filter: blur(20px) saturate(180%);
         -webkit-backdrop-filter: blur(20px) saturate(180%);
-        border-bottom: 1px solid rgba(198, 146, 20, 0.3);
-        margin-bottom: 40px;
+        border-bottom: 2px solid rgba(0, 75, 35, 0.25);
+        margin-bottom: 35px;
         border-radius: 0 0 40px 40px;
-        box-shadow: 0 20px 40px -10px rgba(0, 75, 35, 0.2), inset 0 1px 2px rgba(255,255,255,0.8);
+        box-shadow: 0 20px 40px -10px rgba(0, 40, 20, 0.2), 
+                    0 0 0 1px rgba(198, 146, 20, 0.1) inset;
         position: relative;
-        z-index: 20;
-        transition: box-shadow 0.3s ease;
+        z-index: 10;
     }
-    .rum-header:hover {
-        box-shadow: 0 25px 50px -12px rgba(0, 75, 35, 0.3);
-    }
-    
-    /* Efecto de borde dorado animado */
+
+    /* Línea dorada decorativa inferior */
     .rum-header::after {
         content: "";
         position: absolute;
-        bottom: -2px;
-        left: 5%;
-        width: 90%;
-        height: 2px;
-        background: linear-gradient(90deg, transparent, #C69214, #E6B422, #C69214, transparent);
-        border-radius: 100%;
+        bottom: -4px;
+        left: 15%;
+        width: 70%;
+        height: 4px;
+        background: linear-gradient(90deg, transparent, #C69214, #F5D76E, #C69214, transparent);
+        border-radius: 50%;
         filter: blur(1px);
-        opacity: 0.8;
     }
 
     .header-logo {
         display: flex;
         align-items: center;
-        gap: 25px;
+        gap: 20px;
     }
 
     .header-logo img {
-        height: 110px;
+        height: 90px;
         width: auto;
-        filter: drop-shadow(0 8px 12px rgba(0,0,0,0.08)) brightness(1.05);
-        transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        border-radius: 16px;
+        filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.08));
+        transition: transform 0.4s ease, filter 0.3s ease;
     }
     .header-logo img:hover {
-        transform: scale(1.03) translateY(-3px);
-        filter: drop-shadow(0 15px 20px rgba(198, 146, 20, 0.2)) brightness(1.1);
+        transform: scale(1.03);
+        filter: drop-shadow(0 10px 18px rgba(0, 75, 35, 0.15));
     }
 
     .title-box {
@@ -122,75 +104,59 @@ st.markdown("""
 
     .title-box h1 {
         font-family: 'Cormorant Garamond', serif !important;
-        background: linear-gradient(135deg, #003d1d 0%, #0A6B3A 50%, #1a8a4a 100%);
+        background: linear-gradient(145deg, #003B1A 0%, #0A6B3A 80%);
         -webkit-background-clip: text;
         background-clip: text;
         color: transparent !important;
-        font-size: 3.8rem !important;
-        margin: 0 0 5px 0 !important;
+        font-size: 3.5rem !important;
+        margin: 5px 0 !important;
         letter-spacing: 4px;
         font-weight: 700;
-        text-shadow: 0 2px 20px rgba(0, 75, 35, 0.15);
-        line-height: 1.2;
+        text-shadow: 0 2px 15px rgba(0, 75, 35, 0.1);
     }
 
     .title-box p {
         color: #2c3e50 !important;
         font-family: 'Inter', sans-serif;
         letter-spacing: 5px;
-        font-size: 0.9rem;
+        font-size: 0.85rem;
         font-weight: 400;
         text-transform: uppercase;
-        margin: 0;
-        opacity: 0.9;
+        background: rgba(255,255,255,0.3);
+        padding: 6px 18px;
+        border-radius: 40px;
+        backdrop-filter: blur(5px);
+        display: inline-block;
     }
 
     .subtitle-accent {
         color: #C69214;
         font-weight: 700;
-        text-shadow: 0 0 8px rgba(230, 180, 34, 0.3);
     }
 
-    /* TARJETAS - VIDRIO CON BORDE ILUMINADO */
+    /* TARJETAS VIDRIO (GLASS) MEJORADAS */
     .glass-card {
-        background: rgba(255, 255, 255, 0.45);
+        background: rgba(255, 255, 255, 0.5);
         backdrop-filter: blur(16px) saturate(180%);
         -webkit-backdrop-filter: blur(16px) saturate(180%);
         border-radius: 32px;
-        padding: 32px;
-        border: 1px solid rgba(255, 255, 255, 0.5);
-        border-top: 1px solid rgba(255,255,255,0.8);
-        border-left: 1px solid rgba(255,255,255,0.6);
-        box-shadow: 0 30px 40px -20px rgba(0, 75, 35, 0.2), 
-                    0 0 0 1px rgba(198, 146, 20, 0.05) inset,
-                    0 8px 20px -8px rgba(0,0,0,0.05);
-        margin-bottom: 30px;
-        transition: all 0.35s cubic-bezier(0.15, 0.75, 0.45, 1);
+        padding: 28px;
+        border: 1px solid rgba(255, 255, 255, 0.6);
+        box-shadow: 0 20px 35px -8px rgba(0, 40, 20, 0.12), 
+                    0 0 0 1px rgba(0, 75, 35, 0.05) inset,
+                    0 0 20px rgba(0, 75, 35, 0.03) inset;
+        margin-bottom: 25px;
+        transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         color: #1a1a1a;
-        position: relative;
-        overflow: hidden;
-    }
-    .glass-card::before {
-        content: "";
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 4px;
-        background: linear-gradient(90deg, transparent, #C69214, #E6B422, #C69214, transparent);
-        opacity: 0;
-        transition: opacity 0.4s;
     }
     .glass-card:hover {
-        box-shadow: 0 40px 50px -25px rgba(0, 75, 35, 0.25), 0 0 0 1px rgba(198, 146, 20, 0.15) inset;
-        background: rgba(255, 255, 255, 0.55);
+        box-shadow: 0 30px 45px -12px rgba(0, 75, 35, 0.2), 
+                    0 0 0 1.5px rgba(198, 146, 20, 0.2) inset;
+        background: rgba(255, 255, 255, 0.6);
         transform: translateY(-3px);
     }
-    .glass-card:hover::before {
-        opacity: 0.8;
-    }
 
-    /* BOTONES PRINCIPALES - VERDE UPRM CON PULSO */
+    /* BOTONES PRINCIPALES (VERDE UPRM) */
     .stButton > button {
         background: linear-gradient(145deg, #004B23 0%, #0A6B3A 100%) !important;
         color: white !important;
@@ -198,16 +164,26 @@ st.markdown("""
         border-radius: 60px !important;
         width: 100%;
         border: none !important;
-        height: 60px;
+        height: 58px;
         font-size: 1.2rem;
         letter-spacing: 1.5px;
-        transition: all 0.35s cubic-bezier(0.2, 0.9, 0.4, 1);
-        box-shadow: 0 12px 20px -8px rgba(0, 75, 35, 0.3), 0 0 0 1px rgba(255,255,255,0.1) inset;
+        transition: all 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
+        box-shadow: 0 12px 20px -8px rgba(0, 75, 35, 0.3), 0 0 0 1px rgba(255,255,255,0.2) inset;
         text-transform: uppercase;
         font-family: 'Inter', sans-serif;
         position: relative;
         overflow: hidden;
     }
+    .stButton > button:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 22px 30px -10px rgba(0, 75, 35, 0.45), 0 0 0 1px rgba(255,215,0,0.3) inset;
+        background: linear-gradient(145deg, #0A6B3A 0%, #118B4A 100%) !important;
+    }
+    .stButton > button:active {
+        transform: translateY(2px);
+        box-shadow: 0 6px 12px rgba(0, 75, 35, 0.3);
+    }
+    /* Efecto de brillo al hover */
     .stButton > button::after {
         content: "";
         position: absolute;
@@ -215,60 +191,50 @@ st.markdown("""
         left: -50%;
         width: 200%;
         height: 200%;
-        background: radial-gradient(circle, rgba(255,255,255,0.3) 0%, transparent 70%);
+        background: radial-gradient(circle, rgba(255,255,255,0.2) 0%, transparent 70%);
         opacity: 0;
-        transition: opacity 0.5s;
+        transition: opacity 0.4s;
         pointer-events: none;
-    }
-    .stButton > button:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 20px 30px -10px rgba(0, 75, 35, 0.5), 0 0 0 2px rgba(198, 146, 20, 0.2) inset;
-        background: linear-gradient(145deg, #0A6B3A 0%, #118B4A 100%) !important;
     }
     .stButton > button:hover::after {
         opacity: 1;
     }
-    .stButton > button:active {
-        transform: translateY(2px);
-        box-shadow: 0 6px 12px -4px rgba(0, 75, 35, 0.4);
-        transition: all 0.1s;
-    }
 
-    /* BOTÓN DORADO - DESCARGA */
+    /* BOTÓN DE DESCARGA (DORADO) */
     .stDownloadButton > button {
         background: linear-gradient(145deg, #C69214 0%, #E6B422 100%) !important;
         color: #1a1a1a !important;
         font-weight: 700 !important;
         border-radius: 60px !important;
-        border: none !important;
-        box-shadow: 0 12px 20px -8px rgba(198, 146, 20, 0.4), 0 0 0 1px rgba(255,215,0,0.3) inset;
-        height: 54px;
+        border: 1px solid rgba(255, 215, 0, 0.6) !important;
+        box-shadow: 0 12px 20px -8px rgba(198, 146, 20, 0.3), 0 0 0 1px rgba(255,255,255,0.2) inset;
+        transition: all 0.3s ease;
+        height: 50px;
         text-transform: uppercase;
-        letter-spacing: 1px;
-        transition: all 0.3s;
+        font-family: 'Inter', sans-serif;
     }
     .stDownloadButton > button:hover {
         transform: translateY(-3px);
-        box-shadow: 0 18px 25px -10px rgba(198, 146, 20, 0.6);
+        box-shadow: 0 18px 28px -8px rgba(198, 146, 20, 0.45);
         background: linear-gradient(145deg, #D4A017 0%, #F5C71A 100%) !important;
     }
 
-    /* SIDEBAR - LUJOSO */
+    /* SIDEBAR ESTILIZADA */
     [data-testid="stSidebar"] {
-        background: linear-gradient(160deg, rgba(255, 255, 255, 0.8) 0%, rgba(240, 245, 235, 0.9) 100%);
+        background: rgba(248, 250, 248, 0.75);
         backdrop-filter: blur(20px);
-        border-right: 1px solid rgba(198, 146, 20, 0.25);
-        box-shadow: 8px 0 30px -10px rgba(0, 0, 0, 0.05);
+        -webkit-backdrop-filter: blur(20px);
+        border-right: 1px solid rgba(0, 75, 35, 0.2);
+        box-shadow: 5px 0 30px rgba(0, 0, 0, 0.05);
     }
     
     [data-testid="stSidebar"] .stMarkdown h3 {
         color: #004B23 !important;
         font-family: 'Cormorant Garamond', serif;
-        border-bottom: 2px solid #C69214;
-        padding-bottom: 15px;
-        margin-top: 25px;
+        border-bottom: 2.5px solid #C69214;
+        padding-bottom: 14px;
+        margin-top: 20px;
         font-weight: 700;
-        font-size: 1.8rem;
         letter-spacing: 1px;
     }
     
@@ -278,105 +244,91 @@ st.markdown("""
         color: #1a1a1a !important;
         font-family: 'Inter', sans-serif;
     }
-    
-    [data-testid="stSidebar"] .stSelectbox > div > div {
-        background: rgba(255,255,255,0.6) !important;
-        border-radius: 40px !important;
-        border: 1px solid rgba(0,75,35,0.15) !important;
-    }
 
     /* BADGES DE ESTADO */
     .status-badge {
         background: rgba(0, 75, 35, 0.06);
-        border: 1.5px solid #004B23;
+        border: 1.5px solid rgba(0, 75, 35, 0.3);
         color: #004B23;
-        padding: 16px 20px;
+        padding: 14px 18px;
         border-radius: 60px;
         text-align: center;
         font-family: 'Inter', sans-serif;
         font-weight: 600;
         letter-spacing: 1.5px;
         backdrop-filter: blur(8px);
-        box-shadow: inset 0 2px 4px rgba(0,0,0,0.02), 0 4px 8px rgba(0,75,35,0.05);
-        text-transform: uppercase;
+        box-shadow: inset 0 1px 4px rgba(255,255,255,0.8), 0 4px 8px rgba(0,0,0,0.02);
     }
 
-    /* MÉTRICAS - ESTILO MODERNO */
+    /* MÉTRICAS */
     .stMetric {
-        background: rgba(255, 255, 255, 0.4);
-        backdrop-filter: blur(10px);
-        padding: 20px 24px;
-        border-radius: 28px;
-        border: 1px solid rgba(255,255,255,0.6);
-        box-shadow: 0 12px 20px -10px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(198,146,20,0.05) inset;
-        transition: transform 0.2s;
-    }
-    .stMetric:hover {
-        transform: scale(1.01);
-        background: rgba(255,255,255,0.5);
+        background: rgba(255, 255, 255, 0.45);
+        backdrop-filter: blur(12px);
+        padding: 18px 22px;
+        border-radius: 24px;
+        border: 1px solid rgba(255, 255, 255, 0.7);
+        box-shadow: 0 8px 18px rgba(0, 40, 20, 0.04);
     }
     .stMetric label {
         font-weight: 600 !important;
-        color: #1e2b24 !important;
+        color: #2c3e50 !important;
         font-family: 'Inter', sans-serif;
-        letter-spacing: 0.5px;
     }
     .stMetric [data-testid="stMetricValue"] {
         font-size: 2.2rem !important;
         font-weight: 700 !important;
         color: #004B23 !important;
-        text-shadow: 0 2px 5px rgba(0,75,35,0.1);
+        font-family: 'Cormorant Garamond', serif;
     }
 
-    /* TABLAS ELEGANTES */
+    /* TABLAS */
     .stDataFrame, .stTable {
         border-radius: 24px !important;
         overflow: hidden;
-        box-shadow: 0 15px 30px -12px rgba(0, 75, 35, 0.12);
-        border: 1px solid rgba(255,255,255,0.5);
+        box-shadow: 0 12px 28px -8px rgba(0, 75, 35, 0.12);
+        border: 1px solid rgba(0,0,0,0.03);
         background: rgba(255,255,255,0.3);
-        backdrop-filter: blur(5px);
+        backdrop-filter: blur(4px);
     }
     .stDataFrame table, .stTable table {
         background-color: transparent;
         color: #1a1a1a;
     }
     .stDataFrame th, .stTable th {
-        background: linear-gradient(145deg, #004B23, #0A6B3A) !important;
+        background: #004B23 !important;
         color: white !important;
         font-weight: 600;
         padding: 14px 10px !important;
         font-family: 'Inter', sans-serif;
-        border-bottom: 2px solid #C69214 !important;
     }
     .stDataFrame td, .stTable td {
-        border-bottom: 1px solid rgba(0,0,0,0.05) !important;
-        background-color: rgba(255,255,255,0.2);
+        border-bottom: 1px solid rgba(0,0,0,0.04) !important;
+        background: rgba(255,255,255,0.5);
     }
 
-    /* ENCABEZADOS */
+    /* ENCABEZADOS DE SECCIÓN */
     h2, h3 {
         color: #004B23 !important;
         font-family: 'Cormorant Garamond', serif !important;
         font-weight: 700 !important;
-        letter-spacing: -0.02em;
+        letter-spacing: -0.01em;
     }
     h2 {
         border-left: 8px solid #C69214;
-        padding-left: 25px;
-        font-size: 2.5rem;
+        padding-left: 24px;
+        margin-top: 30px;
+        margin-bottom: 20px;
     }
 
-    /* TABS CON ESTILO */
+    /* TABS ESTILIZADAS */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 12px;
-        background: transparent;
-        padding: 5px;
+        gap: 10px;
+        background-color: transparent;
     }
     .stTabs [data-baseweb="tab"] {
         border-radius: 50px 50px 0 0 !important;
         padding: 14px 28px !important;
-        background: rgba(255,255,255,0.25);
+        background-color: rgba(255,255,255,0.3);
         backdrop-filter: blur(8px);
         border: 1px solid rgba(0,75,35,0.1);
         font-weight: 600;
@@ -385,42 +337,43 @@ st.markdown("""
         transition: all 0.2s;
     }
     .stTabs [aria-selected="true"] {
-        background: linear-gradient(145deg, #ffffff, #f0f5f0) !important;
+        background: rgba(255, 255, 255, 0.8) !important;
         border-bottom: 5px solid #C69214 !important;
         color: #004B23 !important;
         font-weight: 700;
-        box-shadow: 0 -5px 10px rgba(0,75,35,0.05);
-        backdrop-filter: blur(12px);
+        box-shadow: 0 -4px 8px rgba(0,0,0,0.02);
     }
 
-    /* MEJORAS PARA PLOTLY */
-    .js-plotly-plot .plotly .modebar {
-        background: rgba(255,255,255,0.4) !important;
-        backdrop-filter: blur(5px);
-        border-radius: 40px;
-        padding: 2px;
+    /* SELECTBOX Y SLIDER */
+    .stSelectbox > div > div {
+        border-radius: 40px !important;
+        border: 1px solid rgba(0,75,35,0.25) !important;
+        background-color: rgba(255,255,255,0.5) !important;
+        backdrop-filter: blur(8px);
     }
-    
-    /* FOOTER OCULTO */
-    footer {visibility: hidden;}
-    
-    /* SCROLLBAR PERSONALIZADO */
+
+    /* SCROLLBAR PERSONALIZADA */
     ::-webkit-scrollbar {
         width: 8px;
         height: 8px;
     }
     ::-webkit-scrollbar-track {
-        background: rgba(0,75,35,0.05);
+        background: rgba(0,0,0,0.02);
         border-radius: 10px;
     }
     ::-webkit-scrollbar-thumb {
-        background: rgba(0,75,35,0.3);
+        background: rgba(0, 75, 35, 0.3);
         border-radius: 10px;
-        border: 2px solid rgba(255,255,255,0.5);
+        border: 1px solid rgba(255,255,255,0.3);
     }
     ::-webkit-scrollbar-thumb:hover {
-        background: #004B23;
+        background: rgba(0, 75, 35, 0.5);
     }
+
+    /* Pie de página oculto */
+    footer {visibility: hidden;}
+    .reportview-container .main footer {visibility: hidden;}
+    
 </style>
 
 <div class="rum-header">
@@ -434,9 +387,10 @@ st.markdown("""
     <div class="header-logo">
         <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/24/2023/08/logo-rum-200x200-1-150x150.png" alt="UPRM Seal">
     </div>
-    <div style="width:150px;"></div> <!-- Espaciador para simetría -->
+    <div style="width:150px;"></div>
 </div>
 """, unsafe_allow_html=True)
+
 # ==============================================================================
 # 2. UTILIDADES Y TABLAS DE REFERENCIA (SIN CAMBIOS)
 # ==============================================================================
