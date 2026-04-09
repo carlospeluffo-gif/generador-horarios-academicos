@@ -13,9 +13,9 @@ from plotly.subplots import make_subplots
 from copy import deepcopy
 
 # ==============================================================================
-# 1. ESTÉTICA (TEMA CLARO) 
+# 1. ESTÉTICA (IDENTIDAD UPRM - SIN SÍMBOLOS MATEMÁTICOS)
 # ==============================================================================
-st.set_page_config(page_title="UPRM Scheduler Platinum AI v13 Compact", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="UPRM Scheduler Platinum v13", page_icon="🏛️", layout="wide")
 
 st.markdown("""
 <style>
@@ -24,120 +24,164 @@ st.markdown("""
     .stApp { 
         background-color: #f8f9fa;
         background-image: 
-            linear-gradient(rgba(212, 175, 55, 0.05) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(212, 175, 55, 0.05) 1px, transparent 1px);
+            linear-gradient(rgba(0, 75, 35, 0.03) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0, 75, 35, 0.03) 1px, transparent 1px);
         background-size: 40px 40px, 40px 40px;
         background-attachment: fixed;
         color: #1a1a1a; 
     }
 
-    .math-header {
+    /* ENCABEZADO INSTITUCIONAL */
+    .rum-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 30px 60px;
-        background: rgba(255, 255, 255, 0.95);
-        border-bottom: 3px solid #D4AF37;
-        margin-bottom: 40px;
-        border-radius: 0 0 30px 30px;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.05);
-        position: relative;
-        overflow: hidden;
-    }
-
-    .math-header::before { content: '∑'; position: absolute; left: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.1); font-family: serif; }
-    .math-header::after { content: '∫'; position: absolute; right: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.1); font-family: serif; }
-
-    .title-box { text-align: center; z-index: 2; }
-
-    .abstract-icon {
-        font-size: 3rem;
-        color: #D4AF37;
-        border: 2px solid #D4AF37;
-        padding: 10px 20px;
-        border-radius: 50% 0% 50% 0%;
-        background: rgba(212, 175, 55, 0.05);
-        box-shadow: 0 0 15px rgba(212, 175, 55, 0.1);
-    }
-
-    h1 { 
-        font-family: 'Playfair Display', serif !important; 
-        color: #1a1a1a !important; 
-        font-size: 3.2rem !important;
-        margin: 10px 0 !important;
-        text-shadow: 0 0 10px rgba(212, 175, 55, 0.2);
-        letter-spacing: 2px;
-    }
-
-    .glass-card { 
-        background: rgba(255, 255, 255, 0.9); 
-        border-radius: 15px; 
-        padding: 25px; 
-        border: 1px solid rgba(212, 175, 55, 0.3); 
-        backdrop-filter: blur(10px); 
-        margin-bottom: 20px; 
+        padding: 20px 40px;
+        background: rgba(255, 255, 255, 0.98);
+        border-bottom: 4px solid #004B23;  /* Verde UPRM */
+        margin-bottom: 30px;
+        border-radius: 0 0 20px 20px;
         box-shadow: 0 8px 20px rgba(0,0,0,0.05);
+        position: relative;
+    }
+
+    .header-logo {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+    }
+
+    .header-logo img {
+        height: 70px;
+        width: auto;
+    }
+
+    .title-box {
+        text-align: center;
+        z-index: 2;
+    }
+
+    .title-box h1 {
+        font-family: 'Playfair Display', serif !important; 
+        color: #004B23 !important;  /* Verde institucional */
+        font-size: 2.8rem !important;
+        margin: 5px 0 !important;
+        letter-spacing: 2px;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.05);
+    }
+
+    .title-box p {
+        color: #2c3e50 !important;
+        font-family: 'Source Code Pro', monospace;
+        letter-spacing: 3px;
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+
+    .subtitle-accent {
+        color: #C69214;  /* Dorado UPRM */
+        font-weight: bold;
+    }
+
+    /* TARJETAS ESTILO UPRM */
+    .glass-card { 
+        background: rgba(255, 255, 255, 0.95); 
+        border-radius: 12px; 
+        padding: 25px; 
+        border-left: 5px solid #004B23;
+        border-right: 1px solid rgba(0, 75, 35, 0.2);
+        border-top: 1px solid rgba(0, 75, 35, 0.1);
+        border-bottom: 1px solid rgba(0, 75, 35, 0.1);
+        backdrop-filter: blur(8px); 
+        margin-bottom: 20px; 
+        box-shadow: 0 10px 25px rgba(0, 75, 35, 0.08);
         color: #1a1a1a;
     }
 
+    /* BOTONES PRINCIPALES */
     .stButton>button { 
-        background: linear-gradient(135deg, #8E6E13 0%, #D4AF37 50%, #8E6E13 100%) !important; 
-        color: white !important; font-weight: bold !important; border-radius: 4px !important; 
-        width: 100%; border: none !important; height: 55px; font-size: 1.1rem;
-        transition: 0.4s;
+        background: linear-gradient(135deg, #004B23 0%, #0A6B3A 50%, #004B23 100%) !important; 
+        color: white !important; 
+        font-weight: bold !important; 
+        border-radius: 6px !important; 
+        width: 100%; 
+        border: none !important; 
+        height: 55px; 
+        font-size: 1.1rem;
+        transition: 0.3s;
+        box-shadow: 0 4px 8px rgba(0, 75, 35, 0.2);
     }
-    .stButton>button:hover { transform: scale(1.02); box-shadow: 0 0 25px rgba(212, 175, 55, 0.4); }
+    .stButton>button:hover { 
+        transform: scale(1.01); 
+        box-shadow: 0 6px 18px rgba(0, 75, 35, 0.4); 
+        background: linear-gradient(135deg, #0A6B3A 0%, #118B4A 50%, #0A6B3A 100%) !important;
+    }
 
     .stDownloadButton>button {
-        background: linear-gradient(135deg, #B8860B 0%, #FFD700 50%, #B8860B 100%) !important;
+        background: linear-gradient(135deg, #C69214 0%, #E6B422 50%, #C69214 100%) !important;
         color: #000 !important;
         font-weight: 800 !important;
-        border: 1px solid #D4AF37 !important;
+        border: 1px solid #C69214 !important;
     }
 
+    /* SIDEBAR */
     [data-testid="stSidebar"] { 
         background-color: #ffffff; 
-        border-right: 1px solid #D4AF37; 
+        border-right: 3px solid #004B23; 
     }
     
     [data-testid="stSidebar"] h3 {
-        color: #1a1a1a !important;
-        text-shadow: none;
+        color: #004B23 !important;
         font-family: 'Playfair Display', serif;
+        border-bottom: 2px solid #C69214;
+        padding-bottom: 8px;
     }
 
+    /* BADGES */
     .status-badge { 
-        background: rgba(212, 175, 55, 0.1); 
-        border: 1px solid #D4AF37; 
-        color: #1a1a1a; 
+        background: rgba(0, 75, 35, 0.08); 
+        border: 1px solid #004B23; 
+        color: #004B23; 
         padding: 12px; 
         border-radius: 8px; 
         text-align: center;
         font-family: 'Source Code Pro', monospace;
-        font-weight: 500;
+        font-weight: 600;
     }
 
-    .stMarkdown, .stDataFrame, .stTable {
-        color: #1a1a1a;
+    /* MÉTRICAS */
+    .stMetric {
+        background-color: rgba(255,255,255,0.8);
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid #ddd;
     }
+
+    /* TABLAS */
     .stDataFrame table, .stTable table {
         background-color: white;
         color: #1a1a1a;
+        border-radius: 8px;
+        overflow: hidden;
     }
-    .stMetric {
-        color: #1a1a1a;
+
+    /* ENCABEZADOS DE SECCIÓN */
+    h2, h3 {
+        color: #004B23 !important;
+        font-family: 'Playfair Display', serif !important;
     }
 </style>
 
-<div class="math-header">
-    <div class="abstract-icon">Δx</div>
+<div class="rum-header">
+    <div class="header-logo">
+        <img src="https://www.uprm.edu/wdt/resources/seal-rum.png" alt="Sello UPRM">
+        <img src="https://www.uprm.edu/wdt/resources/logo-rum-horizontal.png" alt="UPRM Logo">
+    </div>
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
-        <p style="color: #555; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
-            UPRM MATHEMATICAL OPTIMIZATION ENGINE v13 + COMPACTACIÓN POST-FACTIBILIDAD
-        </p>
+        <p><span class="subtitle-accent">COLEGIO DE ARTES Y CIENCIAS</span> · OPTIMIZACIÓN ACADÉMICA v13</p>
     </div>
-    <div class="abstract-icon">∞</div>
+    <div style="width:150px;"></div> <!-- Espaciador para simetría -->
 </div>
 """, unsafe_allow_html=True)
 
