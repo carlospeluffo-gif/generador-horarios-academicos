@@ -17,10 +17,10 @@ from copy import deepcopy
 # ==============================================================================
 st.set_page_config(page_title="UPRM Scheduler Platinum v14", page_icon="🏛️", layout="wide")
 
-# --- URL DE LA IMAGEN DE FONDO (ACTUALIZADA CON TU ENLACE) ---
+# --- URL DE LA IMAGEN DE FONDO ---
 BACKGROUND_IMAGE_URL = "https://i.ytimg.com/vi/1u7-TSJ5mvA/maxresdefault.jpg"
 
-# Determinamos si ya se generó el horario (existe la variable 'master' en session_state)
+# Determinamos si ya se generó el horario
 horario_generado = 'master' in st.session_state
 
 # --- CSS BASE (SIEMPRE PRESENTE) ---
@@ -325,59 +325,64 @@ base_css = """
     footer {visibility: hidden;}
 """
 
-# --- CSS CONDICIONAL PARA LA IMAGEN DE FONDO (SOLO SI NO SE HA GENERADO HORARIO) ---
-background_image_css = ""
+# --- CSS CONDICIONAL Y DIV PARA IMAGEN DE FONDO (SOLO SI NO HAY HORARIO) ---
 if not horario_generado and BACKGROUND_IMAGE_URL.strip() != "":
-    background_image_css = f"""
+    # CSS adicional para hacer transparentes los contenedores principales y añadir el div fijo
+    background_css = f"""
     <style>
-        /* Sobrescribimos el fondo de .stApp para que sea transparente y mostrar la imagen */
+        /* Fondo de la app transparente */
         .stApp {{
             background: transparent !important;
         }}
         
-        /* Eliminamos el patrón geométrico para evitar interferencias */
+        /* Eliminamos el patrón geométrico que interfiere */
         .stApp::before {{
             display: none !important;
         }}
         
-        /* Creamos un pseudo-elemento fijo con la imagen de fondo (sobre .stApp) */
-        .stApp::after {{
-            content: "";
+        /* Contenedores principales transparentes */
+        .main > div, .block-container {{
+            background-color: transparent !important;
+        }}
+        
+        /* Capa de imagen fija */
+        .fixed-bg-image {{
             position: fixed;
             top: 0;
             left: 0;
             width: 100vw;
             height: 100vh;
+            z-index: -1;
+            opacity: 0.35;
             background-image: url("{BACKGROUND_IMAGE_URL}");
             background-size: cover;
-            background-position: center center;
+            background-position: center;
             background-repeat: no-repeat;
-            background-attachment: fixed;
-            opacity: 0.35;  /* Ajusta la opacidad aquí (0.0 - 1.0) */
-            z-index: -1;
             pointer-events: none;
         }}
         
-        /* Damos un fondo semitransparente al contenido principal para legibilidad */
-        .main > div {{
+        /* Fondo semitransparente para el contenido principal para legibilidad */
+        .main .block-container {{
             background-color: rgba(255, 255, 255, 0.85) !important;
             backdrop-filter: blur(2px);
             border-radius: 12px;
-            padding: 10px;
+            padding: 1rem;
         }}
         
-        /* Aseguramos que el sidebar también sea legible */
+        /* Sidebar legible */
         [data-testid="stSidebar"] {{
             background: rgba(255, 255, 255, 0.9) !important;
             backdrop-filter: blur(8px);
         }}
     </style>
     """
-
-# Cerramos el style del base_css y añadimos el condicional si existe
-full_css = base_css + background_image_css + "\n</style>"
-
-st.markdown(full_css, unsafe_allow_html=True)
+    # Inyectamos el CSS adicional
+    st.markdown(base_css + background_css, unsafe_allow_html=True)
+    # Inyectamos el div fijo con la imagen de fondo
+    st.markdown('<div class="fixed-bg-image"></div>', unsafe_allow_html=True)
+else:
+    # Si ya hay horario, solo el CSS base (fondo claro normal)
+    st.markdown(base_css + "\n</style>", unsafe_allow_html=True)
 
 # Encabezado HTML (sin cambios)
 st.markdown("""
@@ -395,7 +400,6 @@ st.markdown("""
     <div style="width:150px;"></div> <!-- Espaciador para simetría -->
 </div>
 """, unsafe_allow_html=True)
-
 
 # ==============================================================================
 # 2. UTILIDADES Y TABLAS DE REFERENCIA (SIN CAMBIOS)
