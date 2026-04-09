@@ -13,198 +13,324 @@ from plotly.subplots import make_subplots
 from copy import deepcopy
 
 # ==============================================================================
-# 1. ESTÉTICA (IDENTIDAD UPRM - SIN SÍMBOLOS MATEMÁTICOS)
+# 1. ESTÉTICA (IDENTIDAD UPRM - DISEÑO PREMIUM)
 # ==============================================================================
-import streamlit as st
-import pandas as pd
-import numpy as np
-import random
-import io
-import time
-import math
-from datetime import time as dtime
-import matplotlib.pyplot as plt
-import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-from copy import deepcopy
-
-# ==============================================================================
-# 1. ESTÉTICA (IDENTIDAD UPRM - SIN SÍMBOLOS MATEMÁTICOS)
-# ==============================================================================
-st.set_page_config(page_title="UPRM Scheduler Platinum v13", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="UPRM Scheduler Platinum v14", page_icon="🏛️", layout="wide")
 
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Source+Code+Pro:wght@300;500&display=swap');
+    /* Importamos fuentes elegantes */
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Source+Sans+Pro:wght@300;400;600&display=swap');
     
-    .stApp { 
-        background-color: #f8f9fa;
-        background-image: 
-            linear-gradient(rgba(0, 75, 35, 0.03) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(0, 75, 35, 0.03) 1px, transparent 1px);
-        background-size: 40px 40px, 40px 40px;
+    /* Fondo general con degradado y patrón sutil */
+    .stApp {
+        background: linear-gradient(135deg, #f5f7fa 0%, #e9f0e8 100%);
         background-attachment: fixed;
-        color: #1a1a1a; 
+        color: #1a1a1a;
+    }
+    
+    /* Patrón geométrico superpuesto (muy sutil) */
+    .stApp::before {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-image: 
+            radial-gradient(circle at 20% 30%, rgba(0, 75, 35, 0.02) 0%, transparent 20%),
+            radial-gradient(circle at 80% 70%, rgba(198, 146, 20, 0.02) 0%, transparent 25%),
+            repeating-linear-gradient(45deg, rgba(0,75,35,0.01) 0px, rgba(0,75,35,0.01) 2px, transparent 2px, transparent 8px);
+        pointer-events: none;
+        z-index: 0;
+    }
+    
+    /* Contenedor principal por encima del fondo */
+    .main > div {
+        position: relative;
+        z-index: 1;
     }
 
-    /* ENCABEZADO INSTITUCIONAL */
+    /* ENCABEZADO INSTITUCIONAL REDISEÑADO */
     .rum-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 20px 40px;
-        background: rgba(255, 255, 255, 0.98);
-        border-bottom: 4px solid #004B23;  /* Verde UPRM */
-        margin-bottom: 30px;
-        border-radius: 0 0 20px 20px;
-        box-shadow: 0 8px 20px rgba(0,0,0,0.05);
+        padding: 25px 50px;
+        background: linear-gradient(105deg, rgba(255,255,255,0.95) 0%, rgba(248,250,248,0.98) 100%);
+        border-bottom: 6px solid #004B23;
+        margin-bottom: 35px;
+        border-radius: 0 0 30px 30px;
+        box-shadow: 0 15px 30px -10px rgba(0, 75, 35, 0.15);
         position: relative;
+        backdrop-filter: blur(5px);
+        z-index: 10;
+    }
+    
+    /* Línea decorativa dorada */
+    .rum-header::after {
+        content: "";
+        position: absolute;
+        bottom: -8px;
+        left: 10%;
+        width: 80%;
+        height: 3px;
+        background: linear-gradient(90deg, transparent, #C69214, #E6B422, #C69214, transparent);
+        border-radius: 50%;
     }
 
     .header-logo {
         display: flex;
         align-items: center;
-        justify-content: center;
-        flex: 1; /* Permite equilibrar los lados */
+        gap: 20px;
     }
 
     .header-logo img {
-        height: 120px; /* <-- AUMENTAMOS EL TAMAÑO (antes era 70px) */
+        height: 100px;
         width: auto;
-        object-fit: contain;
+        filter: drop-shadow(0 4px 6px rgba(0,0,0,0.05));
+        transition: transform 0.3s ease;
+    }
+    .header-logo img:hover {
+        transform: scale(1.02);
     }
 
     .title-box {
         text-align: center;
         z-index: 2;
-        flex: 3; /* El título toma más espacio en el centro */
     }
 
     .title-box h1 {
-        font-family: 'Playfair Display', serif !important; 
-        color: #004B23 !important;  /* Verde institucional */
-        font-size: 2.8rem !important;
+        font-family: 'Playfair Display', serif !important;
+        background: linear-gradient(135deg, #004B23 0%, #0A6B3A 80%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent !important;
+        font-size: 3.2rem !important;
         margin: 5px 0 !important;
-        letter-spacing: 2px;
-        text-shadow: 1px 1px 2px rgba(0,0,0,0.05);
+        letter-spacing: 3px;
+        font-weight: 900;
+        text-shadow: 0 2px 10px rgba(0, 75, 35, 0.1);
     }
 
     .title-box p {
         color: #2c3e50 !important;
-        font-family: 'Source Code Pro', monospace;
-        letter-spacing: 3px;
-        font-size: 0.85rem;
-        font-weight: 500;
+        font-family: 'Source Sans Pro', sans-serif;
+        letter-spacing: 4px;
+        font-size: 0.9rem;
+        font-weight: 400;
+        text-transform: uppercase;
     }
 
     .subtitle-accent {
-        color: #C69214;  /* Dorado UPRM */
-        font-weight: bold;
+        color: #C69214;
+        font-weight: 700;
     }
 
-    /* TARJETAS ESTILO UPRM */
-    .glass-card { 
-        background: rgba(255, 255, 255, 0.95); 
-        border-radius: 12px; 
-        padding: 25px; 
-        border-left: 5px solid #004B23;
-        border-right: 1px solid rgba(0, 75, 35, 0.2);
-        border-top: 1px solid rgba(0, 75, 35, 0.1);
-        border-bottom: 1px solid rgba(0, 75, 35, 0.1);
-        backdrop-filter: blur(8px); 
-        margin-bottom: 20px; 
-        box-shadow: 0 10px 25px rgba(0, 75, 35, 0.08);
+    /* TARJETAS ESTILO VIDRIO (GLASSMORPHISM) */
+    .glass-card {
+        background: rgba(255, 255, 255, 0.7);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border-radius: 24px;
+        padding: 28px;
+        border: 1px solid rgba(0, 75, 35, 0.15);
+        box-shadow: 0 20px 35px -8px rgba(0, 75, 35, 0.1), 0 5px 10px -4px rgba(0,0,0,0.02);
+        margin-bottom: 25px;
+        transition: all 0.25s ease;
         color: #1a1a1a;
     }
-
-    /* BOTONES PRINCIPALES */
-    .stButton>button { 
-        background: linear-gradient(135deg, #004B23 0%, #0A6B3A 50%, #004B23 100%) !important; 
-        color: white !important; 
-        font-weight: bold !important; 
-        border-radius: 6px !important; 
-        width: 100%; 
-        border: none !important; 
-        height: 55px; 
-        font-size: 1.1rem;
-        transition: 0.3s;
-        box-shadow: 0 4px 8px rgba(0, 75, 35, 0.2);
-    }
-    .stButton>button:hover { 
-        transform: scale(1.01); 
-        box-shadow: 0 6px 18px rgba(0, 75, 35, 0.4); 
-        background: linear-gradient(135deg, #0A6B3A 0%, #118B4A 50%, #0A6B3A 100%) !important;
+    .glass-card:hover {
+        box-shadow: 0 25px 40px -12px rgba(0, 75, 35, 0.18);
+        border-color: rgba(198, 146, 20, 0.3);
+        background: rgba(255, 255, 255, 0.75);
     }
 
-    .stDownloadButton>button {
-        background: linear-gradient(135deg, #C69214 0%, #E6B422 50%, #C69214 100%) !important;
-        color: #000 !important;
-        font-weight: 800 !important;
-        border: 1px solid #C69214 !important;
+    /* BOTONES PRINCIPALES - VERDE UPRM */
+    .stButton > button {
+        background: linear-gradient(145deg, #004B23 0%, #0A6B3A 100%) !important;
+        color: white !important;
+        font-weight: 600 !important;
+        border-radius: 50px !important;
+        width: 100%;
+        border: none !important;
+        height: 58px;
+        font-size: 1.2rem;
+        letter-spacing: 1px;
+        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        box-shadow: 0 8px 15px rgba(0, 75, 35, 0.25);
+        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+        text-transform: uppercase;
+        font-family: 'Source Sans Pro', sans-serif;
+    }
+    .stButton > button:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 15px 25px rgba(0, 75, 35, 0.35);
+        background: linear-gradient(145deg, #0A6B3A 0%, #118B4A 100%) !important;
+    }
+    .stButton > button:active {
+        transform: translateY(1px);
+        box-shadow: 0 5px 10px rgba(0, 75, 35, 0.3);
     }
 
-    /* SIDEBAR */
-    [data-testid="stSidebar"] { 
-        background-color: #ffffff; 
-        border-right: 3px solid #004B23; 
+    /* BOTÓN DE DESCARGA - DORADO */
+    .stDownloadButton > button {
+        background: linear-gradient(145deg, #C69214 0%, #E6B422 100%) !important;
+        color: #1a1a1a !important;
+        font-weight: 700 !important;
+        border-radius: 50px !important;
+        border: 1px solid rgba(255, 215, 0, 0.5) !important;
+        box-shadow: 0 8px 15px rgba(198, 146, 20, 0.25);
+        transition: all 0.3s ease;
+        height: 50px;
+        text-transform: uppercase;
+    }
+    .stDownloadButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 20px rgba(198, 146, 20, 0.35);
+        background: linear-gradient(145deg, #D4A017 0%, #F5C71A 100%) !important;
+    }
+
+    /* SIDEBAR ESTILIZADA */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(240, 245, 240, 0.98) 100%);
+        backdrop-filter: blur(8px);
+        border-right: 2px solid #C69214;
+        box-shadow: 5px 0 20px rgba(0, 0, 0, 0.03);
     }
     
-    [data-testid="stSidebar"] h3 {
+    [data-testid="stSidebar"] .stMarkdown h3 {
         color: #004B23 !important;
         font-family: 'Playfair Display', serif;
         border-bottom: 2px solid #C69214;
-        padding-bottom: 8px;
+        padding-bottom: 12px;
+        margin-top: 20px;
+        font-weight: 700;
+    }
+    
+    [data-testid="stSidebar"] .stSelectbox label, 
+    [data-testid="stSidebar"] .stSlider label {
+        font-weight: 600 !important;
+        color: #1a1a1a !important;
     }
 
-    /* BADGES */
-    .status-badge { 
-        background: rgba(0, 75, 35, 0.08); 
-        border: 1px solid #004B23; 
-        color: #004B23; 
-        padding: 12px; 
-        border-radius: 8px; 
+    /* BADGES Y ESTADO */
+    .status-badge {
+        background: rgba(0, 75, 35, 0.08);
+        border: 1.5px solid #004B23;
+        color: #004B23;
+        padding: 14px 18px;
+        border-radius: 60px;
         text-align: center;
-        font-family: 'Source Code Pro', monospace;
-        font-weight: 600;
+        font-family: 'Source Sans Pro', monospace;
+        font-weight: 700;
+        letter-spacing: 1px;
+        backdrop-filter: blur(4px);
+        box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
     }
 
     /* MÉTRICAS */
     .stMetric {
-        background-color: rgba(255,255,255,0.8);
-        padding: 10px;
-        border-radius: 8px;
-        border: 1px solid #ddd;
+        background: rgba(255, 255, 255, 0.6);
+        backdrop-filter: blur(5px);
+        padding: 15px 20px;
+        border-radius: 20px;
+        border: 1px solid rgba(0, 75, 35, 0.1);
+        box-shadow: 0 5px 12px rgba(0,0,0,0.02);
+    }
+    .stMetric label {
+        font-weight: 600 !important;
+        color: #2c3e50 !important;
+    }
+    .stMetric [data-testid="stMetricValue"] {
+        font-size: 2rem !important;
+        font-weight: 700 !important;
+        color: #004B23 !important;
     }
 
-    /* TABLAS */
-    .stDataFrame table, .stTable table {
-        background-color: white;
-        color: #1a1a1a;
-        border-radius: 8px;
+    /* TABLAS Y DATAFRAMES */
+    .stDataFrame, .stTable {
+        border-radius: 20px !important;
         overflow: hidden;
+        box-shadow: 0 10px 25px -5px rgba(0, 75, 35, 0.08);
+        border: 1px solid rgba(0,0,0,0.05);
+    }
+    .stDataFrame table, .stTable table {
+        background-color: rgba(255, 255, 255, 0.9);
+        color: #1a1a1a;
+    }
+    .stDataFrame th, .stTable th {
+        background-color: #004B23 !important;
+        color: white !important;
+        font-weight: 600;
+        padding: 12px 8px !important;
+    }
+    .stDataFrame td, .stTable td {
+        border-bottom: 1px solid rgba(0,0,0,0.05) !important;
     }
 
     /* ENCABEZADOS DE SECCIÓN */
     h2, h3 {
         color: #004B23 !important;
         font-family: 'Playfair Display', serif !important;
+        font-weight: 700 !important;
+        letter-spacing: -0.01em;
     }
+    h2 {
+        border-left: 6px solid #C69214;
+        padding-left: 20px;
+    }
+
+    /* TABS ESTILIZADAS */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        background-color: transparent;
+    }
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 40px 40px 0 0 !important;
+        padding: 12px 24px !important;
+        background-color: rgba(255,255,255,0.4);
+        border: 1px solid rgba(0,75,35,0.1);
+        font-weight: 600;
+        color: #2c3e50;
+    }
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(145deg, #ffffff, #f0f5f0) !important;
+        border-bottom: 4px solid #C69214 !important;
+        color: #004B23 !important;
+        font-weight: 700;
+    }
+
+    /* SELECTBOX Y SLIDER */
+    .stSelectbox > div > div {
+        border-radius: 40px !important;
+        border: 1px solid rgba(0,75,35,0.2) !important;
+        background-color: rgba(255,255,255,0.7) !important;
+    }
+
+    /* MEJORAS PARA EL CALENDARIO Y GRÁFICOS */
+    .js-plotly-plot .plotly .modebar {
+        background: rgba(255,255,255,0.5) !important;
+        border-radius: 30px;
+    }
+    
+    /* Pie de página invisible pero presente */
+    footer {visibility: hidden;}
+    
 </style>
 
 <div class="rum-header">
     <div class="header-logo">
-        <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/24/2016/04/upr_rum.jpg" alt="logo_uprm.png">
+        <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/24/2016/04/upr_rum.jpg" alt="UPRM Logo">
     </div>
-    
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
-        <p><span class="subtitle-accent">COLEGIO DE ARTES Y CIENCIAS</span> · OPTIMIZACIÓN ACADÉMICA v13</p>
+        <p><span class="subtitle-accent">COLEGIO DE ARTES Y CIENCIAS</span> · OPTIMIZACIÓN ACADÉMICA v14</p>
     </div>
-    
     <div class="header-logo">
-        <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/24/2023/08/logo-rum-200x200-1-150x150.png" alt="otro_uprm.png">
+        <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/24/2023/08/logo-rum-200x200-1-150x150.png" alt="UPRM Seal">
     </div>
+    <div style="width:150px;"></div> <!-- Espaciador para simetría -->
 </div>
 """, unsafe_allow_html=True)
 
