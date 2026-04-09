@@ -21,8 +21,9 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Source+Code+Pro:wght@300;500&display=swap');
     
+    /* FONDO GENERAL CREMA-BEIGE */
     .stApp { 
-        background-color: #f8f9fa;
+        background-color: #FDFBF7;  /* Crema-beige */
         background-image: 
             linear-gradient(rgba(0, 75, 35, 0.03) 1px, transparent 1px),
             linear-gradient(90deg, rgba(0, 75, 35, 0.03) 1px, transparent 1px);
@@ -31,14 +32,27 @@ st.markdown("""
         color: #1a1a1a; 
     }
 
-    /* ENCABEZADO INSTITUCIONAL */
+    /* LÍNEA SUPERIOR VERDE CON BORDE DORADO (1 cm aprox = 10px) */
+    .top-accent-line {
+        height: 10px;
+        background-color: #004B23;
+        border-bottom: 2px solid #C69214;
+        width: 100%;
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 9999;
+    }
+
+    /* ENCABEZADO INSTITUCIONAL (ajustado para que no tape la línea) */
     .rum-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
         padding: 20px 40px;
-        background: rgba(255, 255, 255, 0.98);
+        background: rgba(253, 251, 247, 0.98);  /* Fondo crema */
         border-bottom: 4px solid #004B23;  /* Verde UPRM */
+        margin-top: 10px;  /* Para que no se solape con la línea fija */
         margin-bottom: 30px;
         border-radius: 0 0 20px 20px;
         box-shadow: 0 8px 20px rgba(0,0,0,0.05);
@@ -85,7 +99,7 @@ st.markdown("""
 
     /* TARJETAS ESTILO UPRM */
     .glass-card { 
-        background: rgba(255, 255, 255, 0.95); 
+        background: rgba(253, 251, 247, 0.95);  /* Fondo crema */
         border-radius: 12px; 
         padding: 25px; 
         border-left: 5px solid #004B23;
@@ -126,7 +140,7 @@ st.markdown("""
 
     /* SIDEBAR */
     [data-testid="stSidebar"] { 
-        background-color: #ffffff; 
+        background-color: #FDFBF7;  /* Crema */
         border-right: 3px solid #004B23; 
     }
     
@@ -151,7 +165,7 @@ st.markdown("""
 
     /* MÉTRICAS */
     .stMetric {
-        background-color: rgba(255,255,255,0.8);
+        background-color: rgba(253, 251, 247, 0.9);
         padding: 10px;
         border-radius: 8px;
         border: 1px solid #ddd;
@@ -159,7 +173,7 @@ st.markdown("""
 
     /* TABLAS */
     .stDataFrame table, .stTable table {
-        background-color: white;
+        background-color: #FDFBF7;
         color: #1a1a1a;
         border-radius: 8px;
         overflow: hidden;
@@ -170,20 +184,121 @@ st.markdown("""
         color: #004B23 !important;
         font-family: 'Playfair Display', serif !important;
     }
+
+    /* BANDA DIAGONAL INFERIOR CON BORDE DORADO Y RAMA */
+    .bottom-diagonal {
+        position: fixed;
+        bottom: 0;
+        right: 0;
+        width: 100%;
+        height: 80px; /* Aprox 5 cm de alto máximo */
+        background: linear-gradient(135deg, 
+            transparent 0%, 
+            transparent 70%, 
+            rgba(0, 75, 35, 0.15) 70%, 
+            rgba(0, 75, 35, 0.25) 100%);
+        border-top: 2px solid #C69214;
+        border-left: 2px solid #C69214;
+        z-index: 999;
+        pointer-events: none;
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        padding: 0 20px 10px 20px;
+    }
+
+    /* Área para el logo y texto en la parte ancha (izquierda) */
+    .diagonal-content {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        margin-left: 20px;
+        margin-bottom: 10px;
+        pointer-events: auto;
+        background: rgba(253, 251, 247, 0.7);
+        padding: 5px 15px;
+        border-radius: 40px;
+        backdrop-filter: blur(4px);
+        border: 1px solid #C69214;
+    }
+
+    .diagonal-logo img {
+        height: 50px;
+        width: auto;
+    }
+
+    .diagonal-text {
+        font-family: 'Playfair Display', serif;
+        font-size: 1.8rem;
+        font-weight: bold;
+        color: #004B23;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+        letter-spacing: 2px;
+    }
+
+    /* Rama decorativa en la esquina inferior derecha */
+    .branch-decoration {
+        font-size: 3.5rem;
+        line-height: 1;
+        color: #004B23;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        transform: rotate(-10deg);
+        margin-right: 20px;
+        margin-bottom: 5px;
+        pointer-events: auto;
+    }
+    .branch-decoration span {
+        color: #C69214;
+        margin: 0 5px;
+    }
+
+    /* Ajuste para que el contenido principal no quede tapado por la banda fija */
+    .main > div {
+        padding-bottom: 100px;
+    }
+
+    /* Logo en sidebar */
+    .sidebar-logo {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 10px;
+        margin-top: 10px;
+    }
+    .sidebar-logo img {
+        width: 150px;
+        height: auto;
+    }
 </style>
 
+<!-- Línea superior verde con borde dorado -->
+<div class="top-accent-line"></div>
+
 <div class="rum-header">
-    <div class="header-logo">
-        <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/24/2016/04/upr_rum.jpg" alt="logo_uprm.png">
-    </div>
+    <!-- Se eliminó el logo izquierdo; ahora solo queda el título centrado y un logo derecho decorativo -->
+    <div style="width:150px;"></div> <!-- Espaciador izquierdo para centrar título -->
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
         <p><span class="subtitle-accent">COLEGIO DE ARTES Y CIENCIAS</span> · OPTIMIZACIÓN ACADÉMICA v13</p>
     </div>
-     <div class="header-logo">
+    <div class="header-logo">
         <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/24/2023/08/logo-rum-200x200-1-150x150.png" alt="otro_uprm.png">
     </div>
-    <div style="width:150px;"></div> <!-- Espaciador para simetría -->
+</div>
+
+<!-- BANDA DIAGONAL INFERIOR CON LOGO, TEXTO Y RAMA -->
+<div class="bottom-diagonal">
+    <div class="diagonal-content">
+        <div class="diagonal-logo">
+            <!-- CAMBIA AQUÍ LA URL DEL LOGO SI LO DESEAS -->
+            <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/24/2023/08/logo-rum-200x200-1-150x150.png" alt="Logo UPRM">
+        </div>
+        <div class="diagonal-text">
+            UNIVERSIDAD DE PUERTO RICO
+        </div>
+    </div>
+    <div class="branch-decoration">
+        🌿🍃🌱 <span>✦</span> 🍂🌾
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
