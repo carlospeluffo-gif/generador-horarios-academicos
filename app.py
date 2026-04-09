@@ -13,7 +13,7 @@ from plotly.subplots import make_subplots
 from copy import deepcopy
 
 # ==============================================================================
-# 1. ESTÉTICA (TEMA CLARO) - SIN CAMBIOS
+# 1. ESTÉTICA (MEJORADA: FONDO MÁS VISIBLE Y FÓRMULAS DECORATIVAS)
 # ==============================================================================
 st.set_page_config(page_title="UPRM Scheduler Platinum AI v13 Compact", page_icon="🏛️", layout="wide")
 
@@ -24,11 +24,38 @@ st.markdown("""
     .stApp { 
         background-color: #f8f9fa;
         background-image: 
-            linear-gradient(rgba(212, 175, 55, 0.05) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(212, 175, 55, 0.05) 1px, transparent 1px);
-        background-size: 40px 40px, 40px 40px;
+            linear-gradient(rgba(212, 175, 55, 0.15) 1.5px, transparent 1.5px),
+            linear-gradient(90deg, rgba(212, 175, 55, 0.15) 1.5px, transparent 1.5px);
+        background-size: 50px 50px, 50px 50px;
         background-attachment: fixed;
         color: #1a1a1a; 
+        position: relative;
+    }
+    
+    /* Fórmulas matemáticas decorativas en el fondo */
+    .stApp::before {
+        content: '∑';
+        position: fixed;
+        top: 15%;
+        left: 3%;
+        font-size: 12rem;
+        color: rgba(212, 175, 55, 0.08);
+        font-family: 'Times New Roman', serif;
+        transform: rotate(-15deg);
+        z-index: 0;
+        pointer-events: none;
+    }
+    .stApp::after {
+        content: '∫';
+        position: fixed;
+        bottom: 10%;
+        right: 3%;
+        font-size: 15rem;
+        color: rgba(212, 175, 55, 0.08);
+        font-family: 'Times New Roman', serif;
+        transform: rotate(10deg);
+        z-index: 0;
+        pointer-events: none;
     }
 
     .math-header {
@@ -43,10 +70,11 @@ st.markdown("""
         box-shadow: 0 10px 30px rgba(0,0,0,0.05);
         position: relative;
         overflow: hidden;
+        z-index: 1;
     }
 
-    .math-header::before { content: '∑'; position: absolute; left: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.1); font-family: serif; }
-    .math-header::after { content: '∫'; position: absolute; right: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.1); font-family: serif; }
+    .math-header::before { content: '∑'; position: absolute; left: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.15); font-family: serif; }
+    .math-header::after { content: '∫'; position: absolute; right: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.15); font-family: serif; }
 
     .title-box { text-align: center; z-index: 2; }
 
@@ -78,6 +106,8 @@ st.markdown("""
         margin-bottom: 20px; 
         box-shadow: 0 8px 20px rgba(0,0,0,0.05);
         color: #1a1a1a;
+        position: relative;
+        z-index: 1;
     }
 
     .stButton>button { 
@@ -98,6 +128,7 @@ st.markdown("""
     [data-testid="stSidebar"] { 
         background-color: #ffffff; 
         border-right: 1px solid #D4AF37; 
+        z-index: 1;
     }
     
     [data-testid="stSidebar"] h3 {
@@ -127,6 +158,30 @@ st.markdown("""
     .stMetric {
         color: #1a1a1a;
     }
+    
+    /* Elementos decorativos adicionales */
+    .decorative-delta {
+        position: fixed;
+        bottom: 20%;
+        left: 8%;
+        font-size: 10rem;
+        color: rgba(212, 175, 55, 0.06);
+        font-family: serif;
+        transform: rotate(-5deg);
+        z-index: 0;
+        pointer-events: none;
+    }
+    .decorative-infinity {
+        position: fixed;
+        top: 25%;
+        right: 8%;
+        font-size: 14rem;
+        color: rgba(212, 175, 55, 0.06);
+        font-family: serif;
+        transform: rotate(20deg);
+        z-index: 0;
+        pointer-events: none;
+    }
 </style>
 
 <div class="math-header">
@@ -139,6 +194,10 @@ st.markdown("""
     </div>
     <div class="abstract-icon">∞</div>
 </div>
+
+<!-- Elementos decorativos fijos -->
+<div class="decorative-delta">Δx</div>
+<div class="decorative-infinity">∞</div>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
@@ -1132,16 +1191,15 @@ class TabuScheduler:
         return self.mejor_solucion, int(self.mejor_costo // 10000), self.historial_costos
 
 # ==============================================================================
-# 5. NUEVAS FUNCIONES DE VISUALIZACIÓN (MEJORADAS)
+# 5. FUNCIONES DE VISUALIZACIÓN (CON LOS TRES CAMBIOS SOLICITADOS)
 # ==============================================================================
 def generar_heatmap_plotly(scheduler, solucion):
-    """Heatmap interactivo: días en X, horas en Y."""
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
     inicio = scheduler.limite_operativo[0]
     fin = scheduler.limite_operativo[1]
     horas_del_dia = list(range(inicio, fin + 1, 30))
     
-    matriz = np.zeros((len(horas_del_dia), len(dias_semana)))  # invertido
+    matriz = np.zeros((len(horas_del_dia), len(dias_semana)))
     total_salones = len(scheduler.salones)
     
     for asign in solucion:
@@ -1187,7 +1245,6 @@ def generar_heatmap_plotly(scheduler, solucion):
     return fig
 
 def generar_barras_apiladas_profesor(sol, scheduler):
-    """Gráfico de barras apiladas: distribución de clases por día para cada profesor."""
     df_asign = pd.DataFrame([{
         'Profesor': a['profesor'],
         'Dia': dia,
@@ -1233,20 +1290,18 @@ def generar_barras_apiladas_profesor(sol, scheduler):
     return fig
 
 def generar_evolucion_fitness_plotly(historial):
-    """Gráfico de líneas estilizado para la evolución del fitness."""
+    """Línea con saltos visibles (shape='hv') y marcadores grandes."""
     fitness = [10000 / (10000 + c) for c in historial]
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         y=fitness,
         mode='lines+markers',
-        line=dict(color='#D4AF37', width=3),
-        marker=dict(size=4, color='#8E6E13'),
-        fill='tozeroy',
-        fillcolor='rgba(212, 175, 55, 0.2)',
+        line=dict(color='#D4AF37', width=3, shape='hv'),
+        marker=dict(size=6, color='#8E6E13', symbol='circle'),
         name='Fitness'
     ))
     fig.update_layout(
-        title="Evolución del Fitness durante la Optimización",
+        title="Evolución del Fitness (saltos por generación)",
         xaxis_title="Iteración",
         yaxis_title="Fitness (1.0 = Óptimo)",
         font=dict(color='#1a1a1a', size=12),
@@ -1260,9 +1315,8 @@ def generar_evolucion_fitness_plotly(historial):
     return fig
 
 def generar_calendario_visual(sol, scheduler, filtro_prof=None, filtro_salon=None, filtro_curso=None):
-    """Calendario tipo Gantt realista: días en Y, horas en X, bloques rectangulares."""
+    """Calendario: días en X, horas en Y. Texto visible sobre cada bloque."""
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
-    # Preparar datos
     eventos = []
     for a in sol:
         if filtro_prof and a['profesor'] != filtro_prof:
@@ -1278,15 +1332,15 @@ def generar_calendario_visual(sol, scheduler, filtro_prof=None, filtro_salon=Non
             fin = inicio + duracion
             hora_inicio = mins_to_str(inicio)
             hora_fin = mins_to_str(fin)
-            texto = f"<b>{a['profesor']}</b><br>{a['seccion'].cod}<br>{a['salon']}<br>{hora_inicio} - {hora_fin}"
+            texto_bloque = f"{a['seccion'].cod} | {a['salon']} | {hora_inicio}-{hora_fin}"
             eventos.append({
                 'Dia': dia,
                 'Inicio': inicio,
                 'Fin': fin,
                 'Profesor': a['profesor'],
-                'Seccion': a['seccion'].cod,
-                'Salon': a['salon'],
-                'Texto': texto
+                'Texto': texto_bloque,
+                'Hora_inicio': hora_inicio,
+                'Hora_fin': hora_fin
             })
     
     if not eventos:
@@ -1302,9 +1356,10 @@ def generar_calendario_visual(sol, scheduler, filtro_prof=None, filtro_salon=Non
     
     fig = go.Figure()
     for _, row in df.iterrows():
+        # Bloque rectangular
         fig.add_trace(go.Scatter(
-            x=[row['Inicio'], row['Fin'], row['Fin'], row['Inicio'], row['Inicio']],
-            y=[row['Dia_idx']-0.4, row['Dia_idx']-0.4, row['Dia_idx']+0.4, row['Dia_idx']+0.4, row['Dia_idx']-0.4],
+            x=[row['Dia_idx']-0.4, row['Dia_idx']+0.4, row['Dia_idx']+0.4, row['Dia_idx']-0.4, row['Dia_idx']-0.4],
+            y=[row['Inicio'], row['Inicio'], row['Fin'], row['Fin'], row['Inicio']],
             fill='toself',
             fillcolor=color_map[row['Profesor']],
             line=dict(width=1, color='black'),
@@ -1312,9 +1367,20 @@ def generar_calendario_visual(sol, scheduler, filtro_prof=None, filtro_salon=Non
             legendgroup=row['Profesor'],
             showlegend=False,
             hoverinfo='text',
-            hovertext=row['Texto']
+            hovertext=f"<b>{row['Profesor']}</b><br>{row['Texto']}"
         ))
+        # Texto dentro del bloque
+        fig.add_annotation(
+            x=row['Dia_idx'],
+            y=(row['Inicio'] + row['Fin']) / 2,
+            text=row['Texto'],
+            showarrow=False,
+            font=dict(size=9, color='black'),
+            bgcolor='rgba(255,255,255,0.7)',
+            borderpad=2
+        )
     
+    # Leyenda
     for prof, color in color_map.items():
         fig.add_trace(go.Scatter(
             x=[None], y=[None],
@@ -1328,20 +1394,20 @@ def generar_calendario_visual(sol, scheduler, filtro_prof=None, filtro_salon=Non
     fig.update_layout(
         title="Horario Semanal - Vista Calendario",
         xaxis=dict(
-            title="Hora del día",
-            tickvals=list(range(420, 1140, 60)),
-            ticktext=[mins_to_str(m).replace(' AM', '').replace(' PM', '') for m in range(420, 1140, 60)],
-            range=[scheduler.limite_operativo[0]-30, scheduler.limite_operativo[1]+30]
-        ),
-        yaxis=dict(
             title="Día",
             tickvals=list(range(len(dias_semana))),
             ticktext=dias_semana
         ),
+        yaxis=dict(
+            title="Hora",
+            tickvals=list(range(420, 1140, 60)),
+            ticktext=[mins_to_str(m).replace(' AM', '').replace(' PM', '') for m in range(420, 1140, 60)],
+            range=[scheduler.limite_operativo[1]+30, scheduler.limite_operativo[0]-30]  # invertido para que 7am arriba
+        ),
         font=dict(color='#1a1a1a'),
         paper_bgcolor='white',
         plot_bgcolor='white',
-        height=600,
+        height=700,
         hovermode='closest',
         legend=dict(title="Profesor", orientation='h', yanchor='bottom', y=1.02)
     )
@@ -1410,7 +1476,6 @@ def generar_reporte_pdf_html(scheduler, sol, cargas_finales, master_df):
     return html
 
 def generar_figura_cientifica_carga(cargas_finales, scheduler):
-    """Figura científica unificada con todos los profesores."""
     profesores = list(cargas_finales.keys())
     profesores.sort(key=lambda p: cargas_finales[p], reverse=True)
     carga_asignada = [cargas_finales[p] for p in profesores]
@@ -1420,16 +1485,12 @@ def generar_figura_cientifica_carga(cargas_finales, scheduler):
     x_vals = list(range(len(profesores)))
     
     fig = go.Figure()
-    
-    # Barras (carga asignada)
     fig.add_trace(go.Bar(
         x=x_vals,
         y=carga_asignada,
         name='Carga Asignada',
         marker=dict(color='lightgray', line=dict(color='black', width=1))
     ))
-    
-    # Línea carga mínima
     fig.add_trace(go.Scatter(
         x=x_vals,
         y=carga_min,
@@ -1438,8 +1499,6 @@ def generar_figura_cientifica_carga(cargas_finales, scheduler):
         line=dict(color='blue', width=2, dash='dot'),
         marker=dict(size=6)
     ))
-    
-    # Línea carga máxima
     fig.add_trace(go.Scatter(
         x=x_vals,
         y=carga_max,
@@ -1465,7 +1524,6 @@ def generar_figura_cientifica_carga(cargas_finales, scheduler):
     )
     fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
     fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
-    
     return fig
 
 def generar_plantilla():
@@ -1684,3 +1742,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+        
