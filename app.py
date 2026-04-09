@@ -353,7 +353,7 @@ if not horario_generado and BACKGROUND_IMAGE_URL.strip() != "":
             background-position: center center;
             background-repeat: no-repeat;
             background-attachment: fixed;
-            opacity: 0.2;  /* Ajusta la opacidad aquí (0.0 - 1.0) */
+            opacity: 0.5;  /* Ajusta la opacidad aquí (0.0 - 1.0) */
             z-index: -1;
             pointer-events: none;
         }}
