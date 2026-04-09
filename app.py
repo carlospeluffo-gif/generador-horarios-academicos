@@ -106,7 +106,7 @@ st.markdown("""
 
     <!-- LOGO IZQUIERDO -->
     <div class="logo-left">
-        <img src="AQUI_LINK_LOGO_1">
+        <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/24/2016/04/upr_rum.jpg">
     </div>
 
     <!-- TITULO -->
@@ -117,8 +117,8 @@ st.markdown("""
 
     <!-- LOGOS DERECHA -->
     <div class="logo-right">
-        <img src="logo_uprm.png">
-        <img src="logo_uprm.png">
+        <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/24/2016/04/upr_rum.jpg">
+        <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/24/2016/04/upr_rum.jpg">
     </div>
 
 </div>
