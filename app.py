@@ -13,7 +13,7 @@ from plotly.subplots import make_subplots
 from copy import deepcopy
 
 # ==============================================================================
-# 1. ESTÉTICA (TEMA CLARO)
+# 1. ESTÉTICA (TEMA CLARO) - SIN CAMBIOS
 # ==============================================================================
 st.set_page_config(page_title="UPRM Scheduler Platinum AI v13 Compact", page_icon="🏛️", layout="wide")
 
@@ -117,7 +117,6 @@ st.markdown("""
         font-weight: 500;
     }
 
-    /* Ajustes para texto y tablas */
     .stMarkdown, .stDataFrame, .stTable {
         color: #1a1a1a;
     }
@@ -347,7 +346,7 @@ def compatible_tipo(curso_tipo, salon_tipo):
     return salon_cat != 2
 
 # ==============================================================================
-# 4. MOTOR DE OPTIMIZACIÓN (v13 ORIGINAL + FASE DE COMPACTACIÓN) - SIN CAMBIOS
+# 4. MOTOR DE OPTIMIZACIÓN (SIN CAMBIOS)
 # ==============================================================================
 class TabuScheduler:
     def __init__(self, df_cursos, df_profes, df_salones, zona):
@@ -527,7 +526,6 @@ class TabuScheduler:
                 if prof in capacidad_restante:
                     capacidad_restante[prof] -= creditos
         
-        # Ajuste fino con recocido (sin cambios)
         def calc_penalidad():
             pen = 0
             for p, c in carga_actual.items():
@@ -570,7 +568,6 @@ class TabuScheduler:
             T *= 0.995
 
     def _costo_total(self, sol, solo_duros=False):
-        """Si solo_duros=True, devuelve solo conflictos duros (para la fase de compactación)."""
         conflicts = 0
         soft_penalty = 0
         occ_prof = {}
@@ -669,7 +666,6 @@ class TabuScheduler:
         if solo_duros:
             return conflicts
         
-        # Penalizaciones suaves adicionales (solo en modo completo)
         salones_por_prof_tipo = {}
         for asign in sol:
             prof = asign['profesor']
@@ -762,7 +758,6 @@ class TabuScheduler:
         
         return conflictos_list
 
-    # --- CONSTRUCCIÓN INICIAL ORIGINAL (FUNCIONA SIEMPRE) ---
     def _construir_solucion_greedy(self):
         sol = [None] * len(self.secciones)
         asignado = [False] * len(self.secciones)
@@ -843,7 +838,6 @@ class TabuScheduler:
                             return True
         return False
 
-    # --- MUTACIÓN ORIGINAL (MEJORADA) ---
     def _mutar_solucion(self, sol):
         nuevo = deepcopy(sol)
         idx = random.randint(0, len(nuevo)-1)
@@ -941,9 +935,7 @@ class TabuScheduler:
         nuevo[idx] = {'seccion': s, 'profesor': mejor[1], 'salon': mejor[4], 'patron': mejor[2], 'ini': mejor[3]}
         return nuevo, self._costo_total(nuevo)
 
-    # --- NUEVA FASE: COMPACTACIÓN POST-FACTIBILIDAD ---
     def _costo_compactacion(self, sol):
-        """Calcula penalizaciones de compactación (días extra, salones múltiples, brechas)."""
         penalty = 0
         prof_asignaciones = {}
         for asign in sol:
@@ -964,7 +956,6 @@ class TabuScheduler:
                 salones_usados.add(asign['salon'])
                 carga_total += self.get_sec_creditos(s, prof)
             
-            # Días extra
             if carga_total <= 9:
                 dias_ideal = 2
             elif carga_total <= 15:
@@ -975,11 +966,9 @@ class TabuScheduler:
             if exceso > 0:
                 penalty += exceso * 500
             
-            # Salones múltiples
             if len(salones_usados) > 1:
                 penalty += (len(salones_usados) - 1) * 400
             
-            # Brechas
             for dia in dias_presenciales:
                 clases = []
                 for asign in asigns:
@@ -995,13 +984,11 @@ class TabuScheduler:
         return penalty
 
     def _mutar_compactacion(self, sol):
-        """Genera vecino que mantiene conflictos duros = 0."""
         nuevo = deepcopy(sol)
         idx = random.randint(0, len(nuevo)-1)
         s = nuevo[idx]['seccion']
         prof_actual = nuevo[idx]['profesor']
         
-        # Mantener el mismo profesor (no cambiar asignación de personal)
         prof = prof_actual
         if prof not in self.profesores:
             return nuevo, self._costo_compactacion(nuevo)
@@ -1042,7 +1029,6 @@ class TabuScheduler:
                 continue
             salon = random.choice(salones_cand)
             
-            # Verificar que no introduzca conflictos duros
             conflicto = False
             for j, asign2 in enumerate(nuevo):
                 if j != idx and asign2:
@@ -1065,7 +1051,6 @@ class TabuScheduler:
                                     conflicto = True; break
                     if conflicto: break
             if not conflicto:
-                # Verificar cargas (aunque el profesor no cambia, por si acaso)
                 temp_sol = deepcopy(nuevo)
                 temp_sol[idx] = {'seccion': s, 'profesor': prof, 'salon': salon, 'patron': patron, 'ini': hora}
                 if self._costo_total(temp_sol, solo_duros=True) == 0:
@@ -1080,9 +1065,8 @@ class TabuScheduler:
         return nuevo, self._costo_compactacion(nuevo)
 
     def _compactar_solucion(self, sol, iteraciones=2000):
-        """Recocido simulado sobre la solución factible para minimizar costo de compactación."""
         if self._costo_total(sol, solo_duros=True) > 0:
-            return sol  # No debería ocurrir
+            return sol
         
         actual = deepcopy(sol)
         mejor = deepcopy(sol)
@@ -1102,7 +1086,6 @@ class TabuScheduler:
         return mejor
 
     def optimizar(self, iteraciones=3000, bar=None, status_text=None):
-        # Fase 1: Factibilidad (original)
         temp_inicial = 5000.0
         self.historial_costos = [self.mejor_costo]
         for it in range(iteraciones):
@@ -1138,7 +1121,6 @@ class TabuScheduler:
                 if bar:
                     bar.progress((it+1)/(iteraciones+2000))
         
-        # Fase 2: Compactación (solo si 0 conflictos duros)
         if self._costo_total(self.mejor_solucion, solo_duros=True) == 0:
             if status_text:
                 status_text.markdown("**✨ Fase 2: Compactación de horarios (mejorando organización)...**")
@@ -1150,16 +1132,16 @@ class TabuScheduler:
         return self.mejor_solucion, int(self.mejor_costo // 10000), self.historial_costos
 
 # ==============================================================================
-# 5. NUEVAS FUNCIONES DE VISUALIZACIÓN (PLOTLY + CALENDARIO + PDF)
+# 5. NUEVAS FUNCIONES DE VISUALIZACIÓN (MEJORADAS)
 # ==============================================================================
 def generar_heatmap_plotly(scheduler, solucion):
-    """Heatmap interactivo de ocupación de salones con Plotly."""
+    """Heatmap interactivo: días en X, horas en Y."""
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
     inicio = scheduler.limite_operativo[0]
     fin = scheduler.limite_operativo[1]
     horas_del_dia = list(range(inicio, fin + 1, 30))
     
-    matriz = np.zeros((len(dias_semana), len(horas_del_dia)))
+    matriz = np.zeros((len(horas_del_dia), len(dias_semana)))  # invertido
     total_salones = len(scheduler.salones)
     
     for asign in solucion:
@@ -1176,7 +1158,7 @@ def generar_heatmap_plotly(scheduler, solucion):
             for minuto in range(ini, ini + duracion, 30):
                 if minuto in horas_del_dia:
                     hora_idx = horas_del_dia.index(minuto)
-                    matriz[dia_idx, hora_idx] += 1
+                    matriz[hora_idx, dia_idx] += 1
     
     if total_salones > 0:
         matriz_porcentaje = (matriz / total_salones) * 100
@@ -1187,21 +1169,20 @@ def generar_heatmap_plotly(scheduler, solucion):
     
     fig = px.imshow(
         matriz_porcentaje,
-        labels=dict(x="Hora de Inicio", y="Día", color="% Ocupación"),
-        x=etiquetas_horas,
-        y=dias_semana,
+        labels=dict(x="Día", y="Hora de Inicio", color="% Ocupación"),
+        x=dias_semana,
+        y=etiquetas_horas,
         color_continuous_scale='YlOrRd',
         aspect='auto',
         zmin=0,
         zmax=100
     )
     fig.update_layout(
-        title="Ocupación de Salones por Franja Horaria",
+        title="Ocupación de Salones por Día y Hora",
         font=dict(color='#1a1a1a'),
         paper_bgcolor='white',
         plot_bgcolor='white',
-        xaxis=dict(tickangle=-45),
-        height=500
+        height=600
     )
     return fig
 
@@ -1217,9 +1198,7 @@ def generar_barras_apiladas_profesor(sol, scheduler):
     if df_asign.empty:
         return go.Figure()
     
-    # Agrupar por profesor y día
     pivot = df_asign.groupby(['Profesor', 'Dia']).size().reset_index(name='Clases')
-    # Obtener lista de profesores ordenados por carga total
     carga_prof = {p: 0.0 for p in pivot['Profesor'].unique()}
     for a in sol:
         if a['profesor'] in carga_prof:
@@ -1232,7 +1211,6 @@ def generar_barras_apiladas_profesor(sol, scheduler):
     
     for i, dia in enumerate(dias_unicos):
         data_dia = pivot[pivot['Dia'] == dia]
-        # Rellenar con 0 para profesores sin clase ese día
         y_vals = [data_dia[data_dia['Profesor'] == p]['Clases'].sum() if p in data_dia['Profesor'].values else 0 for p in profes_ordenados]
         fig.add_trace(go.Bar(
             name=dia,
@@ -1255,28 +1233,34 @@ def generar_barras_apiladas_profesor(sol, scheduler):
     return fig
 
 def generar_evolucion_fitness_plotly(historial):
-    """Gráfico de líneas interactivo para la evolución del fitness."""
+    """Gráfico de líneas estilizado para la evolución del fitness."""
     fitness = [10000 / (10000 + c) for c in historial]
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         y=fitness,
-        mode='lines',
-        line=dict(color='#D4AF37', width=2.5),
+        mode='lines+markers',
+        line=dict(color='#D4AF37', width=3),
+        marker=dict(size=4, color='#8E6E13'),
+        fill='tozeroy',
+        fillcolor='rgba(212, 175, 55, 0.2)',
         name='Fitness'
     ))
     fig.update_layout(
         title="Evolución del Fitness durante la Optimización",
         xaxis_title="Iteración",
-        yaxis_title="Fitness",
-        font=dict(color='#1a1a1a'),
+        yaxis_title="Fitness (1.0 = Óptimo)",
+        font=dict(color='#1a1a1a', size=12),
         paper_bgcolor='white',
         plot_bgcolor='white',
-        height=400
+        height=450,
+        hovermode='x unified'
     )
+    fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+    fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
     return fig
 
 def generar_calendario_visual(sol, scheduler, filtro_prof=None, filtro_salon=None, filtro_curso=None):
-    """Calendario tipo Gantt minimalista con Plotly."""
+    """Calendario tipo Gantt realista: días en Y, horas en X, bloques rectangulares."""
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
     # Preparar datos
     eventos = []
@@ -1294,12 +1278,11 @@ def generar_calendario_visual(sol, scheduler, filtro_prof=None, filtro_salon=Non
             fin = inicio + duracion
             hora_inicio = mins_to_str(inicio)
             hora_fin = mins_to_str(fin)
-            texto = f"{a['profesor']}<br>{a['seccion'].cod}<br>{a['salon']}"
+            texto = f"<b>{a['profesor']}</b><br>{a['seccion'].cod}<br>{a['salon']}<br>{hora_inicio} - {hora_fin}"
             eventos.append({
                 'Dia': dia,
                 'Inicio': inicio,
                 'Fin': fin,
-                'Hora': f"{hora_inicio} - {hora_fin}",
                 'Profesor': a['profesor'],
                 'Seccion': a['seccion'].cod,
                 'Salon': a['salon'],
@@ -1310,11 +1293,9 @@ def generar_calendario_visual(sol, scheduler, filtro_prof=None, filtro_salon=Non
         return go.Figure()
     
     df = pd.DataFrame(eventos)
-    # Mapa de días a índices
     dia_a_idx = {d: i for i, d in enumerate(dias_semana)}
     df['Dia_idx'] = df['Dia'].map(dia_a_idx)
     
-    # Asignar colores por profesor
     profes = df['Profesor'].unique()
     colores = px.colors.qualitative.Plotly[:len(profes)]
     color_map = {p: colores[i % len(colores)] for i, p in enumerate(profes)}
@@ -1326,7 +1307,7 @@ def generar_calendario_visual(sol, scheduler, filtro_prof=None, filtro_salon=Non
             y=[row['Dia_idx']-0.4, row['Dia_idx']-0.4, row['Dia_idx']+0.4, row['Dia_idx']+0.4, row['Dia_idx']-0.4],
             fill='toself',
             fillcolor=color_map[row['Profesor']],
-            line=dict(width=0),
+            line=dict(width=1, color='black'),
             name=row['Profesor'],
             legendgroup=row['Profesor'],
             showlegend=False,
@@ -1334,7 +1315,6 @@ def generar_calendario_visual(sol, scheduler, filtro_prof=None, filtro_salon=Non
             hovertext=row['Texto']
         ))
     
-    # Añadir una traza por profesor para la leyenda
     for prof, color in color_map.items():
         fig.add_trace(go.Scatter(
             x=[None], y=[None],
@@ -1346,11 +1326,12 @@ def generar_calendario_visual(sol, scheduler, filtro_prof=None, filtro_salon=Non
         ))
     
     fig.update_layout(
-        title="Calendario Visual de Clases",
+        title="Horario Semanal - Vista Calendario",
         xaxis=dict(
-            title="Hora del día (minutos desde medianoche)",
+            title="Hora del día",
             tickvals=list(range(420, 1140, 60)),
-            ticktext=[mins_to_str(m).replace(' AM', '').replace(' PM', '') for m in range(420, 1140, 60)]
+            ticktext=[mins_to_str(m).replace(' AM', '').replace(' PM', '') for m in range(420, 1140, 60)],
+            range=[scheduler.limite_operativo[0]-30, scheduler.limite_operativo[1]+30]
         ),
         yaxis=dict(
             title="Día",
@@ -1361,13 +1342,12 @@ def generar_calendario_visual(sol, scheduler, filtro_prof=None, filtro_salon=Non
         paper_bgcolor='white',
         plot_bgcolor='white',
         height=600,
-        hovermode='closest'
+        hovermode='closest',
+        legend=dict(title="Profesor", orientation='h', yanchor='bottom', y=1.02)
     )
     return fig
 
 def generar_reporte_pdf_html(scheduler, sol, cargas_finales, master_df):
-    """Genera un HTML con el reporte ejecutivo para imprimir/guardar como PDF."""
-    # Calcular estadísticas
     total_secciones = len(sol)
     secciones_tba = sum(1 for a in sol if a['profesor'] == 'TBA')
     carga_total = sum(cargas_finales.values())
@@ -1429,88 +1409,65 @@ def generar_reporte_pdf_html(scheduler, sol, cargas_finales, master_df):
     """
     return html
 
-# ==============================================================================
-# 6. FUNCIÓN PARA LA FIGURA CIENTÍFICA DE CARGA ACADÉMICA
-# ==============================================================================
 def generar_figura_cientifica_carga(cargas_finales, scheduler):
-    """Subgráficas lado a lado con barras de carga asignada y líneas min/max."""
+    """Figura científica unificada con todos los profesores."""
     profesores = list(cargas_finales.keys())
-    # Ordenar por carga asignada
     profesores.sort(key=lambda p: cargas_finales[p], reverse=True)
     carga_asignada = [cargas_finales[p] for p in profesores]
     carga_min = [scheduler.profesores[p].carga_min for p in profesores]
     carga_max = [scheduler.profesores[p].carga_max for p in profesores]
     
-    # Crear subplots: 1 fila, 2 columnas
-    fig = make_subplots(rows=1, cols=2, subplot_titles=("Profesores (mitad superior)", "Profesores (mitad inferior)"))
+    x_vals = list(range(len(profesores)))
     
-    mitad = len(profesores) // 2
-    for col, idx_range in enumerate([(0, mitad), (mitad, len(profesores))], start=1):
-        idx_inicio, idx_fin = idx_range
-        profs_sub = profesores[idx_inicio:idx_fin]
-        x_vals = list(range(len(profs_sub)))
-        
-        # Barras (carga asignada)
-        fig.add_trace(go.Bar(
-            x=x_vals,
-            y=[carga_asignada[i] for i in range(idx_inicio, idx_fin)],
-            name='Carga Asignada',
-            marker=dict(color='lightgray', line=dict(color='black', width=1)),
-            showlegend=(col==1),
-            legendgroup='asignada'
-        ), row=1, col=col)
-        
-        # Línea carga mínima (azul)
-        fig.add_trace(go.Scatter(
-            x=x_vals,
-            y=[carga_min[i] for i in range(idx_inicio, idx_fin)],
-            mode='lines+markers',
-            name='Carga Mínima',
-            line=dict(color='blue', width=2, dash='dot'),
-            marker=dict(size=6),
-            showlegend=(col==1),
-            legendgroup='min'
-        ), row=1, col=col)
-        
-        # Línea carga máxima (naranja)
-        fig.add_trace(go.Scatter(
-            x=x_vals,
-            y=[carga_max[i] for i in range(idx_inicio, idx_fin)],
-            mode='lines+markers',
-            name='Carga Máxima',
-            line=dict(color='orange', width=2, dash='dot'),
-            marker=dict(size=6),
-            showlegend=(col==1),
-            legendgroup='max'
-        ), row=1, col=col)
-        
-        # Configurar ejes
-        fig.update_xaxes(
-            title_text="Profesores (índice)",
-            tickvals=x_vals,
-            ticktext=[f"P{i+1+idx_inicio}" for i in x_vals],
-            row=1, col=col
-        )
-        fig.update_yaxes(title_text="Cantidad de Créditos Semanales", row=1, col=col)
+    fig = go.Figure()
+    
+    # Barras (carga asignada)
+    fig.add_trace(go.Bar(
+        x=x_vals,
+        y=carga_asignada,
+        name='Carga Asignada',
+        marker=dict(color='lightgray', line=dict(color='black', width=1))
+    ))
+    
+    # Línea carga mínima
+    fig.add_trace(go.Scatter(
+        x=x_vals,
+        y=carga_min,
+        mode='lines+markers',
+        name='Carga Mínima',
+        line=dict(color='blue', width=2, dash='dot'),
+        marker=dict(size=6)
+    ))
+    
+    # Línea carga máxima
+    fig.add_trace(go.Scatter(
+        x=x_vals,
+        y=carga_max,
+        mode='lines+markers',
+        name='Carga Máxima',
+        line=dict(color='orange', width=2, dash='dot'),
+        marker=dict(size=6)
+    ))
     
     fig.update_layout(
-        title="Distribución de Carga Académica por Profesor",
+        title="Análisis de Carga Académica por Profesor",
+        xaxis=dict(
+            title="Profesores (índice)",
+            tickvals=x_vals,
+            ticktext=[f"P{i+1}" for i in x_vals]
+        ),
+        yaxis=dict(title="Cantidad de Créditos Semanales"),
         font=dict(color='#1a1a1a'),
         paper_bgcolor='white',
         plot_bgcolor='white',
         legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5),
-        height=500,
-        showlegend=True
+        height=500
     )
-    # Añadir grid
     fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
     fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
     
     return fig
 
-# ==============================================================================
-# 7. FUNCIÓN PARA GENERAR PLANTILLA EXCEL (SIN CAMBIOS)
-# ==============================================================================
 def generar_plantilla():
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -1553,7 +1510,7 @@ def generar_plantilla():
     return output.getvalue()
 
 # ==============================================================================
-# 8. UI PRINCIPAL (CON NUEVAS FUNCIONALIDADES EN ANALÍTICAS)
+# 8. UI PRINCIPAL
 # ==============================================================================
 def main():
     with st.sidebar:
@@ -1672,7 +1629,6 @@ def main():
         with t4:
             st.markdown("### 📈 Analíticas Avanzadas")
             
-            # Subtabs para organizar
             subtab1, subtab2, subtab3, subtab4 = st.tabs(["📊 Visualizaciones", "🗓️ Calendario", "📄 Reporte PDF", "📈 Carga Científica"])
             
             with subtab1:
