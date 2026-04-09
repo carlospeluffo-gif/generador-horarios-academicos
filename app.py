@@ -174,7 +174,7 @@ st.markdown("""
 
 <div class="rum-header">
     <div class="header-logo">
-        <img src="https://www.uprm.edu/wdt/resources/seal-rum.png" alt="Sello UPRM">
+        <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/24/2016/04/upr_rum.jpg" alt="logo_uprm.png">
         <img src="https://www.uprm.edu/wdt/resources/logo-rum-horizontal.png" alt="UPRM Logo">
     </div>
     <div class="title-box">
