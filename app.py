@@ -17,7 +17,7 @@ from copy import deepcopy
 # ==============================================================================
 st.set_page_config(page_title="UPRM Scheduler Platinum v14", page_icon="🏛️", layout="wide")
 
-# --- URL DE LA IMAGEN DE FONDO (ACTUALIZADA) ---
+# --- URL DE LA IMAGEN DE FONDO (ACTUALIZADA CON TU ENLACE) ---
 BACKGROUND_IMAGE_URL = "https://i.ytimg.com/vi/1u7-TSJ5mvA/maxresdefault.jpg"
 
 # Determinamos si ya se generó el horario (existe la variable 'master' en session_state)
@@ -340,8 +340,8 @@ if not horario_generado and BACKGROUND_IMAGE_URL.strip() != "":
             display: none !important;
         }}
         
-        /* Creamos un pseudo-elemento fijo con la imagen de fondo */
-        body::before {{
+        /* Creamos un pseudo-elemento fijo con la imagen de fondo (sobre .stApp) */
+        .stApp::after {{
             content: "";
             position: fixed;
             top: 0;
@@ -353,7 +353,7 @@ if not horario_generado and BACKGROUND_IMAGE_URL.strip() != "":
             background-position: center center;
             background-repeat: no-repeat;
             background-attachment: fixed;
-            opacity: 0.5;  /* Ajusta la opacidad aquí (0.0 - 1.0) */
+            opacity: 0.35;  /* Ajusta la opacidad aquí (0.0 - 1.0) */
             z-index: -1;
             pointer-events: none;
         }}
