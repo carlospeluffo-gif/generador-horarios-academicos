@@ -13,23 +13,16 @@ from plotly.subplots import make_subplots
 from copy import deepcopy
 
 # ==============================================================================
-# 1. ESTÉTICA (IDENTIDAD UPRM - DISEÑO PREMIUM) + FONDO CONDICIONAL CON IMAGEN
+# 1. ESTÉTICA (IDENTIDAD UPRM - DISEÑO PREMIUM)
 # ==============================================================================
 st.set_page_config(page_title="UPRM Scheduler Platinum v14", page_icon="🏛️", layout="wide")
 
-# --- URL DE LA IMAGEN DE FONDO ---
-BACKGROUND_IMAGE_URL = "https://i.ytimg.com/vi/1u7-TSJ5mvA/maxresdefault.jpg"
-
-# Determinamos si ya se generó el horario
-horario_generado = 'master' in st.session_state
-
-# --- CSS BASE (SIEMPRE PRESENTE) ---
-base_css = """
+st.markdown("""
 <style>
     /* Importamos fuentes elegantes */
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Source+Sans+Pro:wght@300;400;600&display=swap');
     
-    /* Fondo general con degradado y patrón sutil (se usará si NO hay imagen o después de generar) */
+    /* Fondo general con degradado y patrón sutil */
     .stApp {
         background: linear-gradient(135deg, #f5f7fa 0%, #e9f0e8 100%);
         background-attachment: fixed;
@@ -323,69 +316,9 @@ base_css = """
     
     /* Pie de página invisible pero presente */
     footer {visibility: hidden;}
-"""
+    
+</style>
 
-# --- CSS CONDICIONAL Y DIV PARA IMAGEN DE FONDO (SOLO SI NO HAY HORARIO) ---
-if not horario_generado and BACKGROUND_IMAGE_URL.strip() != "":
-    # CSS adicional para hacer transparentes los contenedores principales y añadir el div fijo
-    background_css = f"""
-    <style>
-        /* Fondo de la app transparente */
-        .stApp {{
-            background: transparent !important;
-        }}
-        
-        /* Eliminamos el patrón geométrico que interfiere */
-        .stApp::before {{
-            display: none !important;
-        }}
-        
-        /* Contenedores principales transparentes */
-        .main > div, .block-container {{
-            background-color: transparent !important;
-        }}
-        
-        /* Capa de imagen fija */
-        .fixed-bg-image {{
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            z-index: -1;
-            opacity: 0.35;
-            background-image: url("{BACKGROUND_IMAGE_URL}");
-            background-size: cover;
-            background-position: center;
-            background-repeat: no-repeat;
-            pointer-events: none;
-        }}
-        
-        /* Fondo semitransparente para el contenido principal para legibilidad */
-        .main .block-container {{
-            background-color: rgba(255, 255, 255, 0.85) !important;
-            backdrop-filter: blur(2px);
-            border-radius: 12px;
-            padding: 1rem;
-        }}
-        
-        /* Sidebar legible */
-        [data-testid="stSidebar"] {{
-            background: rgba(255, 255, 255, 0.9) !important;
-            backdrop-filter: blur(8px);
-        }}
-    </style>
-    """
-    # Inyectamos el CSS adicional
-    st.markdown(base_css + background_css, unsafe_allow_html=True)
-    # Inyectamos el div fijo con la imagen de fondo
-    st.markdown('<div class="fixed-bg-image"></div>', unsafe_allow_html=True)
-else:
-    # Si ya hay horario, solo el CSS base (fondo claro normal)
-    st.markdown(base_css + "\n</style>", unsafe_allow_html=True)
-
-# Encabezado HTML (sin cambios)
-st.markdown("""
 <div class="rum-header">
     <div class="header-logo">
         <img src="https://www.uprm.edu/portales/wp-content/uploads/sites/55/2022/05/Tarzan_7896.png" alt="UPRM Logo">
