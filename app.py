@@ -17,7 +17,8 @@ from copy import deepcopy
 # ==============================================================================
 st.set_page_config(page_title="UPRM Scheduler Platinum v14", page_icon="🏛️", layout="wide")
 
-BACKGROUND_IMAGE_URL = "https://i.ytimg.com/vi/1u7-TSJ5mvA/maxresdefault.jpg"  # <-- PON AQUÍ TU LINK
+# --- URL DE LA IMAGEN DE FONDO (ACTUALIZADA) ---
+BACKGROUND_IMAGE_URL = "https://i.ytimg.com/vi/1u7-TSJ5mvA/maxresdefault.jpg"
 
 # Determinamos si ya se generó el horario (existe la variable 'master' en session_state)
 horario_generado = 'master' in st.session_state
@@ -329,40 +330,46 @@ background_image_css = ""
 if not horario_generado and BACKGROUND_IMAGE_URL.strip() != "":
     background_image_css = f"""
     <style>
-        /* Sobrescribimos el fondo de .stApp con la imagen (opaca) */
+        /* Sobrescribimos el fondo de .stApp para que sea transparente y mostrar la imagen */
         .stApp {{
-            background: transparent !important;  /* Eliminamos el gradiente base */
+            background: transparent !important;
         }}
         
-        /* Creamos un pseudo-elemento con la imagen de fondo y opacidad */
-        .stApp::after {{
+        /* Eliminamos el patrón geométrico para evitar interferencias */
+        .stApp::before {{
+            display: none !important;
+        }}
+        
+        /* Creamos un pseudo-elemento fijo con la imagen de fondo */
+        body::before {{
             content: "";
             position: fixed;
             top: 0;
             left: 0;
-            width: 100%;
-            height: 100%;
+            width: 100vw;
+            height: 100vh;
             background-image: url("{BACKGROUND_IMAGE_URL}");
             background-size: cover;
-            background-position: center;
+            background-position: center center;
             background-repeat: no-repeat;
             background-attachment: fixed;
-            opacity: 0.25;  /* AJUSTA LA OPACIDAD AQUÍ (0.0 - 1.0) */
-            z-index: -1;     /* Detrás de todo el contenido */
+            opacity: 0.2;  /* Ajusta la opacidad aquí (0.0 - 1.0) */
+            z-index: -1;
             pointer-events: none;
         }}
         
-        /* Aseguramos que el patrón geométrico no interfiera */
-        .stApp::before {{
-            opacity: 0.3;    /* Reducimos un poco el patrón para que no compita */
-        }}
-        
-        /* Damos un ligero sombreado al contenido para mejorar legibilidad */
+        /* Damos un fondo semitransparente al contenido principal para legibilidad */
         .main > div {{
-            background-color: rgba(255, 255, 255, 0.85);
+            background-color: rgba(255, 255, 255, 0.85) !important;
             backdrop-filter: blur(2px);
             border-radius: 12px;
             padding: 10px;
+        }}
+        
+        /* Aseguramos que el sidebar también sea legible */
+        [data-testid="stSidebar"] {{
+            background: rgba(255, 255, 255, 0.9) !important;
+            backdrop-filter: blur(8px);
         }}
     </style>
     """
