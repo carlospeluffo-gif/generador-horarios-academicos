@@ -175,11 +175,13 @@ st.markdown("""
 <div class="rum-header">
     <div class="header-logo">
         <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/24/2016/04/upr_rum.jpg" alt="logo_uprm.png">
-        <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/24/2023/08/logo-rum-200x200-1-150x150.png" alt="otro_uprm.png">
     </div>
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
         <p><span class="subtitle-accent">COLEGIO DE ARTES Y CIENCIAS</span> · OPTIMIZACIÓN ACADÉMICA v13</p>
+    </div>
+     <div class="header-logo">
+        <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/24/2023/08/logo-rum-200x200-1-150x150.png" alt="otro_uprm.png">
     </div>
     <div style="width:150px;"></div> <!-- Espaciador para simetría -->
 </div>
