@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from copy import deepcopy
 
 # ==============================================================================
-# 1. ESTÉTICA (sin cambios)
+# 1. ESTÉTICA (CAMBIO 1: TEMA CLARO)
 # ==============================================================================
 st.set_page_config(page_title="UPRM Scheduler Platinum AI v13 Compact", page_icon="🏛️", layout="wide")
 
@@ -19,14 +19,13 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Source+Code+Pro:wght@300;500&display=swap');
     
     .stApp { 
-        background-color: #050505;
+        background-color: #f8f9fa;
         background-image: 
-            linear-gradient(rgba(212, 175, 55, 0.1) 2px, transparent 2px),
-            linear-gradient(90deg, rgba(212, 175, 55, 0.1) 2px, transparent 2px),
-            radial-gradient(circle at 50% 20%, #1a1a1a 0%, #000000 100%);
-        background-size: 80px 80px, 80px 80px, 100% 100%;
+            linear-gradient(rgba(212, 175, 55, 0.05) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(212, 175, 55, 0.05) 1px, transparent 1px);
+        background-size: 40px 40px, 40px 40px;
         background-attachment: fixed;
-        color: #e0e0e0; 
+        color: #1a1a1a; 
     }
 
     .math-header {
@@ -34,17 +33,17 @@ st.markdown("""
         justify-content: space-between;
         align-items: center;
         padding: 30px 60px;
-        background: rgba(0, 0, 0, 0.85);
+        background: rgba(255, 255, 255, 0.95);
         border-bottom: 3px solid #D4AF37;
         margin-bottom: 40px;
         border-radius: 0 0 30px 30px;
-        box-shadow: 0 10px 50px rgba(212, 175, 55, 0.15);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.05);
         position: relative;
         overflow: hidden;
     }
 
-    .math-header::before { content: '∑'; position: absolute; left: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.05); font-family: serif; }
-    .math-header::after { content: '∫'; position: absolute; right: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.05); font-family: serif; }
+    .math-header::before { content: '∑'; position: absolute; left: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.1); font-family: serif; }
+    .math-header::after { content: '∫'; position: absolute; right: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.1); font-family: serif; }
 
     .title-box { text-align: center; z-index: 2; }
 
@@ -55,26 +54,27 @@ st.markdown("""
         padding: 10px 20px;
         border-radius: 50% 0% 50% 0%;
         background: rgba(212, 175, 55, 0.05);
-        box-shadow: 0 0 15px rgba(212, 175, 55, 0.3);
+        box-shadow: 0 0 15px rgba(212, 175, 55, 0.1);
     }
 
     h1 { 
         font-family: 'Playfair Display', serif !important; 
-        color: #D4AF37 !important; 
+        color: #1a1a1a !important; 
         font-size: 3.2rem !important;
         margin: 10px 0 !important;
-        text-shadow: 0 0 20px rgba(212, 175, 55, 0.5);
+        text-shadow: 0 0 10px rgba(212, 175, 55, 0.2);
         letter-spacing: 2px;
     }
 
     .glass-card { 
-        background: rgba(15, 15, 15, 0.9); 
+        background: rgba(255, 255, 255, 0.9); 
         border-radius: 15px; 
         padding: 25px; 
-        border: 1px solid rgba(212, 175, 55, 0.25); 
-        backdrop-filter: blur(15px); 
+        border: 1px solid rgba(212, 175, 55, 0.3); 
+        backdrop-filter: blur(10px); 
         margin-bottom: 20px; 
-        box-shadow: 0 15px 40px rgba(0,0,0,0.8);
+        box-shadow: 0 8px 20px rgba(0,0,0,0.05);
+        color: #1a1a1a;
     }
 
     .stButton>button { 
@@ -92,23 +92,38 @@ st.markdown("""
         border: 1px solid #D4AF37 !important;
     }
 
-    [data-testid="stSidebar"] { background-color: #050505; border-right: 1px solid #D4AF37; }
+    [data-testid="stSidebar"] { 
+        background-color: #ffffff; 
+        border-right: 1px solid #D4AF37; 
+    }
     
     [data-testid="stSidebar"] h3 {
-        color: #D4AF37 !important;
-        text-shadow: 0 0 10px rgba(212, 175, 55, 0.4);
+        color: #1a1a1a !important;
+        text-shadow: none;
         font-family: 'Playfair Display', serif;
     }
 
     .status-badge { 
         background: rgba(212, 175, 55, 0.1); 
         border: 1px solid #D4AF37; 
-        color: #D4AF37; 
+        color: #1a1a1a; 
         padding: 12px; 
         border-radius: 8px; 
         text-align: center;
         font-family: 'Source Code Pro', monospace;
         font-weight: 500;
+    }
+
+    /* Ajustes para texto y tablas */
+    .stMarkdown, .stDataFrame, .stTable {
+        color: #1a1a1a;
+    }
+    .stDataFrame table, .stTable table {
+        background-color: white;
+        color: #1a1a1a;
+    }
+    .stMetric {
+        color: #1a1a1a;
     }
 </style>
 
@@ -116,7 +131,7 @@ st.markdown("""
     <div class="abstract-icon">Δx</div>
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
-        <p style="color: #888; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
+        <p style="color: #555; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
             UPRM MATHEMATICAL OPTIMIZATION ENGINE v13 + COMPACTACIÓN POST-FACTIBILIDAD
         </p>
     </div>
@@ -125,7 +140,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. UTILIDADES Y TABLAS DE REFERENCIA
+# 2. UTILIDADES Y TABLAS DE REFERENCIA (SIN CAMBIOS)
 # ==============================================================================
 COMPENSACION_TABLE = [
     (1, 1, 44, 0.0), (1, 45, 74, 0.5), (1, 75, 104, 1.0), (1, 105, 134, 1.5), (1, 135, 164, 2.0),
@@ -220,7 +235,7 @@ def exportar_todo(df):
     return out.getvalue()
 
 # ==============================================================================
-# 3. MODELO DE DATOS (con mejoras)
+# 3. MODELO DE DATOS (SIN CAMBIOS)
 # ==============================================================================
 class Seccion:
     def __init__(self, cod, creditos, cupo, candidatos_raw, tipo_salon, es_ayudantia=False):
@@ -1105,7 +1120,19 @@ class TabuScheduler:
             if it % 10 == 0 or it == iteraciones - 1:
                 if status_text:
                     duros = int(self.mejor_costo // 10000)
-                    status_text.markdown(f"**🔄 Fase 1 Gen {it+1}/{iteraciones}** | Conflictos Duros: {duros} | Costo Total: {self.mejor_costo:.2f}")
+                    costo_total = self.mejor_costo
+                    # CAMBIO 2: Calcular fitness y porcentaje de restricciones suaves
+                    fitness_actual = 10000 / (10000 + costo_total)
+                    costo_suave = costo_total - (duros * 10000)
+                    if costo_total > 0:
+                        pct_suave = (costo_suave / costo_total) * 100
+                    else:
+                        pct_suave = 0.0
+                    status_text.markdown(
+                        f"**🔄 Fase 1 Gen {it+1}/{iteraciones}** | "
+                        f"Conflictos Duros: {duros} | Costo Total: {costo_total:.2f} | "
+                        f"Fitness: {fitness_actual:.5f} | % Suave: {pct_suave:.1f}%"
+                    )
                 if bar:
                     bar.progress((it+1)/(iteraciones+2000))
         
@@ -1121,7 +1148,7 @@ class TabuScheduler:
         return self.mejor_solucion, int(self.mejor_costo // 10000), self.historial_costos
 
 # ==============================================================================
-# 5. HEATMAP Y PLANTILLA (sin cambios)
+# 5. HEATMAP Y PLANTILLA (SIN CAMBIOS)
 # ==============================================================================
 def generar_heatmap_ocupacion(scheduler, solucion):
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
@@ -1216,7 +1243,7 @@ def generar_plantilla():
     return output.getvalue()
 
 # ==============================================================================
-# 6. UI PRINCIPAL
+# 6. UI PRINCIPAL (SIN CAMBIOS)
 # ==============================================================================
 def main():
     with st.sidebar:
