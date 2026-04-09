@@ -7,6 +7,8 @@ import time
 import math
 from datetime import time as dtime
 import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -413,7 +415,7 @@ PATRONES = {
 
 def format_horario(patron, h_ini):
     parts = []
-    for dia, contrib in patron['days'].items():
+    for dia, contrib in patrón['days'].items():
         mins_duracion = int(contrib * 50)
         h_fin = h_ini + mins_duracion
         parts.append(f"{dia}: {mins_to_str(h_ini)}-{mins_to_str(h_fin)}")
@@ -539,7 +541,7 @@ def compatible_tipo(curso_tipo, salon_tipo):
     return salon_cat != 2
 
 # ==============================================================================
-# 4. MOTOR DE OPTIMIZACIÓN (SIN CAMBIOS)
+# 4. MOTOR DE OPTIMIZACIÓN (CON REGISTRO DE HISTORIAL SEPARADO)
 # ==============================================================================
 class TabuScheduler:
     def __init__(self, df_cursos, df_profes, df_salones, zona):
@@ -646,6 +648,9 @@ class TabuScheduler:
         self.mejor_solucion = deepcopy(self.solucion)
         self.mejor_costo = self._costo_total(self.solucion)
         self.historial_costos = [self.mejor_costo]
+        # NUEVOS HISTORIALES SEPARADOS
+        self.historial_hard = []
+        self.historial_soft = []
 
     def get_sec_creditos(self, s, prof_name):
         if prof_name in self.profesores and self.profesores[prof_name].compensacion:
@@ -1281,8 +1286,16 @@ class TabuScheduler:
     def optimizar(self, iteraciones=3000, bar=None, status_text=None):
         temp_inicial = 5000.0
         self.historial_costos = [self.mejor_costo]
+        self.historial_hard = []
+        self.historial_soft = []
         for it in range(iteraciones):
             vecino, costo_vecino = self._mutar_solucion(self.solucion)
+            # Registrar costos separados
+            costo_hard = self._costo_total(vecino, solo_duros=True)
+            costo_soft = costo_vecino - costo_hard
+            self.historial_hard.append(costo_hard)
+            self.historial_soft.append(costo_soft)
+            
             if costo_vecino <= self.mejor_costo:
                 self.solucion = vecino
                 self.mejor_costo = costo_vecino
@@ -1325,7 +1338,7 @@ class TabuScheduler:
         return self.mejor_solucion, int(self.mejor_costo // 10000), self.historial_costos
 
 # ==============================================================================
-# 5. NUEVAS FUNCIONES DE VISUALIZACIÓN (MEJORADAS)
+# 5. FUNCIONES DE VISUALIZACIÓN (INCLUYENDO NUEVAS)
 # ==============================================================================
 def generar_heatmap_plotly(scheduler, solucion):
     """Heatmap interactivo: días en X, horas en Y."""
@@ -1334,7 +1347,7 @@ def generar_heatmap_plotly(scheduler, solucion):
     fin = scheduler.limite_operativo[1]
     horas_del_dia = list(range(inicio, fin + 1, 30))
     
-    matriz = np.zeros((len(horas_del_dia), len(dias_semana)))  # invertido
+    matriz = np.zeros((len(horas_del_dia), len(dias_semana)))
     total_salones = len(scheduler.salones)
     
     for asign in solucion:
@@ -1455,7 +1468,6 @@ def generar_evolucion_fitness_plotly(historial):
 def generar_calendario_visual(sol, scheduler, filtro_prof=None, filtro_salon=None, filtro_curso=None):
     """Calendario tipo Gantt realista: días en Y, horas en X, bloques rectangulares."""
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
-    # Preparar datos
     eventos = []
     for a in sol:
         if filtro_prof and a['profesor'] != filtro_prof:
@@ -1614,7 +1626,6 @@ def generar_figura_cientifica_carga(cargas_finales, scheduler):
     
     fig = go.Figure()
     
-    # Barras (carga asignada)
     fig.add_trace(go.Bar(
         x=x_vals,
         y=carga_asignada,
@@ -1622,7 +1633,6 @@ def generar_figura_cientifica_carga(cargas_finales, scheduler):
         marker=dict(color='lightgray', line=dict(color='black', width=1))
     ))
     
-    # Línea carga mínima
     fig.add_trace(go.Scatter(
         x=x_vals,
         y=carga_min,
@@ -1632,7 +1642,6 @@ def generar_figura_cientifica_carga(cargas_finales, scheduler):
         marker=dict(size=6)
     ))
     
-    # Línea carga máxima
     fig.add_trace(go.Scatter(
         x=x_vals,
         y=carga_max,
@@ -1659,6 +1668,72 @@ def generar_figura_cientifica_carga(cargas_finales, scheduler):
     fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
     fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
     
+    return fig
+
+def generar_convergencia_restriccion(historial_hard, historial_soft):
+    """Genera figura Matplotlib de dos paneles: F_hard y F_soft."""
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(7, 6), sharex=True)
+    fig.subplots_adjust(hspace=0.1)
+    
+    generaciones = list(range(1, len(historial_hard)+1))
+    
+    # Panel superior: F_hard
+    ax1.plot(generaciones, historial_hard, color='#C44E52', linewidth=2.0, label='$F_{\\mathrm{hard}}$')
+    ax1.axhline(y=0, color='gray', linestyle='--', linewidth=0.8, alpha=0.7)
+    ax1.set_ylabel('Penalización $F_{\\mathrm{hard}}$', fontweight='bold')
+    ax1.set_title('Convergencia de Restricciones Fuertes', fontweight='bold')
+    ax1.grid(True, linestyle='--', alpha=0.4)
+    ax1.legend(loc='upper right')
+    
+    # Panel inferior: F_soft
+    ax2.plot(generaciones, historial_soft, color='#4A7A9C', linewidth=2.0, label='$F_{\\mathrm{soft}}$')
+    ax2.set_xlabel('Generación', fontweight='bold')
+    ax2.set_ylabel('Penalización $F_{\\mathrm{soft}}$', fontweight='bold')
+    ax2.set_title('Refinamiento de Restricciones Suaves', fontweight='bold')
+    ax2.grid(True, linestyle='--', alpha=0.4)
+    ax2.legend(loc='upper right')
+    
+    plt.tight_layout()
+    return fig
+
+def generar_boxplot_multiejecuciones(df):
+    """Genera boxplot comparativo a partir de DataFrame con columnas: Departamento, Fitness (factibles)."""
+    plt.style.use('seaborn-v0_8-whitegrid')
+    fig, ax = plt.subplots(figsize=(6.5, 5.0))
+    
+    departamentos = df['Departamento'].unique()
+    datos = [df[df['Departamento'] == dep]['Fitness'].values for dep in departamentos]
+    etiquetas = [f"{dep}\n(n={len(d)})" for dep, d in zip(departamentos, datos)]
+    
+    box = ax.boxplot(datos, patch_artist=True, tick_labels=etiquetas, widths=0.5,
+                     boxprops=dict(linewidth=1.3, edgecolor='black'),
+                     medianprops=dict(linewidth=2.0, color='darkred'),
+                     whiskerprops=dict(linewidth=1.1),
+                     capprops=dict(linewidth=1.1),
+                     flierprops=dict(marker='o', markersize=4, markerfacecolor='gray',
+                                     markeredgecolor='black', alpha=0.8))
+    
+    colores = ['#6A8CA6', '#5E9B8A']
+    for patch, color in zip(box['boxes'], colores[:len(departamentos)]):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.8)
+    
+    ax.set_ylabel('Fitness $F(H)$', fontweight='bold')
+    ax.set_title('Estabilidad del Algoritmo Genético\nDistribución del Fitness en Ejecuciones Independientes',
+                 fontweight='bold', pad=15)
+    ax.set_ylim(0.72, 1.01)
+    ax.yaxis.grid(True, linestyle='--', alpha=0.4)
+    ax.set_axisbelow(True)
+    for y in [0.8, 0.9, 1.0]:
+        ax.axhline(y=y, color='gray', linestyle=':', linewidth=0.8, alpha=0.5)
+    
+    for i, d in enumerate(datos):
+        med = np.median(d)
+        ax.text(i+1, med + 0.012, f'{med:.4f}', ha='center', va='bottom',
+                fontsize=11, fontweight='bold',
+                bbox=dict(boxstyle='round,pad=0.15', facecolor='white', edgecolor='none', alpha=0.7))
+    
+    plt.tight_layout()
     return fig
 
 def generar_plantilla():
@@ -1703,7 +1778,7 @@ def generar_plantilla():
     return output.getvalue()
 
 # ==============================================================================
-# 8. UI PRINCIPAL
+# 6. UI PRINCIPAL
 # ==============================================================================
 def main():
     with st.sidebar:
@@ -1750,6 +1825,8 @@ def main():
                     st.session_state.elapsed_time = time.time() - start_time
                     st.session_state.conflicts = conflictos
                     st.session_state.historial = historial
+                    st.session_state.historial_hard = scheduler.historial_hard
+                    st.session_state.historial_soft = scheduler.historial_soft
                     st.session_state.scheduler = scheduler
                     st.session_state.mejor_sol = mejor_sol
                     
@@ -1822,7 +1899,10 @@ def main():
         with t4:
             st.markdown("### 📈 Analíticas Avanzadas")
             
-            subtab1, subtab2, subtab3, subtab4 = st.tabs(["📊 Visualizaciones", "🗓️ Calendario", "📄 Reporte PDF", "📈 Carga Científica"])
+            subtab1, subtab2, subtab3, subtab4, subtab5, subtab6 = st.tabs([
+                "📊 Visualizaciones", "🗓️ Calendario", "📄 Reporte PDF", 
+                "📈 Carga Científica", "📉 Convergencia Restricción", "📊 Boxplot Ejecuciones"
+            ])
             
             with subtab1:
                 st.markdown("#### Mapa de Calor de Ocupación")
@@ -1872,6 +1952,51 @@ def main():
                 st.markdown("#### Análisis Científico de Carga Académica")
                 fig_carga = generar_figura_cientifica_carga(st.session_state.cargas_finales, st.session_state.scheduler)
                 st.plotly_chart(fig_carga, use_container_width=True)
+            
+            with subtab5:
+                st.markdown("#### Convergencia por Restricción (F_hard vs F_soft)")
+                if 'historial_hard' in st.session_state and 'historial_soft' in st.session_state:
+                    fig_conv = generar_convergencia_restriccion(
+                        st.session_state.historial_hard,
+                        st.session_state.historial_soft
+                    )
+                    st.pyplot(fig_conv)
+                    buf = io.BytesIO()
+                    fig_conv.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+                    buf.seek(0)
+                    st.download_button(
+                        label="📥 Descargar Convergencia (PNG)",
+                        data=buf,
+                        file_name="convergencia_restriccion.png",
+                        mime="image/png"
+                    )
+                else:
+                    st.info("Ejecuta una optimización primero para generar los datos de convergencia.")
+            
+            with subtab6:
+                st.markdown("#### Boxplot de Fitness para Múltiples Ejecuciones")
+                st.markdown("Carga un archivo Excel con columnas: `Ejecucion, Conflictos, Costo Total, Tiempo, Fitness`.")
+                uploaded_results = st.file_uploader("Cargar resultados (Excel)", type=['xlsx'], key="boxplot_uploader")
+                if uploaded_results:
+                    try:
+                        df_res = pd.read_excel(uploaded_results)
+                        df_fact = df_res[df_res['Conflictos'] == 0].copy()
+                        depto = st.text_input("Nombre del Departamento (ej. Inglés)", value="Inglés")
+                        if st.button("Generar Boxplot"):
+                            df_fact['Departamento'] = depto
+                            fig_box = generar_boxplot_multiejecuciones(df_fact)
+                            st.pyplot(fig_box)
+                            buf = io.BytesIO()
+                            fig_box.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+                            buf.seek(0)
+                            st.download_button(
+                                label="📥 Descargar Boxplot (PNG)",
+                                data=buf,
+                                file_name=f"boxplot_{depto}.png",
+                                mime="image/png"
+                            )
+                    except Exception as e:
+                        st.error(f"Error al procesar el archivo: {e}")
             
         st.markdown("</div>", unsafe_allow_html=True)
 
