@@ -7,10 +7,13 @@ import time
 import math
 from datetime import time as dtime
 import matplotlib.pyplot as plt
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from copy import deepcopy
 
 # ==============================================================================
-# 1. ESTÉTICA (CAMBIO 1: TEMA CLARO)
+# 1. ESTÉTICA (TEMA CLARO)
 # ==============================================================================
 st.set_page_config(page_title="UPRM Scheduler Platinum AI v13 Compact", page_icon="🏛️", layout="wide")
 
@@ -344,7 +347,7 @@ def compatible_tipo(curso_tipo, salon_tipo):
     return salon_cat != 2
 
 # ==============================================================================
-# 4. MOTOR DE OPTIMIZACIÓN (v13 ORIGINAL + FASE DE COMPACTACIÓN)
+# 4. MOTOR DE OPTIMIZACIÓN (v13 ORIGINAL + FASE DE COMPACTACIÓN) - SIN CAMBIOS
 # ==============================================================================
 class TabuScheduler:
     def __init__(self, df_cursos, df_profes, df_salones, zona):
@@ -1121,7 +1124,6 @@ class TabuScheduler:
                 if status_text:
                     duros = int(self.mejor_costo // 10000)
                     costo_total = self.mejor_costo
-                    # CAMBIO 2: Calcular fitness y porcentaje de restricciones suaves
                     fitness_actual = 10000 / (10000 + costo_total)
                     costo_suave = costo_total - (duros * 10000)
                     if costo_total > 0:
@@ -1148,9 +1150,10 @@ class TabuScheduler:
         return self.mejor_solucion, int(self.mejor_costo // 10000), self.historial_costos
 
 # ==============================================================================
-# 5. HEATMAP Y PLANTILLA (SIN CAMBIOS)
+# 5. NUEVAS FUNCIONES DE VISUALIZACIÓN (PLOTLY + CALENDARIO + PDF)
 # ==============================================================================
-def generar_heatmap_ocupacion(scheduler, solucion):
+def generar_heatmap_plotly(scheduler, solucion):
+    """Heatmap interactivo de ocupación de salones con Plotly."""
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
     inicio = scheduler.limite_operativo[0]
     fin = scheduler.limite_operativo[1]
@@ -1180,27 +1183,334 @@ def generar_heatmap_ocupacion(scheduler, solucion):
     else:
         matriz_porcentaje = matriz
     
-    fig, ax = plt.subplots(figsize=(14, 6))
-    im = ax.imshow(matriz_porcentaje, cmap='YlOrRd', aspect='auto', vmin=0, vmax=100)
-    ax.set_xticks(range(len(horas_del_dia)))
     etiquetas_horas = [mins_to_str(h).replace(' AM', '').replace(' PM', '') for h in horas_del_dia]
-    step = max(1, len(etiquetas_horas) // 12)
-    ax.set_xticks(range(0, len(horas_del_dia), step))
-    ax.set_xticklabels(etiquetas_horas[::step], rotation=45, ha='right', color='white')
-    ax.set_yticks(range(len(dias_semana)))
-    ax.set_yticklabels(dias_semana, color='white')
-    cbar = plt.colorbar(im, ax=ax, label='% Ocupación')
-    cbar.ax.yaxis.label.set_color('white')
-    cbar.ax.tick_params(colors='white')
-    ax.set_title('Ocupación de Salones por Franja Horaria', color='white', pad=20)
-    fig.patch.set_facecolor('#0F0F0F')
-    ax.set_facecolor('#1A1A1A')
-    ax.tick_params(colors='white')
-    for spine in ax.spines.values():
-        spine.set_edgecolor('#D4AF37')
-    plt.tight_layout()
+    
+    fig = px.imshow(
+        matriz_porcentaje,
+        labels=dict(x="Hora de Inicio", y="Día", color="% Ocupación"),
+        x=etiquetas_horas,
+        y=dias_semana,
+        color_continuous_scale='YlOrRd',
+        aspect='auto',
+        zmin=0,
+        zmax=100
+    )
+    fig.update_layout(
+        title="Ocupación de Salones por Franja Horaria",
+        font=dict(color='#1a1a1a'),
+        paper_bgcolor='white',
+        plot_bgcolor='white',
+        xaxis=dict(tickangle=-45),
+        height=500
+    )
     return fig
 
+def generar_barras_apiladas_profesor(sol, scheduler):
+    """Gráfico de barras apiladas: distribución de clases por día para cada profesor."""
+    df_asign = pd.DataFrame([{
+        'Profesor': a['profesor'],
+        'Dia': dia,
+        'Cantidad': 1
+    } for a in sol if a['profesor'] not in ['TBA', 'GRADUADOS']
+      for dia in a['patron']['days'].keys()])
+    
+    if df_asign.empty:
+        return go.Figure()
+    
+    # Agrupar por profesor y día
+    pivot = df_asign.groupby(['Profesor', 'Dia']).size().reset_index(name='Clases')
+    # Obtener lista de profesores ordenados por carga total
+    carga_prof = {p: 0.0 for p in pivot['Profesor'].unique()}
+    for a in sol:
+        if a['profesor'] in carga_prof:
+            carga_prof[a['profesor']] += scheduler.get_sec_creditos(a['seccion'], a['profesor'])
+    profes_ordenados = sorted(carga_prof.keys(), key=lambda x: carga_prof[x], reverse=True)
+    
+    fig = go.Figure()
+    dias_unicos = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
+    colores = px.colors.qualitative.Set2[:len(dias_unicos)]
+    
+    for i, dia in enumerate(dias_unicos):
+        data_dia = pivot[pivot['Dia'] == dia]
+        # Rellenar con 0 para profesores sin clase ese día
+        y_vals = [data_dia[data_dia['Profesor'] == p]['Clases'].sum() if p in data_dia['Profesor'].values else 0 for p in profes_ordenados]
+        fig.add_trace(go.Bar(
+            name=dia,
+            x=profes_ordenados,
+            y=y_vals,
+            marker_color=colores[i]
+        ))
+    
+    fig.update_layout(
+        barmode='stack',
+        title="Distribución de Clases por Profesor y Día",
+        xaxis_title="Profesor",
+        yaxis_title="Número de Clases",
+        font=dict(color='#1a1a1a'),
+        paper_bgcolor='white',
+        plot_bgcolor='white',
+        legend_title="Día",
+        height=500
+    )
+    return fig
+
+def generar_evolucion_fitness_plotly(historial):
+    """Gráfico de líneas interactivo para la evolución del fitness."""
+    fitness = [10000 / (10000 + c) for c in historial]
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        y=fitness,
+        mode='lines',
+        line=dict(color='#D4AF37', width=2.5),
+        name='Fitness'
+    ))
+    fig.update_layout(
+        title="Evolución del Fitness durante la Optimización",
+        xaxis_title="Iteración",
+        yaxis_title="Fitness",
+        font=dict(color='#1a1a1a'),
+        paper_bgcolor='white',
+        plot_bgcolor='white',
+        height=400
+    )
+    return fig
+
+def generar_calendario_visual(sol, scheduler, filtro_prof=None, filtro_salon=None, filtro_curso=None):
+    """Calendario tipo Gantt minimalista con Plotly."""
+    dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
+    # Preparar datos
+    eventos = []
+    for a in sol:
+        if filtro_prof and a['profesor'] != filtro_prof:
+            continue
+        if filtro_salon and a['salon'] != filtro_salon:
+            continue
+        if filtro_curso and filtro_curso not in a['seccion'].cod:
+            continue
+        
+        for dia, contrib in a['patron']['days'].items():
+            inicio = a['ini']
+            duracion = contrib * 50
+            fin = inicio + duracion
+            hora_inicio = mins_to_str(inicio)
+            hora_fin = mins_to_str(fin)
+            texto = f"{a['profesor']}<br>{a['seccion'].cod}<br>{a['salon']}"
+            eventos.append({
+                'Dia': dia,
+                'Inicio': inicio,
+                'Fin': fin,
+                'Hora': f"{hora_inicio} - {hora_fin}",
+                'Profesor': a['profesor'],
+                'Seccion': a['seccion'].cod,
+                'Salon': a['salon'],
+                'Texto': texto
+            })
+    
+    if not eventos:
+        return go.Figure()
+    
+    df = pd.DataFrame(eventos)
+    # Mapa de días a índices
+    dia_a_idx = {d: i for i, d in enumerate(dias_semana)}
+    df['Dia_idx'] = df['Dia'].map(dia_a_idx)
+    
+    # Asignar colores por profesor
+    profes = df['Profesor'].unique()
+    colores = px.colors.qualitative.Plotly[:len(profes)]
+    color_map = {p: colores[i % len(colores)] for i, p in enumerate(profes)}
+    
+    fig = go.Figure()
+    for _, row in df.iterrows():
+        fig.add_trace(go.Scatter(
+            x=[row['Inicio'], row['Fin'], row['Fin'], row['Inicio'], row['Inicio']],
+            y=[row['Dia_idx']-0.4, row['Dia_idx']-0.4, row['Dia_idx']+0.4, row['Dia_idx']+0.4, row['Dia_idx']-0.4],
+            fill='toself',
+            fillcolor=color_map[row['Profesor']],
+            line=dict(width=0),
+            name=row['Profesor'],
+            legendgroup=row['Profesor'],
+            showlegend=False,
+            hoverinfo='text',
+            hovertext=row['Texto']
+        ))
+    
+    # Añadir una traza por profesor para la leyenda
+    for prof, color in color_map.items():
+        fig.add_trace(go.Scatter(
+            x=[None], y=[None],
+            mode='markers',
+            marker=dict(size=10, color=color),
+            name=prof,
+            legendgroup=prof,
+            showlegend=True
+        ))
+    
+    fig.update_layout(
+        title="Calendario Visual de Clases",
+        xaxis=dict(
+            title="Hora del día (minutos desde medianoche)",
+            tickvals=list(range(420, 1140, 60)),
+            ticktext=[mins_to_str(m).replace(' AM', '').replace(' PM', '') for m in range(420, 1140, 60)]
+        ),
+        yaxis=dict(
+            title="Día",
+            tickvals=list(range(len(dias_semana))),
+            ticktext=dias_semana
+        ),
+        font=dict(color='#1a1a1a'),
+        paper_bgcolor='white',
+        plot_bgcolor='white',
+        height=600,
+        hovermode='closest'
+    )
+    return fig
+
+def generar_reporte_pdf_html(scheduler, sol, cargas_finales, master_df):
+    """Genera un HTML con el reporte ejecutivo para imprimir/guardar como PDF."""
+    # Calcular estadísticas
+    total_secciones = len(sol)
+    secciones_tba = sum(1 for a in sol if a['profesor'] == 'TBA')
+    carga_total = sum(cargas_finales.values())
+    profesores_con_carga = len([c for c in cargas_finales.values() if c > 0])
+    
+    html = f"""
+    <html>
+    <head>
+        <title>Reporte Ejecutivo - UPRM Scheduler</title>
+        <style>
+            body {{ font-family: 'Segoe UI', Arial, sans-serif; margin: 40px; background: white; color: #1a1a1a; }}
+            h1 {{ color: #1a1a1a; border-bottom: 2px solid #D4AF37; padding-bottom: 10px; }}
+            h2 {{ color: #1a1a1a; margin-top: 30px; }}
+            .stats {{ display: flex; gap: 20px; margin-bottom: 30px; }}
+            .stat-card {{ background: #f8f9fa; border: 1px solid #ddd; border-radius: 8px; padding: 15px; flex: 1; }}
+            table {{ border-collapse: collapse; width: 100%; margin-bottom: 20px; }}
+            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+            th {{ background-color: #f2f2f2; }}
+            .footer {{ margin-top: 40px; font-size: 0.9em; color: #666; text-align: center; }}
+        </style>
+    </head>
+    <body>
+        <h1>UPRM Scheduler - Reporte Ejecutivo</h1>
+        <p>Generado el: {time.strftime('%Y-%m-%d %H:%M:%S')}</p>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <h3>Total Secciones</h3>
+                <p style="font-size: 24px; font-weight: bold;">{total_secciones}</p>
+            </div>
+            <div class="stat-card">
+                <h3>Secciones TBA</h3>
+                <p style="font-size: 24px; font-weight: bold;">{secciones_tba} ({secciones_tba/total_secciones*100:.1f}%)</p>
+            </div>
+            <div class="stat-card">
+                <h3>Carga Total (Créditos)</h3>
+                <p style="font-size: 24px; font-weight: bold;">{carga_total:.1f}</p>
+            </div>
+            <div class="stat-card">
+                <h3>Profesores Activos</h3>
+                <p style="font-size: 24px; font-weight: bold;">{profesores_con_carga}</p>
+            </div>
+        </div>
+        
+        <h2>Listado de Secciones TBA (Contrataciones Pendientes)</h2>
+        {master_df[master_df['Persona'] == 'TBA'][['ID', 'Asignatura', 'Estudiantes (Cupo)', 'Días', 'Horario', 'Salón']].to_html(index=False) if secciones_tba > 0 else '<p>No hay secciones TBA.</p>'}
+        
+        <h2>Horarios por Profesor</h2>
+        {''.join([f'<h3>{p}</h3>{master_df[master_df["Persona"]==p][["ID", "Asignatura", "Días", "Horario", "Salón"]].to_html(index=False)}' for p in sorted(master_df['Persona'].unique()) if p not in ['TBA', 'GRADUADOS']])}
+        
+        <div class="footer">
+            Reporte generado automáticamente por UPRM Timetable System.
+        </div>
+        <script>
+            window.onload = function() {{ window.print(); }}
+        </script>
+    </body>
+    </html>
+    """
+    return html
+
+# ==============================================================================
+# 6. FUNCIÓN PARA LA FIGURA CIENTÍFICA DE CARGA ACADÉMICA
+# ==============================================================================
+def generar_figura_cientifica_carga(cargas_finales, scheduler):
+    """Subgráficas lado a lado con barras de carga asignada y líneas min/max."""
+    profesores = list(cargas_finales.keys())
+    # Ordenar por carga asignada
+    profesores.sort(key=lambda p: cargas_finales[p], reverse=True)
+    carga_asignada = [cargas_finales[p] for p in profesores]
+    carga_min = [scheduler.profesores[p].carga_min for p in profesores]
+    carga_max = [scheduler.profesores[p].carga_max for p in profesores]
+    
+    # Crear subplots: 1 fila, 2 columnas
+    fig = make_subplots(rows=1, cols=2, subplot_titles=("Profesores (mitad superior)", "Profesores (mitad inferior)"))
+    
+    mitad = len(profesores) // 2
+    for col, idx_range in enumerate([(0, mitad), (mitad, len(profesores))], start=1):
+        idx_inicio, idx_fin = idx_range
+        profs_sub = profesores[idx_inicio:idx_fin]
+        x_vals = list(range(len(profs_sub)))
+        
+        # Barras (carga asignada)
+        fig.add_trace(go.Bar(
+            x=x_vals,
+            y=[carga_asignada[i] for i in range(idx_inicio, idx_fin)],
+            name='Carga Asignada',
+            marker=dict(color='lightgray', line=dict(color='black', width=1)),
+            showlegend=(col==1),
+            legendgroup='asignada'
+        ), row=1, col=col)
+        
+        # Línea carga mínima (azul)
+        fig.add_trace(go.Scatter(
+            x=x_vals,
+            y=[carga_min[i] for i in range(idx_inicio, idx_fin)],
+            mode='lines+markers',
+            name='Carga Mínima',
+            line=dict(color='blue', width=2, dash='dot'),
+            marker=dict(size=6),
+            showlegend=(col==1),
+            legendgroup='min'
+        ), row=1, col=col)
+        
+        # Línea carga máxima (naranja)
+        fig.add_trace(go.Scatter(
+            x=x_vals,
+            y=[carga_max[i] for i in range(idx_inicio, idx_fin)],
+            mode='lines+markers',
+            name='Carga Máxima',
+            line=dict(color='orange', width=2, dash='dot'),
+            marker=dict(size=6),
+            showlegend=(col==1),
+            legendgroup='max'
+        ), row=1, col=col)
+        
+        # Configurar ejes
+        fig.update_xaxes(
+            title_text="Profesores (índice)",
+            tickvals=x_vals,
+            ticktext=[f"P{i+1+idx_inicio}" for i in x_vals],
+            row=1, col=col
+        )
+        fig.update_yaxes(title_text="Cantidad de Créditos Semanales", row=1, col=col)
+    
+    fig.update_layout(
+        title="Distribución de Carga Académica por Profesor",
+        font=dict(color='#1a1a1a'),
+        paper_bgcolor='white',
+        plot_bgcolor='white',
+        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5),
+        height=500,
+        showlegend=True
+    )
+    # Añadir grid
+    fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+    fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+    
+    return fig
+
+# ==============================================================================
+# 7. FUNCIÓN PARA GENERAR PLANTILLA EXCEL (SIN CAMBIOS)
+# ==============================================================================
 def generar_plantilla():
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -1243,7 +1553,7 @@ def generar_plantilla():
     return output.getvalue()
 
 # ==============================================================================
-# 6. UI PRINCIPAL (SIN CAMBIOS)
+# 8. UI PRINCIPAL (CON NUEVAS FUNCIONALIDADES EN ANALÍTICAS)
 # ==============================================================================
 def main():
     with st.sidebar:
@@ -1360,36 +1670,60 @@ def main():
                 st.success("✅ 100% Asignación Perfecta. Cero Conflictos Duros.")
                 
         with t4:
-            st.markdown("### 🧬 Evolución del Algoritmo")
-            fitness_history = [10000 / (10000 + costo) for costo in st.session_state.historial]
-            fig1, ax1 = plt.subplots(figsize=(10, 4))
-            ax1.plot(fitness_history, color='#D4AF37', linewidth=2.5)
-            ax1.set_title("Crecimiento de Fitness Evolutivo", color='white')
-            fig1.patch.set_facecolor('#0F0F0F')
-            ax1.set_facecolor('#1A1A1A')
-            ax1.tick_params(colors='white')
-            for spine in ax1.spines.values(): spine.set_edgecolor('#D4AF37')
-            st.pyplot(fig1)
+            st.markdown("### 📈 Analíticas Avanzadas")
             
-            st.markdown("### ⚖️ Distribución de Carga Académica")
-            cargas_df = pd.DataFrame(list(st.session_state.cargas_finales.items()), columns=['Profesor', 'Créditos Reales'])
-            cargas_df = cargas_df.sort_values('Créditos Reales', ascending=False)
-            fig2, ax2 = plt.subplots(figsize=(12, 6))
-            ax2.bar(cargas_df['Profesor'], cargas_df['Créditos Reales'], color='#8E6E13')
-            ax2.axhline(y=12, color='#FF4B4B', linestyle='--', linewidth=2)
-            ax2.set_xticklabels(cargas_df['Profesor'], rotation=45, ha='right', color='white')
-            ax2.tick_params(colors='white')
-            fig2.patch.set_facecolor('#0F0F0F')
-            ax2.set_facecolor('#1A1A1A')
-            for spine in ax2.spines.values(): spine.set_edgecolor('#D4AF37')
-            st.pyplot(fig2)
-
-            st.markdown("### 🗺️ Heatmap de Ocupación de Salones")
-            if 'scheduler' in st.session_state and 'mejor_sol' in st.session_state:
-                fig3 = generar_heatmap_ocupacion(st.session_state.scheduler, st.session_state.mejor_sol)
-                st.pyplot(fig3)
-            else:
-                st.warning("No hay datos suficientes para generar el heatmap.")
+            # Subtabs para organizar
+            subtab1, subtab2, subtab3, subtab4 = st.tabs(["📊 Visualizaciones", "🗓️ Calendario", "📄 Reporte PDF", "📈 Carga Científica"])
+            
+            with subtab1:
+                st.markdown("#### Mapa de Calor de Ocupación")
+                fig_heat = generar_heatmap_plotly(st.session_state.scheduler, st.session_state.mejor_sol)
+                st.plotly_chart(fig_heat, use_container_width=True)
+                
+                st.markdown("#### Distribución de Clases por Profesor y Día")
+                fig_barras = generar_barras_apiladas_profesor(st.session_state.mejor_sol, st.session_state.scheduler)
+                st.plotly_chart(fig_barras, use_container_width=True)
+                
+                st.markdown("#### Evolución del Fitness")
+                fig_fitness = generar_evolucion_fitness_plotly(st.session_state.historial)
+                st.plotly_chart(fig_fitness, use_container_width=True)
+            
+            with subtab2:
+                st.markdown("#### Calendario Visual Interactivo")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    filtro_prof = st.selectbox("Filtrar por Profesor", ['Todos'] + sorted(st.session_state.master['Persona'].unique()))
+                with col2:
+                    filtro_salon = st.selectbox("Filtrar por Salón", ['Todos'] + sorted(st.session_state.master['Salón'].unique()))
+                with col3:
+                    filtro_curso = st.selectbox("Filtrar por Curso", ['Todos'] + sorted(st.session_state.master['Asignatura'].unique()))
+                
+                fig_cal = generar_calendario_visual(
+                    st.session_state.mejor_sol,
+                    st.session_state.scheduler,
+                    filtro_prof if filtro_prof != 'Todos' else None,
+                    filtro_salon if filtro_salon != 'Todos' else None,
+                    filtro_curso if filtro_curso != 'Todos' else None
+                )
+                st.plotly_chart(fig_cal, use_container_width=True)
+            
+            with subtab3:
+                st.markdown("#### Exportar Reporte Ejecutivo en PDF")
+                if st.button("📑 Generar Reporte PDF (Imprimir)"):
+                    html_reporte = generar_reporte_pdf_html(
+                        st.session_state.scheduler,
+                        st.session_state.mejor_sol,
+                        st.session_state.cargas_finales,
+                        st.session_state.master
+                    )
+                    st.components.v1.html(html_reporte, height=600, scrolling=True)
+                st.info("Haz clic en el botón para generar el reporte y luego usa la opción 'Imprimir' de tu navegador para guardar como PDF.")
+            
+            with subtab4:
+                st.markdown("#### Análisis Científico de Carga Académica")
+                fig_carga = generar_figura_cientifica_carga(st.session_state.cargas_finales, st.session_state.scheduler)
+                st.plotly_chart(fig_carga, use_container_width=True)
+            
         st.markdown("</div>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
