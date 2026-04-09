@@ -447,6 +447,7 @@ class TabuScheduler:
         # Estructuras para seguimiento de compactación
         self.salones_por_prof = {p: set() for p in self.profesores}
         self.dias_por_prof = {p: set() for p in self.profesores}
+        self._ultima_hora_por_dia = {}   # <- CORRECCIÓN: inicialización
 
         # Construcción inicial greedy con compactación
         self.solucion = self._construir_solucion_greedy()
@@ -918,8 +919,6 @@ class TabuScheduler:
             if prof in self.profesores:
                 self.salones_por_prof.setdefault(prof, set()).add(salon)
                 self.dias_por_prof.setdefault(prof, set()).update(patron['days'].keys())
-                if not hasattr(self, '_ultima_hora_por_dia'):
-                    self._ultima_hora_por_dia = {}
                 if prof not in self._ultima_hora_por_dia:
                     self._ultima_hora_por_dia[prof] = {}
                 for dia, contrib in patron['days'].items():
