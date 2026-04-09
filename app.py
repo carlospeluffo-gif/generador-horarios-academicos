@@ -321,7 +321,7 @@ st.markdown("""
 
 <div class="rum-header">
     <div class="header-logo">
-        <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/24/2016/04/upr_rum.jpg" alt="UPRM Logo">
+        <img src="https://www.uprm.edu/portales/marca/" alt="UPRM Logo">
     </div>
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
