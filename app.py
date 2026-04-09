@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from copy import deepcopy
 
 # ==============================================================================
-# 1. ESTÉTICA (sin cambios)
+# 1. ESTÉTICA (fondo blanco, estilo limpio)
 # ==============================================================================
 st.set_page_config(page_title="UPRM Scheduler Platinum AI v13", page_icon="🏛️", layout="wide")
 
@@ -19,14 +19,8 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Source+Code+Pro:wght@300;500&display=swap');
     
     .stApp { 
-        background-color: #050505;
-        background-image: 
-            linear-gradient(rgba(212, 175, 55, 0.1) 2px, transparent 2px),
-            linear-gradient(90deg, rgba(212, 175, 55, 0.1) 2px, transparent 2px),
-            radial-gradient(circle at 50% 20%, #1a1a1a 0%, #000000 100%);
-        background-size: 80px 80px, 80px 80px, 100% 100%;
-        background-attachment: fixed;
-        color: #e0e0e0; 
+        background-color: #ffffff;
+        color: #1e1e1e;
     }
 
     .math-header {
@@ -34,17 +28,17 @@ st.markdown("""
         justify-content: space-between;
         align-items: center;
         padding: 30px 60px;
-        background: rgba(0, 0, 0, 0.85);
+        background: #f5f5f5;
         border-bottom: 3px solid #D4AF37;
         margin-bottom: 40px;
         border-radius: 0 0 30px 30px;
-        box-shadow: 0 10px 50px rgba(212, 175, 55, 0.15);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.05);
         position: relative;
         overflow: hidden;
     }
 
-    .math-header::before { content: '∑'; position: absolute; left: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.05); font-family: serif; }
-    .math-header::after { content: '∫'; position: absolute; right: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.05); font-family: serif; }
+    .math-header::before { content: '∑'; position: absolute; left: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.1); font-family: serif; }
+    .math-header::after { content: '∫'; position: absolute; right: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.1); font-family: serif; }
 
     .title-box { text-align: center; z-index: 2; }
 
@@ -55,35 +49,32 @@ st.markdown("""
         padding: 10px 20px;
         border-radius: 50% 0% 50% 0%;
         background: rgba(212, 175, 55, 0.05);
-        box-shadow: 0 0 15px rgba(212, 175, 55, 0.3);
     }
 
     h1 { 
         font-family: 'Playfair Display', serif !important; 
-        color: #D4AF37 !important; 
+        color: #8E6E13 !important; 
         font-size: 3.2rem !important;
         margin: 10px 0 !important;
-        text-shadow: 0 0 20px rgba(212, 175, 55, 0.5);
         letter-spacing: 2px;
     }
 
     .glass-card { 
-        background: rgba(15, 15, 15, 0.9); 
+        background: #fefefe; 
         border-radius: 15px; 
         padding: 25px; 
-        border: 1px solid rgba(212, 175, 55, 0.25); 
-        backdrop-filter: blur(15px); 
+        border: 1px solid #e0e0e0; 
+        box-shadow: 0 5px 15px rgba(0,0,0,0.05);
         margin-bottom: 20px; 
-        box-shadow: 0 15px 40px rgba(0,0,0,0.8);
     }
 
     .stButton>button { 
         background: linear-gradient(135deg, #8E6E13 0%, #D4AF37 50%, #8E6E13 100%) !important; 
         color: white !important; font-weight: bold !important; border-radius: 4px !important; 
         width: 100%; border: none !important; height: 55px; font-size: 1.1rem;
-        transition: 0.4s;
+        transition: 0.3s;
     }
-    .stButton>button:hover { transform: scale(1.02); box-shadow: 0 0 25px rgba(212, 175, 55, 0.4); }
+    .stButton>button:hover { transform: scale(1.02); box-shadow: 0 0 12px rgba(212, 175, 55, 0.5); }
 
     .stDownloadButton>button {
         background: linear-gradient(135deg, #B8860B 0%, #FFD700 50%, #B8860B 100%) !important;
@@ -92,23 +83,27 @@ st.markdown("""
         border: 1px solid #D4AF37 !important;
     }
 
-    [data-testid="stSidebar"] { background-color: #050505; border-right: 1px solid #D4AF37; }
+    [data-testid="stSidebar"] { background-color: #fafafa; border-right: 1px solid #ddd; }
     
     [data-testid="stSidebar"] h3 {
-        color: #D4AF37 !important;
-        text-shadow: 0 0 10px rgba(212, 175, 55, 0.4);
+        color: #8E6E13 !important;
         font-family: 'Playfair Display', serif;
     }
 
     .status-badge { 
-        background: rgba(212, 175, 55, 0.1); 
+        background: #f0f0f0; 
         border: 1px solid #D4AF37; 
-        color: #D4AF37; 
+        color: #8E6E13; 
         padding: 12px; 
         border-radius: 8px; 
         text-align: center;
         font-family: 'Source Code Pro', monospace;
         font-weight: 500;
+    }
+    
+    /* tablas, textos */
+    .stDataFrame, .stTable, .stMarkdown, p, li, div {
+        color: #1e1e1e;
     }
 </style>
 
@@ -116,7 +111,7 @@ st.markdown("""
     <div class="abstract-icon">Δx</div>
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
-        <p style="color: #888; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
+        <p style="color: #666; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
             UPRM MATHEMATICAL OPTIMIZATION ENGINE v13 (EVOLUTIVO + INTENSIVOS + GRANDES + BLOQUEOS)
         </p>
     </div>
@@ -237,7 +232,6 @@ class Seccion:
             raw_list = [c.strip().upper() for c in str(candidatos_raw).split(',') if c.strip() and str(c).upper() != 'NAN']
         self.cands = list(set(raw_list))
         
-        # Manejo de tipo_salon: 1.3 -> 3, otros a entero
         try:
             t = float(tipo_salon)
             if abs(t - 1.3) < 0.01:
@@ -261,10 +255,8 @@ class Profesor:
         self.carga_min = float(carga_min) if pd.notnull(carga_min) and carga_min != '' else 0.0
         self.carga_max = float(carga_max) if pd.notnull(carga_max) and carga_max != '' else 12.0
         
-        # Procesar preferencia de días (convertir a set de días en español)
         self.pref_dias_set = set()
         if pref_dias and isinstance(pref_dias, str):
-            # Soporta "L, M, W, J, V" o "Lu, Ma, Mi, Ju, Vi"
             for token in pref_dias.replace(',', ' ').upper().split():
                 if token in ('L', 'LU'):
                     self.pref_dias_set.add('Lu')
@@ -292,8 +284,7 @@ class Profesor:
         except:
             self.cursos_intensivos = 0
 
-        # Procesar bloqueos de horario
-        self.bloqueos = []  # lista de (dias_set, start_min, end_min)
+        self.bloqueos = []
         if bloqueo_dias and isinstance(bloqueo_dias, str) and bloqueo_dias.strip():
             dias_map = {'L': 'Lu', 'M': 'Ma', 'MI': 'Mi', 'J': 'Ju', 'V': 'Vi'}
             dias_limpios = bloqueo_dias.upper().replace(' ', '')
@@ -326,11 +317,6 @@ class Profesor:
         return 0.0
 
 def compatible_tipo(curso_tipo, salon_tipo):
-    """
-    Determina si un salón es compatible con el tipo de curso.
-    curso_tipo: 1 (teórico), 2 (laboratorio), 3 (anfiteatro)
-    salon_tipo: entero o flotante (1, 1.2, 1.3, 2, 3)
-    """
     if isinstance(salon_tipo, float):
         if salon_tipo >= 1.9 and salon_tipo <= 2.1:
             salon_cat = 2
@@ -340,15 +326,14 @@ def compatible_tipo(curso_tipo, salon_tipo):
             salon_cat = 1
     else:
         salon_cat = int(salon_tipo)
-    if curso_tipo == 2:   # laboratorio
+    if curso_tipo == 2:
         return salon_cat == 2
-    if curso_tipo == 3:   # anfiteatro
+    if curso_tipo == 3:
         return salon_cat == 3
-    # teórico puede ir a cualquier salón excepto laboratorio
     return salon_cat != 2
 
 # ==============================================================================
-# 4. MOTOR DE OPTIMIZACIÓN (CONSTRUCCIÓN ORIGINAL + RECOCIDO MEJORADO)
+# 4. MOTOR DE OPTIMIZACIÓN (NUEVAS RESTRICCIONES FUERTES + SECCIONES INTELIGENTES)
 # ==============================================================================
 class TabuScheduler:
     def __init__(self, df_cursos, df_profes, df_salones, zona):
@@ -393,14 +378,13 @@ class TabuScheduler:
                 )
                 self.profesores[prof.nombre] = prof
 
-        # 3. Procesar Cursos y Secciones
+        # 3. Procesar Cursos y Secciones (NUEVA LÓGICA DE SOBRANTES)
         self.secciones = []
         df_cursos.columns = [c.strip().upper() for c in df_cursos.columns]
         cursos_agrupados = {}
         for _, r in df_cursos.iterrows():
             cod_base = str(r['CODIGO']).strip().upper()
             if cod_base not in cursos_agrupados:
-                # Procesar tipo_salon
                 t = r.get('TIPO_SALON', 1)
                 try:
                     t_val = float(t)
@@ -428,31 +412,43 @@ class TabuScheduler:
             acepta_comp = any(c in self.profesores and self.profesores[c].compensacion for c in candidatos_list)
             
             if acepta_comp and demanda_total > cupo_tipico:
-                cupo_efectivo = min(demanda_total, 85)   # Ajustado: máximo 85 para compensación
+                cupo_efectivo = min(demanda_total, 85)
             else:
                 cupo_efectivo = cupo_tipico
 
-            num_secciones = math.ceil(demanda_total / cupo_efectivo) if demanda_total > 0 else 1
-            est_sec = [cupo_efectivo] * (num_secciones - 1)
-            resto = demanda_total - sum(est_sec)
-            est_sec.append(resto if resto > 0 else cupo_efectivo)
+            # --- NUEVA REGLA: IGNORAR SOBRANTES MENORES A cupo_efectivo/2 ---
+            full_sections = demanda_total // cupo_efectivo
+            remainder = demanda_total % cupo_efectivo
+            if remainder >= cupo_efectivo / 2:
+                num_secciones = full_sections + 1
+            else:
+                num_secciones = full_sections
+            if num_secciones == 0 and demanda_total > 0:
+                num_secciones = 1  # al menos una sección si hay demanda
+
+            # Distribuir estudiantes
+            est_sec = [cupo_efectivo] * (num_secciones - 1) if num_secciones > 1 else []
+            if num_secciones > 0:
+                ultimo_cupo = demanda_total - (num_secciones - 1) * cupo_efectivo
+                if ultimo_cupo <= 0:
+                    ultimo_cupo = cupo_efectivo
+                est_sec.append(ultimo_cupo)
             
             for i, cupo in enumerate(est_sec):
                 self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", datos['creditos'], cupo, datos['candidatos'], datos['tipo_salon']))
 
         self._preasignar_profesores_robusto()
 
-        # ===== CORRECCIÓN DE LÍMITES HORARIOS =====
+        # Límites horarios
         if zona == "CENTRAL":
-            self.hora_universal = (630, 750)          # 10:30 - 12:30
-            self.limite_operativo = (450, 1110)       # 07:30 - 18:30
-            self.bloques = list(range(450, 1051, 60)) # 450,510,...,1050
-        else:  # PERIFERICA
-            self.hora_universal = (600, 720)          # 10:00 - 12:00
-            self.limite_operativo = (420, 1080)       # 07:00 - 18:00
-            self.bloques = list(range(420, 1021, 60)) # 420,480,...,1020
+            self.hora_universal = (630, 750)
+            self.limite_operativo = (450, 1110)
+            self.bloques = list(range(450, 1051, 60))
+        else:
+            self.hora_universal = (600, 720)
+            self.limite_operativo = (420, 1080)
+            self.bloques = list(range(420, 1021, 60))
 
-        # Construcción inicial con la función original (siempre asigna todas las secciones)
         self.solucion = self._construir_solucion_greedy()
         self.mejor_solucion = deepcopy(self.solucion)
         self.mejor_costo = self._costo_total(self.solucion)
@@ -464,7 +460,6 @@ class TabuScheduler:
         return float(s.creditos)
 
     def _preasignar_profesores_robusto(self):
-        # Misma implementación que tenías, sin cambios
         carga_actual = {p: 0.0 for p in self.profesores}
         carga_actual["GRADUADOS"] = 0.0
         carga_actual["TBA"] = 0.0
@@ -571,6 +566,56 @@ class TabuScheduler:
                     carga_actual[prof_viejo] += creditos_viejos
                     carga_actual[nuevo_prof] -= creditos_nuevos
             T *= 0.995
+
+    # ---------- NUEVAS FUNCIONES DE RESTRICCIONES FUERTES ----------
+    def _penalizar_compacidad_profesor(self, sol):
+        """Penalización fuerte si un profesor mezcla patrones MWF con TTh"""
+        prof_days = {}
+        for asign in sol:
+            prof = asign['profesor']
+            if prof in ["GRADUADOS", "TBA"] or prof not in self.profesores:
+                continue
+            days = set(asign['patron']['days'].keys())
+            if prof not in prof_days:
+                prof_days[prof] = set()
+            prof_days[prof].update(days)
+        
+        penalty = 0
+        set_mwf = {'Lu', 'Mi', 'Vi'}
+        set_tth = {'Ma', 'Ju'}
+        for prof, days in prof_days.items():
+            has_mwf = any(d in set_mwf for d in days)
+            has_tth = any(d in set_tth for d in days)
+            if has_mwf and has_tth:
+                penalty += 10000   # fuerte
+        return penalty
+
+    def _penalizar_mismo_salon(self, sol):
+        """Penalización fuerte si un profesor usa más de un salón sin necesidad de tipos diferentes"""
+        prof_rooms = {}
+        prof_types = {}
+        for asign in sol:
+            prof = asign['profesor']
+            if prof in ["GRADUADOS", "TBA"] or prof not in self.profesores:
+                continue
+            salon = asign['salon']
+            tipo_requerido = asign['seccion'].tipo_salon
+            if prof not in prof_rooms:
+                prof_rooms[prof] = set()
+                prof_types[prof] = set()
+            prof_rooms[prof].add(salon)
+            prof_types[prof].add(tipo_requerido)
+        
+        penalty = 0
+        for prof, rooms in prof_rooms.items():
+            if len(rooms) > 1:
+                # Si todos los cursos requieren el mismo tipo de salón, penalizar fuerte
+                if len(prof_types[prof]) == 1:
+                    penalty += 10000 * (len(rooms) - 1)
+                else:
+                    # Tipos distintos, penalización más leve (aún fuerte pero se puede negociar)
+                    penalty += 5000 * (len(rooms) - 1)
+        return penalty
 
     def _costo_total(self, sol):
         conflicts = 0
@@ -685,6 +730,10 @@ class TabuScheduler:
             if len(salones) > 1:
                 soft_penalty += (len(salones) - 1) * 2
         
+        # NUEVAS RESTRICCIONES FUERTES
+        conflicts += self._penalizar_compacidad_profesor(sol)
+        conflicts += self._penalizar_mismo_salon(sol)
+        
         return conflicts + soft_penalty
 
     def _obtener_conflictos(self, sol):
@@ -763,9 +812,48 @@ class TabuScheduler:
                 if carga < prof_obj.carga_min - 1.5:
                     conflictos_list.append(f"Profesor {prof} no alcanza carga mínima ({carga:.1f} < {prof_obj.carga_min})")
         
+        # Nuevas restricciones fuertes en lista de conflictos
+        # Compacidad
+        prof_days = {}
+        for asign in sol:
+            prof = asign['profesor']
+            if prof in ["GRADUADOS", "TBA"] or prof not in self.profesores:
+                continue
+            days = set(asign['patron']['days'].keys())
+            if prof not in prof_days:
+                prof_days[prof] = set()
+            prof_days[prof].update(days)
+        set_mwf = {'Lu', 'Mi', 'Vi'}
+        set_tth = {'Ma', 'Ju'}
+        for prof, days in prof_days.items():
+            has_mwf = any(d in set_mwf for d in days)
+            has_tth = any(d in set_tth for d in days)
+            if has_mwf and has_tth:
+                conflictos_list.append(f"Profesor {prof} mezcla horarios MWF y TTh (viola compacidad)")
+        
+        # Mismo salón
+        prof_rooms = {}
+        prof_types = {}
+        for asign in sol:
+            prof = asign['profesor']
+            if prof in ["GRADUADOS", "TBA"] or prof not in self.profesores:
+                continue
+            salon = asign['salon']
+            tipo_req = asign['seccion'].tipo_salon
+            if prof not in prof_rooms:
+                prof_rooms[prof] = set()
+                prof_types[prof] = set()
+            prof_rooms[prof].add(salon)
+            prof_types[prof].add(tipo_req)
+        for prof, rooms in prof_rooms.items():
+            if len(rooms) > 1:
+                if len(prof_types[prof]) == 1:
+                    conflictos_list.append(f"Profesor {prof} usa múltiples salones ({len(rooms)}) para el mismo tipo de curso")
+                else:
+                    conflictos_list.append(f"Profesor {prof} usa múltiples salones ({len(rooms)}) pero con tipos de curso diferentes (penalizado)")
+        
         return conflictos_list
 
-    # --- CONSTRUCCIÓN INICIAL ORIGINAL (FUNCIONA SIEMPRE) ---
     def _construir_solucion_greedy(self):
         sol = [None] * len(self.secciones)
         asignado = [False] * len(self.secciones)
@@ -812,12 +900,10 @@ class TabuScheduler:
                     inicios_posibles = [ini for ini in inicios_posibles if ini >= 930]
                 
                 salones_posibles = [sl['CODIGO'] for sl in self.salones if sl['CAPACIDAD'] >= s.cupo]
-                # Filtrar por tipo compatible usando la nueva función
                 salones_posibles = [sl for sl in salones_posibles if compatible_tipo(s.tipo_salon, self.salon_tipo.get(sl, 1))]
                 
                 for ini in inicios_posibles:
                     for salon in salones_posibles:
-                        # Verificar bloqueos del profesor
                         if prof in self.profesores:
                             bloqueado = False
                             for (dias_set, start, end) in self.profesores[prof].bloqueos:
@@ -827,7 +913,6 @@ class TabuScheduler:
                             if bloqueado:
                                 continue
                         
-                        # Verificar otros conflictos
                         conflicto = False
                         for j, asign in enumerate(sol):
                             if asign and asignado[j] and j != idx:
@@ -849,28 +934,21 @@ class TabuScheduler:
                             return True
         return False
 
-    # --- MUTACIÓN ASISTIDA POR FACTIBILIDAD (MEJORADA) ---
     def _mutar_solucion(self, sol):
-        """
-        Genera una nueva solución cambiando una sección por otra asignación que no introduzca conflictos duros.
-        """
         nuevo = deepcopy(sol)
         idx = random.randint(0, len(nuevo)-1)
         s = nuevo[idx]['seccion']
         prof_actual = nuevo[idx]['profesor']
 
-        # Lista de profesores candidatos (reales)
         cand_profs = [p for p in s.cands if p in self.profesores]
         if not cand_profs:
             cand_profs = ["GRADUADOS"] if "GRADUADOS" in s.cands else ["TBA"]
-        # Ordenar por prioridad
         cand_profs.sort(key=lambda p: (
             0 if (p in self.profesores and s.es_grande and self.profesores[p].acepta_grandes == 1) else 1,
             -(self.profesores[p].prioridad_curso(s.cod) if p in self.profesores else 0)
         ))
 
         mejores_opciones = []
-        # Probar varias combinaciones
         for _ in range(30):
             prof = random.choice(cand_profs)
             patrones = PATRONES.get(s.creditos, PATRONES[3])
@@ -885,7 +963,6 @@ class TabuScheduler:
                 patrones = PATRONES.get(s.creditos, PATRONES[3])
 
             patron = random.choice(patrones)
-            # Buscar hora factible
             horas_posibles = set(self.bloques)
             for dia, contrib in patron['days'].items():
                 duracion = contrib * 50
@@ -901,14 +978,12 @@ class TabuScheduler:
                 continue
             hora = random.choice(list(horas_posibles))
 
-            # Salones compatibles
             salones_cand = [sl['CODIGO'] for sl in self.salones
                             if compatible_tipo(s.tipo_salon, sl['TIPO']) and sl['CAPACIDAD'] >= s.cupo]
             if not salones_cand:
                 continue
             salon = random.choice(salones_cand)
 
-            # Verificar conflictos con otras asignaciones (excepto la actual)
             conflicto = False
             for j, asign2 in enumerate(sol):
                 if j != idx and asign2:
@@ -950,18 +1025,13 @@ class TabuScheduler:
                 mejores_opciones.append((costo, prof, patron, hora, salon))
 
         if not mejores_opciones:
-            # No se encontró ninguna alternativa válida, devolver la misma solución
             return nuevo, self._costo_total(nuevo)
-        # Elegir la de menor costo suave
         mejores_opciones.sort(key=lambda x: x[0])
         mejor = mejores_opciones[0]
         nuevo[idx] = {'seccion': s, 'profesor': mejor[1], 'salon': mejor[4], 'patron': mejor[2], 'ini': mejor[3]}
         return nuevo, self._costo_total(nuevo)
 
     def optimizar(self, iteraciones=3000, bar=None, status_text=None):
-        """
-        Algoritmo de recocido simulado que busca minimizar el costo total.
-        """
         temp_inicial = 5000.0
         self.historial_costos = [self.mejor_costo]
         for it in range(iteraciones):
@@ -983,13 +1053,58 @@ class TabuScheduler:
                 if status_text:
                     fitness_actual = 10000 / (10000 + self.mejor_costo)
                     duros = int(self.mejor_costo // 10000)
-                    status_text.markdown(f"**🔄 Generación {it+1}/{iteraciones}** | Conflictos Duros: {duros} | Costo Total: {self.mejor_costo:.2f} | Fitness: {fitness_actual:.5f}")
+                    # Calcular porcentaje de restricciones suaves cumplidas
+                    soft_total, soft_violations = self._calcular_soft_metric(self.mejor_solucion)
+                    soft_pct = 100.0 * (1 - soft_violations / max(soft_total, 1))
+                    status_text.markdown(f"**🔄 Generación {it+1}/{iteraciones}** | Conflictos Duros: {duros} | Costo Total: {self.mejor_costo:.2f} | Fitness: {fitness_actual:.5f} | Soft Satisfaction: {soft_pct:.1f}%")
                 if bar:
                     bar.progress((it+1)/iteraciones)
         return self.mejor_solucion, int(self.mejor_costo // 10000), self.historial_costos
 
+    def _calcular_soft_metric(self, sol):
+        """Retorna (total_soft_instancias, violaciones_soft)"""
+        total = 0
+        violaciones = 0
+        for asign in sol:
+            prof = asign['profesor']
+            if prof in ["GRADUADOS", "TBA"] or prof not in self.profesores:
+                continue
+            prof_obj = self.profesores[prof]
+            # Hora preferencia
+            total += 1
+            if prof_obj.pref_horas == 'AM' and asign['ini'] >= 720:
+                violaciones += 1
+            elif prof_obj.pref_horas == 'PM' and asign['ini'] < 720:
+                violaciones += 1
+            # Días preferencia
+            for dia in asign['patron']['days'].keys():
+                total += 1
+                if prof_obj.pref_dias_set and dia not in prof_obj.pref_dias_set:
+                    violaciones += 1
+        # Penalización suave por salones múltiples (ya está en soft_penalty, pero la contamos)
+        # Contamos por cada profesor con más de un salón del mismo tipo
+        prof_rooms = {}
+        prof_types = {}
+        for asign in sol:
+            prof = asign['profesor']
+            if prof in ["GRADUADOS", "TBA"] or prof not in self.profesores:
+                continue
+            salon = asign['salon']
+            tipo_req = asign['seccion'].tipo_salon
+            if prof not in prof_rooms:
+                prof_rooms[prof] = set()
+                prof_types[prof] = set()
+            prof_rooms[prof].add(salon)
+            prof_types[prof].add(tipo_req)
+        for prof, rooms in prof_rooms.items():
+            if len(rooms) > 1:
+                total += 1
+                if len(prof_types[prof]) == 1:
+                    violaciones += 1
+        return total, violaciones
+
 # ==============================================================================
-# 5. FUNCIÓN PARA GENERAR HEATMAP DE OCUPACIÓN DE SALONES
+# 5. FUNCIÓN PARA GENERAR HEATMAP DE OCUPACIÓN DE SALONES (ejes intercambiados)
 # ==============================================================================
 def generar_heatmap_ocupacion(scheduler, solucion):
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
@@ -997,7 +1112,7 @@ def generar_heatmap_ocupacion(scheduler, solucion):
     fin = scheduler.limite_operativo[1]
     horas_del_dia = list(range(inicio, fin + 1, 30))
     
-    matriz = np.zeros((len(dias_semana), len(horas_del_dia)))
+    matriz = np.zeros((len(horas_del_dia), len(dias_semana)))  # filas = horas, columnas = días
     total_salones = len(scheduler.salones)
     
     for asign in solucion:
@@ -1015,31 +1130,31 @@ def generar_heatmap_ocupacion(scheduler, solucion):
             for minuto in range(ini, ini + duracion, 30):
                 if minuto in horas_del_dia:
                     hora_idx = horas_del_dia.index(minuto)
-                    matriz[dia_idx, hora_idx] += 1
+                    matriz[hora_idx, dia_idx] += 1
     
     if total_salones > 0:
         matriz_porcentaje = (matriz / total_salones) * 100
     else:
         matriz_porcentaje = matriz
     
-    fig, ax = plt.subplots(figsize=(14, 6))
+    fig, ax = plt.subplots(figsize=(12, 7))
     im = ax.imshow(matriz_porcentaje, cmap='YlOrRd', aspect='auto', vmin=0, vmax=100)
-    ax.set_xticks(range(len(horas_del_dia)))
+    ax.set_yticks(range(len(horas_del_dia)))
     etiquetas_horas = [mins_to_str(h).replace(' AM', '').replace(' PM', '') for h in horas_del_dia]
-    step = max(1, len(etiquetas_horas) // 12)
-    ax.set_xticks(range(0, len(horas_del_dia), step))
-    ax.set_xticklabels(etiquetas_horas[::step], rotation=45, ha='right', color='white')
-    ax.set_yticks(range(len(dias_semana)))
-    ax.set_yticklabels(dias_semana, color='white')
+    step_y = max(1, len(etiquetas_horas) // 12)
+    ax.set_yticks(range(0, len(horas_del_dia), step_y))
+    ax.set_yticklabels(etiquetas_horas[::step_y], color='black')
+    ax.set_xticks(range(len(dias_semana)))
+    ax.set_xticklabels(dias_semana, color='black')
     cbar = plt.colorbar(im, ax=ax, label='% Ocupación')
-    cbar.ax.yaxis.label.set_color('white')
-    cbar.ax.tick_params(colors='white')
-    ax.set_title('Ocupación de Salones por Franja Horaria', color='white', pad=20)
-    ax.set_xlabel('Hora de Inicio', color='white')
-    ax.set_ylabel('Día', color='white')
-    fig.patch.set_facecolor('#0F0F0F')
-    ax.set_facecolor('#1A1A1A')
-    ax.tick_params(colors='white')
+    cbar.ax.yaxis.label.set_color('black')
+    cbar.ax.tick_params(colors='black')
+    ax.set_title('Ocupación de Salones por Franja Horaria', color='black', pad=20)
+    ax.set_xlabel('Día', color='black')
+    ax.set_ylabel('Hora de Inicio', color='black')
+    fig.patch.set_facecolor('white')
+    ax.set_facecolor('#f5f5f5')
+    ax.tick_params(colors='black')
     for spine in ax.spines.values():
         spine.set_edgecolor('#D4AF37')
     plt.tight_layout()
@@ -1115,7 +1230,7 @@ def main():
     if not file:
         st.markdown("""
             <div class='glass-card' style='text-align: center;'>
-                <h3 style='margin-top:0; color: #D4AF37;'>📥 Sincronización de Datos</h3>
+                <h3 style='margin-top:0; color: #8E6E13;'>📥 Sincronización de Datos</h3>
                 <p>Asegúrese de que el archivo Excel contiene las hojas: <b>Cursos</b>, <b>Profesores</b>, <b>Salones</b>.<br>
                 Las columnas necesarias incluyen: CURSOS_INTENSIVOS, ACEPTA_GRANDES, BLOQUEO_DIAS, BLOQUEO_HORA_INI, BLOQUEO_HORA_FIN.</p>
             </div>
@@ -1218,12 +1333,12 @@ def main():
             
             fig1, ax1 = plt.subplots(figsize=(10, 4))
             ax1.plot(fitness_history, color='#D4AF37', linewidth=2.5)
-            ax1.set_title("Crecimiento de Fitness Evolutivo", color='white', pad=15)
-            ax1.set_xlabel("Iteraciones", color='white')
-            ax1.set_ylabel("Fitness (1.0 = Ideal)", color='white')
-            fig1.patch.set_facecolor('#0F0F0F')
-            ax1.set_facecolor('#1A1A1A')
-            ax1.tick_params(colors='white')
+            ax1.set_title("Crecimiento de Fitness Evolutivo", color='black', pad=15)
+            ax1.set_xlabel("Iteraciones", color='black')
+            ax1.set_ylabel("Fitness (1.0 = Ideal)", color='black')
+            fig1.patch.set_facecolor('white')
+            ax1.set_facecolor('#f5f5f5')
+            ax1.tick_params(colors='black')
             for spine in ax1.spines.values(): spine.set_edgecolor('#D4AF37')
             st.pyplot(fig1)
             
@@ -1235,10 +1350,10 @@ def main():
             fig2, ax2 = plt.subplots(figsize=(12, 6))
             ax2.bar(cargas_df['Profesor'], cargas_df['Créditos Reales'], color='#8E6E13')
             ax2.axhline(y=12, color='#FF4B4B', linestyle='--', linewidth=2, label='Carga Estándar Típica (12 cr)')
-            ax2.set_xticklabels(cargas_df['Profesor'], rotation=45, ha='right', color='white')
-            ax2.tick_params(colors='white')
-            fig2.patch.set_facecolor('#0F0F0F')
-            ax2.set_facecolor('#1A1A1A')
+            ax2.set_xticklabels(cargas_df['Profesor'], rotation=45, ha='right', color='black')
+            ax2.tick_params(colors='black')
+            fig2.patch.set_facecolor('white')
+            ax2.set_facecolor('#f5f5f5')
             for spine in ax2.spines.values(): spine.set_edgecolor('#D4AF37')
             ax2.legend()
             st.pyplot(fig2)
