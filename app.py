@@ -12,115 +12,132 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from copy import deepcopy
 
+# ==============================================================================
+# 1. ESTÉTICA (TEMA CLARO) 
+# ==============================================================================
+st.set_page_config(page_title="UPRM Scheduler Platinum AI v13 Compact", page_icon="🏛️", layout="wide")
+
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Source+Code+Pro:wght@300;500&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Source+Code+Pro:wght@300;500&display=swap');
+    
+    .stApp { 
+        background-color: #f8f9fa;
+        background-image: 
+            linear-gradient(rgba(212, 175, 55, 0.05) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(212, 175, 55, 0.05) 1px, transparent 1px);
+        background-size: 40px 40px, 40px 40px;
+        background-attachment: fixed;
+        color: #1a1a1a; 
+    }
 
-/* Fondo general */
-.stApp { 
-    background: linear-gradient(180deg, #f8f9fa 0%, #eef1f4 100%);
-    color: #1a1a1a; 
-}
+    .math-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 30px 60px;
+        background: rgba(255, 255, 255, 0.95);
+        border-bottom: 3px solid #D4AF37;
+        margin-bottom: 40px;
+        border-radius: 0 0 30px 30px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+        position: relative;
+        overflow: hidden;
+    }
 
-/* HEADER PRINCIPAL */
-.uprm-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 25px 50px;
-    background: white;
-    border-bottom: 4px solid #D4AF37;
-    border-radius: 0 0 25px 25px;
-    box-shadow: 0 8px 25px rgba(0,0,0,0.08);
-}
+    .math-header::before { content: '∑'; position: absolute; left: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.1); font-family: serif; }
+    .math-header::after { content: '∫'; position: absolute; right: 5%; font-size: 8rem; color: rgba(212, 175, 55, 0.1); font-family: serif; }
 
-/* LOGOS */
-.logo-left, .logo-right {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-}
+    .title-box { text-align: center; z-index: 2; }
 
-.logo-left img {
-    height: 90px;
-}
+    .abstract-icon {
+        font-size: 3rem;
+        color: #D4AF37;
+        border: 2px solid #D4AF37;
+        padding: 10px 20px;
+        border-radius: 50% 0% 50% 0%;
+        background: rgba(212, 175, 55, 0.05);
+        box-shadow: 0 0 15px rgba(212, 175, 55, 0.1);
+    }
 
-.logo-right img {
-    height: 75px;
-}
+    h1 { 
+        font-family: 'Playfair Display', serif !important; 
+        color: #1a1a1a !important; 
+        font-size: 3.2rem !important;
+        margin: 10px 0 !important;
+        text-shadow: 0 0 10px rgba(212, 175, 55, 0.2);
+        letter-spacing: 2px;
+    }
 
-/* TITULO */
-.title-container {
-    text-align: center;
-}
+    .glass-card { 
+        background: rgba(255, 255, 255, 0.9); 
+        border-radius: 15px; 
+        padding: 25px; 
+        border: 1px solid rgba(212, 175, 55, 0.3); 
+        backdrop-filter: blur(10px); 
+        margin-bottom: 20px; 
+        box-shadow: 0 8px 20px rgba(0,0,0,0.05);
+        color: #1a1a1a;
+    }
 
-.title-container h1 {
-    font-family: 'Playfair Display', serif;
-    font-size: 3rem;
-    margin: 0;
-    letter-spacing: 2px;
-}
+    .stButton>button { 
+        background: linear-gradient(135deg, #8E6E13 0%, #D4AF37 50%, #8E6E13 100%) !important; 
+        color: white !important; font-weight: bold !important; border-radius: 4px !important; 
+        width: 100%; border: none !important; height: 55px; font-size: 1.1rem;
+        transition: 0.4s;
+    }
+    .stButton>button:hover { transform: scale(1.02); box-shadow: 0 0 25px rgba(212, 175, 55, 0.4); }
 
-.title-container p {
-    font-family: 'Source Code Pro', monospace;
-    font-size: 0.85rem;
-    color: #555;
-    letter-spacing: 3px;
-}
+    .stDownloadButton>button {
+        background: linear-gradient(135deg, #B8860B 0%, #FFD700 50%, #B8860B 100%) !important;
+        color: #000 !important;
+        font-weight: 800 !important;
+        border: 1px solid #D4AF37 !important;
+    }
 
-/* TARJETAS */
-.glass-card { 
-    background: white; 
-    border-radius: 15px; 
-    padding: 25px; 
-    border: 1px solid rgba(212, 175, 55, 0.3); 
-    margin-bottom: 20px; 
-    box-shadow: 0 8px 20px rgba(0,0,0,0.05);
-}
+    [data-testid="stSidebar"] { 
+        background-color: #ffffff; 
+        border-right: 1px solid #D4AF37; 
+    }
+    
+    [data-testid="stSidebar"] h3 {
+        color: #1a1a1a !important;
+        text-shadow: none;
+        font-family: 'Playfair Display', serif;
+    }
 
-/* BOTONES */
-.stButton>button { 
-    background: linear-gradient(135deg, #8E6E13, #D4AF37);
-    color: white;
-    font-weight: bold;
-    border-radius: 6px;
-    height: 50px;
-    border: none;
-}
+    .status-badge { 
+        background: rgba(212, 175, 55, 0.1); 
+        border: 1px solid #D4AF37; 
+        color: #1a1a1a; 
+        padding: 12px; 
+        border-radius: 8px; 
+        text-align: center;
+        font-family: 'Source Code Pro', monospace;
+        font-weight: 500;
+    }
 
-.stDownloadButton>button {
-    background: linear-gradient(135deg, #FFD700, #B8860B);
-    color: black;
-    font-weight: bold;
-}
-
-/* SIDEBAR */
-[data-testid="stSidebar"] { 
-    background-color: #ffffff; 
-    border-right: 2px solid #D4AF37;
-}
-
+    .stMarkdown, .stDataFrame, .stTable {
+        color: #1a1a1a;
+    }
+    .stDataFrame table, .stTable table {
+        background-color: white;
+        color: #1a1a1a;
+    }
+    .stMetric {
+        color: #1a1a1a;
+    }
 </style>
 
-<div class="uprm-header">
-
-    <!-- LOGO IZQUIERDO -->
-    <div class="logo-left">
-        <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/24/2016/04/upr_rum.jpg">
-    </div>
-
-    <!-- TITULO -->
-    <div class="title-container">
+<div class="math-header">
+    <div class="abstract-icon">Δx</div>
+    <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
-        <p>UPRM MATHEMATICAL OPTIMIZATION ENGINE v13 + COMPACTACIÓN POST-FACTIBILIDAD</p>
+        <p style="color: #555; font-family: 'Source Code Pro'; letter-spacing: 4px; font-size: 0.9rem;">
+            UPRM MATHEMATICAL OPTIMIZATION ENGINE v13 + COMPACTACIÓN POST-FACTIBILIDAD
+        </p>
     </div>
-
-    <!-- LOGOS DERECHA -->
-    <div class="logo-right">
-        <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/24/2016/04/upr_rum.jpg">
-        <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/24/2016/04/upr_rum.jpg">
-    </div>
-
+    <div class="abstract-icon">∞</div>
 </div>
 """, unsafe_allow_html=True)
 
