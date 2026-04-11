@@ -394,8 +394,10 @@ PATRONES = {
         {"name": "Lu-Ma-Ju-Vi", "days": {"Lu": 1, "Ma": 1, "Ju": 1, "Vi": 1}},
         {"name": "Lu-Mi-Ju-Vi", "days": {"Lu": 1, "Mi": 1, "Ju": 1, "Vi": 1}},
         {"name": "Ma-Mi-Ju-Vi", "days": {"Ma": 1, "Mi": 1, "Ju": 1, "Vi": 1}},
+        {"name": "Lu-Mi", "days": {"Lu": 2, "Mi": 2}},
+        {"name": "Lu-Vi", "days": {"Lu": 2, "Vi": 2}},
         {"name": "Ma-Ju", "days": {"Ma": 2, "Ju": 2}},
-
+        {"name": "Mi-Vi", "days": {"Mi": 2, "Vi": 2}},
     ],
     5: [
         {"name": "Lu-Ma-Mi-Ju-Vi", "days": {"Lu": 1, "Ma": 1, "Mi": 1, "Ju": 1, "Vi": 1}},
@@ -1762,7 +1764,7 @@ def main():
     with st.sidebar:
         st.markdown("### ∑ Configuración")
         zona = st.selectbox("Zona Campus", ["CENTRAL", "PERIFERICA"])
-        iteraciones = st.slider("Iteraciones Fase 1 (Factibilidad)", 500, 5000, 3000)
+        iteraciones = st.slider("Iteraciones Fase 1 (Factibilidad)", 500, 10000, 3000)
         file = st.file_uploader("Subir Protocolo Excel", type=['xlsx'])
         st.download_button(
             label="📥 Descargar Plantilla",
