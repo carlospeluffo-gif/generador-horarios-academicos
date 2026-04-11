@@ -539,10 +539,10 @@ def compatible_tipo(curso_tipo, salon_tipo):
     return salon_cat != 2
 
 # ==============================================================================
-# 4. MOTOR DE OPTIMIZACIÓN (SIN CAMBIOS)
+# 4. MOTOR DE OPTIMIZACIÓN (CON RESTRICCIÓN DE DOBLE ROL PARA GRADUADOS)
 # ==============================================================================
 class TabuScheduler:
-    def __init__(self, df_cursos, df_profes, df_salones, zona):
+    def __init__(self, df_cursos, df_profes, df_salones, zona, df_grad=None):
         self.zona = zona
         
         # Salones
@@ -631,6 +631,16 @@ class TabuScheduler:
                 self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", datos['creditos'], cupo, datos['candidatos'], datos['tipo_salon']))
 
         self._preasignar_profesores_robusto()
+
+        # --- NUEVO: Carga de Graduados (doble rol) ---
+        self.graduados_reciben = {}
+        if df_grad is not None and not df_grad.empty:
+            df_grad.columns = [c.strip().upper() for c in df_grad.columns]
+            for _, r in df_grad.iterrows():
+                nombre = str(r['NOMBRE']).strip().upper()
+                recibe_str = str(r['RECIBE']) if pd.notnull(r['RECIBE']) else ''
+                codigos = [c.strip().upper() for c in recibe_str.split(',') if c.strip()]
+                self.graduados_reciben[nombre] = codigos
 
         # Límites horarios
         if zona == "CENTRAL":
@@ -855,7 +865,31 @@ class TabuScheduler:
                     conflicts += 10000
                 if carga < prof_obj.carga_min - 1.5:
                     conflicts += 10000
-        
+
+        # --- NUEVA RESTRICCIÓN FUERTE: DOBLE ROL DE GRADUADOS ---
+        for grad, codigos_recibe in self.graduados_reciben.items():
+            # Secciones que dicta este graduado
+            dicta = [asign for asign in sol if asign['profesor'] == grad]
+            # Secciones de cursos que recibe (por código base)
+            recibe = []
+            for asign in sol:
+                cod_base = asign['seccion'].cod.split('-')[0].upper()
+                if cod_base in codigos_recibe:
+                    recibe.append(asign)
+            # Verificar solapamientos
+            for d in dicta:
+                for r in recibe:
+                    for dia_d, contrib_d in d['patron']['days'].items():
+                        ini_d = d['ini']
+                        fin_d = ini_d + int(contrib_d * 50)
+                        for dia_r, contrib_r in r['patron']['days'].items():
+                            if dia_d == dia_r:
+                                ini_r = r['ini']
+                                fin_r = ini_r + int(contrib_r * 50)
+                                if max(ini_d, ini_r) < min(fin_d, fin_r):
+                                    conflicts += 10000  # Penalización fuerte
+        # ------------------------------------------------------------
+
         if solo_duros:
             return conflicts
         
@@ -948,6 +982,27 @@ class TabuScheduler:
                     conflictos_list.append(f"Profesor {prof} excede carga máxima ({carga:.1f} > {prof_obj.carga_max})")
                 if carga < prof_obj.carga_min - 1.5:
                     conflictos_list.append(f"Profesor {prof} no alcanza carga mínima ({carga:.1f} < {prof_obj.carga_min})")
+
+        # --- NUEVO: Conflictos de doble rol en la auditoría ---
+        for grad, codigos_recibe in self.graduados_reciben.items():
+            dicta = [asign for asign in sol if asign['profesor'] == grad]
+            recibe = []
+            for asign in sol:
+                cod_base = asign['seccion'].cod.split('-')[0].upper()
+                if cod_base in codigos_recibe:
+                    recibe.append(asign)
+            for d in dicta:
+                for r in recibe:
+                    for dia_d, contrib_d in d['patron']['days'].items():
+                        ini_d = d['ini']
+                        fin_d = ini_d + int(contrib_d * 50)
+                        for dia_r, contrib_r in r['patron']['days'].items():
+                            if dia_d == dia_r:
+                                ini_r = r['ini']
+                                fin_r = ini_r + int(contrib_r * 50)
+                                if max(ini_d, ini_r) < min(fin_d, fin_r):
+                                    conflictos_list.append(f"Graduado {grad}: conflicto de doble rol entre {d['seccion'].cod} y {r['seccion'].cod} el {dia_d}")
+        # ------------------------------------------------------------
         
         return conflictos_list
 
@@ -1739,8 +1794,14 @@ def main():
                     df_cursos = pd.read_excel(xls, 'Cursos')
                     df_profes = pd.read_excel(xls, 'Profesores')
                     df_salones = pd.read_excel(xls, 'Salones')
+                    
+                    # --- NUEVO: Leer hoja Graduados si existe ---
+                    df_grad = None
+                    if 'Graduados' in xls.sheet_names:
+                        df_grad = pd.read_excel(xls, 'Graduados')
+                    # ---------------------------------------------
 
-                    scheduler = TabuScheduler(df_cursos, df_profes, df_salones, zona)
+                    scheduler = TabuScheduler(df_cursos, df_profes, df_salones, zona, df_grad)
                     
                     start_time = time.time()
                     bar = st.progress(0)
