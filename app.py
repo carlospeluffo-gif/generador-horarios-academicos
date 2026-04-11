@@ -1334,7 +1334,7 @@ class TabuScheduler:
         return mejor
 
     def optimizar(self, iteraciones=3000, bar=None, status_text=None):
-        temp_inicial = 10000.0
+        temp_inicial = 20000.0
         self.historial_costos = [self.mejor_costo]
         for it in range(iteraciones):
             vecino, costo_vecino = self._mutar_solucion(self.solucion)
