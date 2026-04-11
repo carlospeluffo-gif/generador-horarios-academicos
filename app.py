@@ -1334,7 +1334,7 @@ class TabuScheduler:
         return mejor
 
     def optimizar(self, iteraciones=3000, bar=None, status_text=None):
-        temp_inicial = 5000.0
+        temp_inicial = 10000.0
         self.historial_costos = [self.mejor_costo]
         for it in range(iteraciones):
             vecino, costo_vecino = self._mutar_solucion(self.solucion)
@@ -1764,7 +1764,7 @@ def main():
     with st.sidebar:
         st.markdown("### ∑ Configuración")
         zona = st.selectbox("Zona Campus", ["CENTRAL", "PERIFERICA"])
-        iteraciones = st.slider("Iteraciones Fase 1 (Factibilidad)", 500, 10000, 3000)
+        iteraciones = st.slider("Iteraciones Fase 1 (Factibilidad)", 500, 5000, 3000)
         file = st.file_uploader("Subir Protocolo Excel", type=['xlsx'])
         st.download_button(
             label="📥 Descargar Plantilla",
