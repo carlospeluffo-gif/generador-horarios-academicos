@@ -15,7 +15,7 @@ from copy import deepcopy
 # ==============================================================================
 # 1. ESTÉTICA (IDENTIDAD UPRM - DISEÑO PREMIUM)
 # ==============================================================================
-st.set_page_config(page_title="UPRM Scheduler Platinum v16", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="UPRM Scheduler Platinum v14", page_icon="🏛️", layout="wide")
 
 st.markdown("""
 <style>
@@ -325,17 +325,17 @@ st.markdown("""
     </div>
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
-        <p><span class="subtitle-accent">COLEGIO DE ARTES Y CIENCIAS</span> · OPTIMIZACIÓN ACADÉMICA v16</p>
+        <p><span class="subtitle-accent">COLEGIO DE ARTES Y CIENCIAS</span> · OPTIMIZACIÓN ACADÉMICA v14</p>
     </div>
     <div class="header-logo">
         <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/24/2023/08/logo-rum-200x200-1-150x150.png" alt="UPRM Seal">
     </div>
-    <div style="width:150px;"></div>
+    <div style="width:150px;"></div> <!-- Espaciador para simetría -->
 </div>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. UTILIDADES Y TABLAS DE REFERENCIA
+# 2. UTILIDADES Y TABLAS DE REFERENCIA (SIN CAMBIOS)
 # ==============================================================================
 COMPENSACION_TABLE = [
     (1, 1, 44, 0.0), (1, 45, 74, 0.5), (1, 75, 104, 1.0), (1, 105, 134, 1.5), (1, 135, 164, 2.0),
@@ -430,7 +430,7 @@ def exportar_todo(df):
     return out.getvalue()
 
 # ==============================================================================
-# 3. MODELO DE DATOS
+# 3. MODELO DE DATOS (SIN CAMBIOS)
 # ==============================================================================
 class Seccion:
     def __init__(self, cod, creditos, cupo, candidatos_raw, tipo_salon, es_ayudantia=False):
@@ -539,7 +539,7 @@ def compatible_tipo(curso_tipo, salon_tipo):
     return salon_cat != 2
 
 # ==============================================================================
-# 4. MOTOR DE OPTIMIZACIÓN (REFORZADO PARA 0 CONFLICTOS)
+# 4. MOTOR DE OPTIMIZACIÓN (CON RESTRICCIÓN DE DOBLE ROL PARA GRADUADOS)
 # ==============================================================================
 class TabuScheduler:
     def __init__(self, df_cursos, df_profes, df_salones, zona, df_grad=None):
@@ -632,7 +632,7 @@ class TabuScheduler:
 
         self._preasignar_profesores_robusto()
 
-        # Graduados
+        # --- NUEVO: Carga de Graduados (doble rol) ---
         self.graduados_reciben = {}
         if df_grad is not None and not df_grad.empty:
             df_grad.columns = [c.strip().upper() for c in df_grad.columns]
@@ -866,14 +866,17 @@ class TabuScheduler:
                 if carga < prof_obj.carga_min - 1.5:
                     conflicts += 10000
 
-        # Doble rol
+        # --- NUEVA RESTRICCIÓN FUERTE: DOBLE ROL DE GRADUADOS ---
         for grad, codigos_recibe in self.graduados_reciben.items():
+            # Secciones que dicta este graduado
             dicta = [asign for asign in sol if asign['profesor'] == grad]
+            # Secciones de cursos que recibe (por código base)
             recibe = []
             for asign in sol:
                 cod_base = asign['seccion'].cod.split('-')[0].upper()
                 if cod_base in codigos_recibe:
                     recibe.append(asign)
+            # Verificar solapamientos
             for d in dicta:
                 for r in recibe:
                     for dia_d, contrib_d in d['patron']['days'].items():
@@ -884,7 +887,8 @@ class TabuScheduler:
                                 ini_r = r['ini']
                                 fin_r = ini_r + int(contrib_r * 50)
                                 if max(ini_d, ini_r) < min(fin_d, fin_r):
-                                    conflicts += 10000
+                                    conflicts += 10000  # Penalización fuerte
+        # ------------------------------------------------------------
 
         if solo_duros:
             return conflicts
@@ -979,6 +983,7 @@ class TabuScheduler:
                 if carga < prof_obj.carga_min - 1.5:
                     conflictos_list.append(f"Profesor {prof} no alcanza carga mínima ({carga:.1f} < {prof_obj.carga_min})")
 
+        # --- NUEVO: Conflictos de doble rol en la auditoría ---
         for grad, codigos_recibe in self.graduados_reciben.items():
             dicta = [asign for asign in sol if asign['profesor'] == grad]
             recibe = []
@@ -997,6 +1002,7 @@ class TabuScheduler:
                                 fin_r = ini_r + int(contrib_r * 50)
                                 if max(ini_d, ini_r) < min(fin_d, fin_r):
                                     conflictos_list.append(f"Graduado {grad}: conflicto de doble rol entre {d['seccion'].cod} y {r['seccion'].cod} el {dia_d}")
+        # ------------------------------------------------------------
         
         return conflictos_list
 
@@ -1080,10 +1086,11 @@ class TabuScheduler:
                             return True
         return False
 
-    def _mutar_solucion(self, sol, fuerza_extra=False):
+    def _mutar_solucion(self, sol):
         nuevo = deepcopy(sol)
         idx = random.randint(0, len(nuevo)-1)
         s = nuevo[idx]['seccion']
+        prof_actual = nuevo[idx]['profesor']
 
         cand_profs = [p for p in s.cands if p in self.profesores]
         if not cand_profs:
@@ -1094,8 +1101,7 @@ class TabuScheduler:
         ))
 
         mejores_opciones = []
-        num_intentos = 60 if fuerza_extra else 30
-        for _ in range(num_intentos):
+        for _ in range(30):
             prof = random.choice(cand_profs)
             patrones = PATRONES.get(s.creditos, PATRONES[3])
             if prof in self.profesores:
@@ -1177,59 +1183,15 @@ class TabuScheduler:
         nuevo[idx] = {'seccion': s, 'profesor': mejor[1], 'salon': mejor[4], 'patron': mejor[2], 'ini': mejor[3]}
         return nuevo, self._costo_total(nuevo)
 
-    def _reparar_conflictos(self, sol):
-        """Intenta reparar conflictos residuales reasignando secciones problemáticas."""
-        mejor_sol = deepcopy(sol)
-        mejor_costo = self._costo_total(mejor_sol)
-        if mejor_costo < 10000:
-            return mejor_sol
-        
-        # Identificar índices de secciones con conflictos (heurístico)
-        indices_conflictivos = []
-        for i, asign in enumerate(sol):
-            # Prueba simple: si al eliminar esta sección el costo baja más de 10000, es conflictiva
-            temp_sol = deepcopy(sol)
-            temp_sol[i] = self._crear_asignacion_temporal(asign['seccion'], prof="TBA", salon="TBA")
-            costo_temp = self._costo_total(temp_sol)
-            if costo_temp < mejor_costo - 5000:
-                indices_conflictivos.append(i)
-        
-        if not indices_conflictivos:
-            indices_conflictivos = list(range(len(sol)))
-            random.shuffle(indices_conflictivos)
-            indices_conflictivos = indices_conflictivos[:max(1, len(sol)//10)]
-        
-        for idx in indices_conflictivos:
-            s = sol[idx]['seccion']
-            cand_profs = [p for p in s.cands if p in self.profesores]
-            if not cand_profs:
-                cand_profs = ["GRADUADOS"] if "GRADUADOS" in s.cands else ["TBA"]
-            random.shuffle(cand_profs)
-            for prof in cand_profs[:3]:  # probar primeros 3
-                for patron in PATRONES.get(s.creditos, PATRONES[3]):
-                    for ini in self.bloques:
-                        for salon in [sl['CODIGO'] for sl in self.salones if sl['CAPACIDAD'] >= s.cupo and compatible_tipo(s.tipo_salon, sl['TIPO'])]:
-                            temp_sol = deepcopy(sol)
-                            temp_sol[idx] = {'seccion': s, 'profesor': prof, 'salon': salon, 'patron': patron, 'ini': ini}
-                            if self._costo_total(temp_sol, solo_duros=True) == 0:
-                                nuevo_costo = self._costo_total(temp_sol)
-                                if nuevo_costo < mejor_costo:
-                                    mejor_sol = temp_sol
-                                    mejor_costo = nuevo_costo
-                                    if mejor_costo < 10000:
-                                        return mejor_sol
-        return mejor_sol
-
     def _costo_compactacion(self, sol):
         penalty = 0
         prof_asignaciones = {}
         for asign in sol:
             prof = asign['profesor']
-            if prof in self.graduados_reciben or prof in ["TBA", "GRADUADOS"] or prof not in self.profesores:
-                continue
-            if prof not in prof_asignaciones:
-                prof_asignaciones[prof] = []
-            prof_asignaciones[prof].append(asign)
+            if prof not in ["TBA", "GRADUADOS"] and prof in self.profesores:
+                if prof not in prof_asignaciones:
+                    prof_asignaciones[prof] = []
+                prof_asignaciones[prof].append(asign)
         
         for prof, asigns in prof_asignaciones.items():
             dias_presenciales = set()
@@ -1271,12 +1233,13 @@ class TabuScheduler:
 
     def _mutar_compactacion(self, sol):
         nuevo = deepcopy(sol)
-        indices_validos = [i for i, a in enumerate(sol) if a['profesor'] not in self.graduados_reciben and a['profesor'] in self.profesores]
-        if not indices_validos:
-            return nuevo, self._costo_compactacion(nuevo)
-        idx = random.choice(indices_validos)
+        idx = random.randint(0, len(nuevo)-1)
         s = nuevo[idx]['seccion']
-        prof = nuevo[idx]['profesor']
+        prof_actual = nuevo[idx]['profesor']
+        
+        prof = prof_actual
+        if prof not in self.profesores:
+            return nuevo, self._costo_compactacion(nuevo)
         
         patrones = PATRONES.get(s.creditos, PATRONES[3])
         prof_obj = self.profesores[prof]
@@ -1370,86 +1333,45 @@ class TabuScheduler:
             temp *= 0.995
         return mejor
 
-    def optimizar(self, iteraciones=3000, bar=None, status_text=None, max_reintentos=3):
-        mejor_global = None
-        mejor_costo_global = float('inf')
-        historial_global = []
-        
-        for intento in range(max_reintentos):
-            if intento > 0:
-                # Reiniciar con nueva solución greedy
-                self.solucion = self._construir_solucion_greedy()
+    def optimizar(self, iteraciones=3000, bar=None, status_text=None):
+        temp_inicial = 5000.0
+        self.historial_costos = [self.mejor_costo]
+        for it in range(iteraciones):
+            vecino, costo_vecino = self._mutar_solucion(self.solucion)
+            if costo_vecino <= self.mejor_costo:
+                self.solucion = vecino
+                self.mejor_costo = costo_vecino
                 self.mejor_solucion = deepcopy(self.solucion)
-                self.mejor_costo = self._costo_total(self.solucion)
-                if status_text:
-                    status_text.markdown(f"**🔄 Reintento {intento+1}/{max_reintentos} para alcanzar 0 conflictos...**")
-            
-            temp_inicial = 5000.0
-            historial_local = [self.mejor_costo]
-            estancamiento = 0
-            mejor_local = deepcopy(self.mejor_solucion)
-            mejor_costo_local = self.mejor_costo
-            
-            for it in range(iteraciones):
-                # Ajuste dinámico de fuerza de mutación
-                fuerza = (estancamiento > 50) or (mejor_costo_local >= 10000 and it > iteraciones//2)
-                vecino, costo_vecino = self._mutar_solucion(self.solucion, fuerza_extra=fuerza)
-                
-                if costo_vecino <= mejor_costo_local:
+            else:
+                temp = temp_inicial / (it + 1)
+                try:
+                    prob = math.exp((self.mejor_costo - costo_vecino) / temp)
+                except:
+                    prob = 0
+                if random.random() < prob:
                     self.solucion = vecino
-                    mejor_costo_local = costo_vecino
-                    mejor_local = deepcopy(self.solucion)
-                    estancamiento = 0
-                else:
-                    temp = temp_inicial / (it + 1)
-                    try:
-                        prob = math.exp((mejor_costo_local - costo_vecino) / temp)
-                    except:
-                        prob = 0
-                    if random.random() < prob:
-                        self.solucion = vecino
-                    estancamiento += 1
-                
-                historial_local.append(mejor_costo_local)
-                
-                if it % 10 == 0 or it == iteraciones - 1:
-                    if status_text:
-                        duros = int(mejor_costo_local // 10000)
-                        costo_total = mejor_costo_local
-                        fitness_actual = 10000 / (10000 + costo_total) if costo_total < 100000 else 0
-                        status_text.markdown(
-                            f"**🔄 Fase 1 Gen {it+1}/{iteraciones} (Intento {intento+1})** | "
-                            f"Conflictos Duros: {duros} | Costo Total: {costo_total:.2f} | "
-                            f"Fitness: {fitness_actual:.5f}"
-                        )
-                    if bar:
-                        bar.progress((it+1 + intento*iteraciones) / (iteraciones * max_reintentos + 2000))
-                
-                # Si ya es factible, salir del bucle
-                if mejor_costo_local < 10000:
-                    break
-            
-            # Reparación extra si aún hay conflictos
-            if mejor_costo_local >= 10000:
-                mejor_local = self._reparar_conflictos(mejor_local)
-                mejor_costo_local = self._costo_total(mejor_local)
-            
-            if mejor_costo_local < mejor_costo_global:
-                mejor_global = deepcopy(mejor_local)
-                mejor_costo_global = mejor_costo_local
-                historial_global = historial_local
-            
-            if mejor_costo_global < 10000:
-                break  # Éxito, salir de reintentos
+            self.historial_costos.append(self.mejor_costo)
+            if it % 10 == 0 or it == iteraciones - 1:
+                if status_text:
+                    duros = int(self.mejor_costo // 10000)
+                    costo_total = self.mejor_costo
+                    fitness_actual = 10000 / (10000 + costo_total)
+                    costo_suave = costo_total - (duros * 10000)
+                    if costo_total > 0:
+                        pct_suave = (costo_suave / costo_total) * 100
+                    else:
+                        pct_suave = 0.0
+                    status_text.markdown(
+                        f"**🔄 Fase 1 Gen {it+1}/{iteraciones}** | "
+                        f"Conflictos Duros: {duros} | Costo Total: {costo_total:.2f} | "
+                        f"Fitness: {fitness_actual:.5f} | % Suave: {pct_suave:.1f}%"
+                    )
+                if bar:
+                    bar.progress((it+1)/(iteraciones+2000))
         
-        self.mejor_solucion = mejor_global
-        self.mejor_costo = mejor_costo_global
-        self.historial_costos = historial_global
-        
-        # Compactación solo si es factible
         if self._costo_total(self.mejor_solucion, solo_duros=True) == 0:
             if status_text:
-                status_text.markdown("**✨ Fase 2: Compactación de horarios (solo profesores regulares)...**")
+                status_text.markdown("**✨ Fase 2: Compactación de horarios (mejorando organización)...**")
             self.mejor_solucion = self._compactar_solucion(self.mejor_solucion, iteraciones=2000)
             self.mejor_costo = self._costo_total(self.mejor_solucion)
             if bar:
@@ -1458,15 +1380,16 @@ class TabuScheduler:
         return self.mejor_solucion, int(self.mejor_costo // 10000), self.historial_costos
 
 # ==============================================================================
-# 5. VISUALIZACIONES (sin cambios relevantes)
+# 5. NUEVAS FUNCIONES DE VISUALIZACIÓN (MEJORADAS)
 # ==============================================================================
 def generar_heatmap_plotly(scheduler, solucion):
+    """Heatmap interactivo: días en X, horas en Y."""
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
     inicio = scheduler.limite_operativo[0]
     fin = scheduler.limite_operativo[1]
     horas_del_dia = list(range(inicio, fin + 1, 30))
     
-    matriz = np.zeros((len(horas_del_dia), len(dias_semana)))
+    matriz = np.zeros((len(horas_del_dia), len(dias_semana)))  # invertido
     total_salones = len(scheduler.salones)
     
     for asign in solucion:
@@ -1512,6 +1435,7 @@ def generar_heatmap_plotly(scheduler, solucion):
     return fig
 
 def generar_barras_apiladas_profesor(sol, scheduler):
+    """Gráfico de barras apiladas: distribución de clases por día para cada profesor."""
     df_asign = pd.DataFrame([{
         'Profesor': a['profesor'],
         'Dia': dia,
@@ -1557,7 +1481,8 @@ def generar_barras_apiladas_profesor(sol, scheduler):
     return fig
 
 def generar_evolucion_fitness_plotly(historial):
-    fitness = [10000 / (10000 + c) if c < 100000 else 0 for c in historial]
+    """Gráfico de líneas estilizado para la evolución del fitness."""
+    fitness = [10000 / (10000 + c) for c in historial]
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         y=fitness,
@@ -1583,7 +1508,9 @@ def generar_evolucion_fitness_plotly(historial):
     return fig
 
 def generar_calendario_visual(sol, scheduler, filtro_prof=None, filtro_salon=None, filtro_curso=None):
+    """Calendario tipo Gantt realista: días en Y, horas en X, bloques rectangulares."""
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
+    # Preparar datos
     eventos = []
     for a in sol:
         if filtro_prof and a['profesor'] != filtro_prof:
@@ -1731,6 +1658,7 @@ def generar_reporte_pdf_html(scheduler, sol, cargas_finales, master_df):
     return html
 
 def generar_figura_cientifica_carga(cargas_finales, scheduler):
+    """Figura científica unificada con todos los profesores."""
     profesores = list(cargas_finales.keys())
     profesores.sort(key=lambda p: cargas_finales[p], reverse=True)
     carga_asignada = [cargas_finales[p] for p in profesores]
@@ -1740,12 +1668,16 @@ def generar_figura_cientifica_carga(cargas_finales, scheduler):
     x_vals = list(range(len(profesores)))
     
     fig = go.Figure()
+    
+    # Barras (carga asignada)
     fig.add_trace(go.Bar(
         x=x_vals,
         y=carga_asignada,
         name='Carga Asignada',
         marker=dict(color='lightgray', line=dict(color='black', width=1))
     ))
+    
+    # Línea carga mínima
     fig.add_trace(go.Scatter(
         x=x_vals,
         y=carga_min,
@@ -1754,6 +1686,8 @@ def generar_figura_cientifica_carga(cargas_finales, scheduler):
         line=dict(color='blue', width=2, dash='dot'),
         marker=dict(size=6)
     ))
+    
+    # Línea carga máxima
     fig.add_trace(go.Scatter(
         x=x_vals,
         y=carga_max,
@@ -1762,6 +1696,7 @@ def generar_figura_cientifica_carga(cargas_finales, scheduler):
         line=dict(color='orange', width=2, dash='dot'),
         marker=dict(size=6)
     ))
+    
     fig.update_layout(
         title="Análisis de Carga Académica por Profesor",
         xaxis=dict(
@@ -1778,6 +1713,7 @@ def generar_figura_cientifica_carga(cargas_finales, scheduler):
     )
     fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
     fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+    
     return fig
 
 def generar_plantilla():
@@ -1817,18 +1753,12 @@ def generar_plantilla():
             'TIPO': [1, 2]
         })
         df_salones.to_excel(writer, sheet_name='Salones', index=False)
-        
-        df_grad = pd.DataFrame({
-            'NOMBRE': ['graduado1'],
-            'RECIBE': ['MATE6005']
-        })
-        df_grad.to_excel(writer, sheet_name='Graduados', index=False)
     
     output.seek(0)
     return output.getvalue()
 
 # ==============================================================================
-# 6. UI PRINCIPAL
+# 8. UI PRINCIPAL
 # ==============================================================================
 def main():
     with st.sidebar:
@@ -1865,16 +1795,18 @@ def main():
                     df_profes = pd.read_excel(xls, 'Profesores')
                     df_salones = pd.read_excel(xls, 'Salones')
                     
+                    # --- NUEVO: Leer hoja Graduados si existe ---
                     df_grad = None
                     if 'Graduados' in xls.sheet_names:
                         df_grad = pd.read_excel(xls, 'Graduados')
+                    # ---------------------------------------------
 
                     scheduler = TabuScheduler(df_cursos, df_profes, df_salones, zona, df_grad)
                     
                     start_time = time.time()
                     bar = st.progress(0)
                     status = st.empty()
-                    mejor_sol, conflictos, historial = scheduler.optimizar(iteraciones, bar, status, max_reintentos=3)
+                    mejor_sol, conflictos, historial = scheduler.optimizar(iteraciones, bar, status)
                     
                     st.session_state.elapsed_time = time.time() - start_time
                     st.session_state.conflicts = conflictos
@@ -1918,50 +1850,26 @@ def main():
             st.download_button("💾 EXPORTAR EXCEL PLATINUM", exportar_todo(edited), "Horario_Final_UPRM.xlsx", use_container_width=True)
             
         with t2:
-            f1, f2, f3, f4 = st.tabs(["Por Profesor", "Por Curso", "Por Salón", "Por Graduado"])
+            f1, f2, f3 = st.tabs(["Por Profesor", "Por Curso", "Por Salón"])
             df_master = st.session_state.master
-            scheduler = st.session_state.scheduler
-            
             with f1:
-                lista_profes = sorted([p for p in df_master['Persona'].unique() if p not in ["GRADUADOS", "TBA"] and p in scheduler.profesores])
+                lista_profes = sorted([p for p in df_master['Persona'].unique() if p != "GRADUADOS"])
                 if lista_profes:
                     p = st.selectbox("Seleccionar Profesor", lista_profes)
                     subset = df_master[df_master['Persona'] == p]
                     st.table(subset[['ID', 'Estudiantes (Cupo)', 'Créditos Reales', 'Días', 'Horario', 'Salón']])
-                    
             with f2:
                 lista_cursos = sorted(df_master['Asignatura'].unique())
                 if lista_cursos:
                     c = st.selectbox("Seleccionar Curso", lista_cursos)
                     subset = df_master[df_master['Asignatura'] == c]
                     st.table(subset[['ID', 'Estudiantes (Cupo)', 'Persona', 'Días', 'Horario', 'Salón']])
-                    
             with f3:
                 lista_salones = sorted(df_master['Salón'].unique())
                 if lista_salones:
                     sl = st.selectbox("Seleccionar Salón", lista_salones)
                     subset = df_master[df_master['Salón'] == sl]
                     st.table(subset[['ID', 'Asignatura', 'Persona', 'Días', 'Horario']])
-                    
-            with f4:
-                if scheduler.graduados_reciben:
-                    grad_list = sorted(scheduler.graduados_reciben.keys())
-                    g_sel = st.selectbox("Seleccionar Graduado", grad_list)
-                    dicta_df = df_master[df_master['Persona'] == g_sel]
-                    st.markdown("**📚 Cursos que dicta:**")
-                    if not dicta_df.empty:
-                        st.table(dicta_df[['ID', 'Asignatura', 'Días', 'Horario', 'Salón']])
-                    else:
-                        st.write("No dicta cursos en este horario.")
-                    recibe_cods = scheduler.graduados_reciben[g_sel]
-                    recibe_df = df_master[df_master['Asignatura'].isin(recibe_cods)]
-                    st.markdown("**🎓 Cursos que recibe:**")
-                    if not recibe_df.empty:
-                        st.table(recibe_df[['ID', 'Asignatura', 'Persona', 'Días', 'Horario', 'Salón']])
-                    else:
-                        st.write("No se encontraron secciones de los cursos que recibe.")
-                else:
-                    st.info("No hay graduados registrados en esta instancia.")
                 
         with t3:
             conflictos = st.session_state.conflicts
