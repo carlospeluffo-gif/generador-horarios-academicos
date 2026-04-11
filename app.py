@@ -15,7 +15,7 @@ from copy import deepcopy
 # ==============================================================================
 # 1. ESTÉTICA (IDENTIDAD UPRM - DISEÑO PREMIUM)
 # ==============================================================================
-st.set_page_config(page_title="UPRM Scheduler Platinum v15", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="UPRM Scheduler Platinum v14", page_icon="🏛️", layout="wide")
 
 st.markdown("""
 <style>
@@ -325,7 +325,7 @@ st.markdown("""
     </div>
     <div class="title-box">
         <h1>UPRM TIMETABLE SYSTEM</h1>
-        <p><span class="subtitle-accent">COLEGIO DE ARTES Y CIENCIAS</span> · OPTIMIZACIÓN ACADÉMICA v15</p>
+        <p><span class="subtitle-accent">COLEGIO DE ARTES Y CIENCIAS</span> · OPTIMIZACIÓN ACADÉMICA v14</p>
     </div>
     <div class="header-logo">
         <img src="https://www.uprm.edu/portada/wp-content/uploads/sites/24/2023/08/logo-rum-200x200-1-150x150.png" alt="UPRM Seal">
@@ -335,7 +335,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. UTILIDADES Y TABLAS DE REFERENCIA
+# 2. UTILIDADES Y TABLAS DE REFERENCIA (SIN CAMBIOS)
 # ==============================================================================
 COMPENSACION_TABLE = [
     (1, 1, 44, 0.0), (1, 45, 74, 0.5), (1, 75, 104, 1.0), (1, 105, 134, 1.5), (1, 135, 164, 2.0),
@@ -430,7 +430,7 @@ def exportar_todo(df):
     return out.getvalue()
 
 # ==============================================================================
-# 3. MODELO DE DATOS
+# 3. MODELO DE DATOS (SIN CAMBIOS)
 # ==============================================================================
 class Seccion:
     def __init__(self, cod, creditos, cupo, candidatos_raw, tipo_salon, es_ayudantia=False):
@@ -539,7 +539,7 @@ def compatible_tipo(curso_tipo, salon_tipo):
     return salon_cat != 2
 
 # ==============================================================================
-# 4. MOTOR DE OPTIMIZACIÓN (CON DOBLE ROL Y COMPACTACIÓN SOLO PARA PROFESORES REGULARES)
+# 4. MOTOR DE OPTIMIZACIÓN (CON RESTRICCIÓN DE DOBLE ROL PARA GRADUADOS)
 # ==============================================================================
 class TabuScheduler:
     def __init__(self, df_cursos, df_profes, df_salones, zona, df_grad=None):
@@ -632,7 +632,7 @@ class TabuScheduler:
 
         self._preasignar_profesores_robusto()
 
-        # Carga de Graduados (doble rol)
+        # --- NUEVO: Carga de Graduados (doble rol) ---
         self.graduados_reciben = {}
         if df_grad is not None and not df_grad.empty:
             df_grad.columns = [c.strip().upper() for c in df_grad.columns]
@@ -866,14 +866,17 @@ class TabuScheduler:
                 if carga < prof_obj.carga_min - 1.5:
                     conflicts += 10000
 
-        # Restricción de doble rol para graduados
+        # --- NUEVA RESTRICCIÓN FUERTE: DOBLE ROL DE GRADUADOS ---
         for grad, codigos_recibe in self.graduados_reciben.items():
+            # Secciones que dicta este graduado
             dicta = [asign for asign in sol if asign['profesor'] == grad]
+            # Secciones de cursos que recibe (por código base)
             recibe = []
             for asign in sol:
                 cod_base = asign['seccion'].cod.split('-')[0].upper()
                 if cod_base in codigos_recibe:
                     recibe.append(asign)
+            # Verificar solapamientos
             for d in dicta:
                 for r in recibe:
                     for dia_d, contrib_d in d['patron']['days'].items():
@@ -884,7 +887,8 @@ class TabuScheduler:
                                 ini_r = r['ini']
                                 fin_r = ini_r + int(contrib_r * 50)
                                 if max(ini_d, ini_r) < min(fin_d, fin_r):
-                                    conflicts += 10000
+                                    conflicts += 10000  # Penalización fuerte
+        # ------------------------------------------------------------
 
         if solo_duros:
             return conflicts
@@ -979,7 +983,7 @@ class TabuScheduler:
                 if carga < prof_obj.carga_min - 1.5:
                     conflictos_list.append(f"Profesor {prof} no alcanza carga mínima ({carga:.1f} < {prof_obj.carga_min})")
 
-        # Conflictos de doble rol en auditoría
+        # --- NUEVO: Conflictos de doble rol en la auditoría ---
         for grad, codigos_recibe in self.graduados_reciben.items():
             dicta = [asign for asign in sol if asign['profesor'] == grad]
             recibe = []
@@ -998,6 +1002,7 @@ class TabuScheduler:
                                 fin_r = ini_r + int(contrib_r * 50)
                                 if max(ini_d, ini_r) < min(fin_d, fin_r):
                                     conflictos_list.append(f"Graduado {grad}: conflicto de doble rol entre {d['seccion'].cod} y {r['seccion'].cod} el {dia_d}")
+        # ------------------------------------------------------------
         
         return conflictos_list
 
@@ -1183,12 +1188,10 @@ class TabuScheduler:
         prof_asignaciones = {}
         for asign in sol:
             prof = asign['profesor']
-            # Excluir graduados y otros no profesores regulares
-            if prof in self.graduados_reciben or prof in ["TBA", "GRADUADOS"] or prof not in self.profesores:
-                continue
-            if prof not in prof_asignaciones:
-                prof_asignaciones[prof] = []
-            prof_asignaciones[prof].append(asign)
+            if prof not in ["TBA", "GRADUADOS"] and prof in self.profesores:
+                if prof not in prof_asignaciones:
+                    prof_asignaciones[prof] = []
+                prof_asignaciones[prof].append(asign)
         
         for prof, asigns in prof_asignaciones.items():
             dias_presenciales = set()
@@ -1230,13 +1233,13 @@ class TabuScheduler:
 
     def _mutar_compactacion(self, sol):
         nuevo = deepcopy(sol)
-        # Seleccionar un índice cuyo profesor no sea graduado
-        indices_validos = [i for i, a in enumerate(sol) if a['profesor'] not in self.graduados_reciben and a['profesor'] in self.profesores]
-        if not indices_validos:
-            return nuevo, self._costo_compactacion(nuevo)
-        idx = random.choice(indices_validos)
+        idx = random.randint(0, len(nuevo)-1)
         s = nuevo[idx]['seccion']
-        prof = nuevo[idx]['profesor']
+        prof_actual = nuevo[idx]['profesor']
+        
+        prof = prof_actual
+        if prof not in self.profesores:
+            return nuevo, self._costo_compactacion(nuevo)
         
         patrones = PATRONES.get(s.creditos, PATRONES[3])
         prof_obj = self.profesores[prof]
@@ -1368,7 +1371,7 @@ class TabuScheduler:
         
         if self._costo_total(self.mejor_solucion, solo_duros=True) == 0:
             if status_text:
-                status_text.markdown("**✨ Fase 2: Compactación de horarios (solo profesores regulares)...**")
+                status_text.markdown("**✨ Fase 2: Compactación de horarios (mejorando organización)...**")
             self.mejor_solucion = self._compactar_solucion(self.mejor_solucion, iteraciones=2000)
             self.mejor_costo = self._costo_total(self.mejor_solucion)
             if bar:
@@ -1377,15 +1380,16 @@ class TabuScheduler:
         return self.mejor_solucion, int(self.mejor_costo // 10000), self.historial_costos
 
 # ==============================================================================
-# 5. VISUALIZACIONES
+# 5. NUEVAS FUNCIONES DE VISUALIZACIÓN (MEJORADAS)
 # ==============================================================================
 def generar_heatmap_plotly(scheduler, solucion):
+    """Heatmap interactivo: días en X, horas en Y."""
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
     inicio = scheduler.limite_operativo[0]
     fin = scheduler.limite_operativo[1]
     horas_del_dia = list(range(inicio, fin + 1, 30))
     
-    matriz = np.zeros((len(horas_del_dia), len(dias_semana)))
+    matriz = np.zeros((len(horas_del_dia), len(dias_semana)))  # invertido
     total_salones = len(scheduler.salones)
     
     for asign in solucion:
@@ -1431,6 +1435,7 @@ def generar_heatmap_plotly(scheduler, solucion):
     return fig
 
 def generar_barras_apiladas_profesor(sol, scheduler):
+    """Gráfico de barras apiladas: distribución de clases por día para cada profesor."""
     df_asign = pd.DataFrame([{
         'Profesor': a['profesor'],
         'Dia': dia,
@@ -1476,6 +1481,7 @@ def generar_barras_apiladas_profesor(sol, scheduler):
     return fig
 
 def generar_evolucion_fitness_plotly(historial):
+    """Gráfico de líneas estilizado para la evolución del fitness."""
     fitness = [10000 / (10000 + c) for c in historial]
     fig = go.Figure()
     fig.add_trace(go.Scatter(
@@ -1502,7 +1508,9 @@ def generar_evolucion_fitness_plotly(historial):
     return fig
 
 def generar_calendario_visual(sol, scheduler, filtro_prof=None, filtro_salon=None, filtro_curso=None):
+    """Calendario tipo Gantt realista: días en Y, horas en X, bloques rectangulares."""
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
+    # Preparar datos
     eventos = []
     for a in sol:
         if filtro_prof and a['profesor'] != filtro_prof:
@@ -1650,6 +1658,7 @@ def generar_reporte_pdf_html(scheduler, sol, cargas_finales, master_df):
     return html
 
 def generar_figura_cientifica_carga(cargas_finales, scheduler):
+    """Figura científica unificada con todos los profesores."""
     profesores = list(cargas_finales.keys())
     profesores.sort(key=lambda p: cargas_finales[p], reverse=True)
     carga_asignada = [cargas_finales[p] for p in profesores]
@@ -1659,12 +1668,16 @@ def generar_figura_cientifica_carga(cargas_finales, scheduler):
     x_vals = list(range(len(profesores)))
     
     fig = go.Figure()
+    
+    # Barras (carga asignada)
     fig.add_trace(go.Bar(
         x=x_vals,
         y=carga_asignada,
         name='Carga Asignada',
         marker=dict(color='lightgray', line=dict(color='black', width=1))
     ))
+    
+    # Línea carga mínima
     fig.add_trace(go.Scatter(
         x=x_vals,
         y=carga_min,
@@ -1673,6 +1686,8 @@ def generar_figura_cientifica_carga(cargas_finales, scheduler):
         line=dict(color='blue', width=2, dash='dot'),
         marker=dict(size=6)
     ))
+    
+    # Línea carga máxima
     fig.add_trace(go.Scatter(
         x=x_vals,
         y=carga_max,
@@ -1681,6 +1696,7 @@ def generar_figura_cientifica_carga(cargas_finales, scheduler):
         line=dict(color='orange', width=2, dash='dot'),
         marker=dict(size=6)
     ))
+    
     fig.update_layout(
         title="Análisis de Carga Académica por Profesor",
         xaxis=dict(
@@ -1697,6 +1713,7 @@ def generar_figura_cientifica_carga(cargas_finales, scheduler):
     )
     fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
     fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+    
     return fig
 
 def generar_plantilla():
@@ -1736,18 +1753,12 @@ def generar_plantilla():
             'TIPO': [1, 2]
         })
         df_salones.to_excel(writer, sheet_name='Salones', index=False)
-        
-        df_grad = pd.DataFrame({
-            'NOMBRE': ['graduado1'],
-            'RECIBE': ['MATE6005']
-        })
-        df_grad.to_excel(writer, sheet_name='Graduados', index=False)
     
     output.seek(0)
     return output.getvalue()
 
 # ==============================================================================
-# 6. UI PRINCIPAL
+# 8. UI PRINCIPAL
 # ==============================================================================
 def main():
     with st.sidebar:
@@ -1784,9 +1795,11 @@ def main():
                     df_profes = pd.read_excel(xls, 'Profesores')
                     df_salones = pd.read_excel(xls, 'Salones')
                     
+                    # --- NUEVO: Leer hoja Graduados si existe ---
                     df_grad = None
                     if 'Graduados' in xls.sheet_names:
                         df_grad = pd.read_excel(xls, 'Graduados')
+                    # ---------------------------------------------
 
                     scheduler = TabuScheduler(df_cursos, df_profes, df_salones, zona, df_grad)
                     
@@ -1837,52 +1850,26 @@ def main():
             st.download_button("💾 EXPORTAR EXCEL PLATINUM", exportar_todo(edited), "Horario_Final_UPRM.xlsx", use_container_width=True)
             
         with t2:
-            f1, f2, f3, f4 = st.tabs(["Por Profesor", "Por Curso", "Por Salón", "Por Graduado"])
+            f1, f2, f3 = st.tabs(["Por Profesor", "Por Curso", "Por Salón"])
             df_master = st.session_state.master
-            scheduler = st.session_state.scheduler
-            
             with f1:
-                lista_profes = sorted([p for p in df_master['Persona'].unique() if p not in ["GRADUADOS", "TBA"] and p in scheduler.profesores])
+                lista_profes = sorted([p for p in df_master['Persona'].unique() if p != "GRADUADOS"])
                 if lista_profes:
                     p = st.selectbox("Seleccionar Profesor", lista_profes)
                     subset = df_master[df_master['Persona'] == p]
                     st.table(subset[['ID', 'Estudiantes (Cupo)', 'Créditos Reales', 'Días', 'Horario', 'Salón']])
-                    
             with f2:
                 lista_cursos = sorted(df_master['Asignatura'].unique())
                 if lista_cursos:
                     c = st.selectbox("Seleccionar Curso", lista_cursos)
                     subset = df_master[df_master['Asignatura'] == c]
                     st.table(subset[['ID', 'Estudiantes (Cupo)', 'Persona', 'Días', 'Horario', 'Salón']])
-                    
             with f3:
                 lista_salones = sorted(df_master['Salón'].unique())
                 if lista_salones:
                     sl = st.selectbox("Seleccionar Salón", lista_salones)
                     subset = df_master[df_master['Salón'] == sl]
                     st.table(subset[['ID', 'Asignatura', 'Persona', 'Días', 'Horario']])
-                    
-            with f4:
-                if scheduler.graduados_reciben:
-                    grad_list = sorted(scheduler.graduados_reciben.keys())
-                    g_sel = st.selectbox("Seleccionar Graduado", grad_list)
-                    # Secciones que dicta
-                    dicta_df = df_master[df_master['Persona'] == g_sel]
-                    st.markdown("**📚 Cursos que dicta:**")
-                    if not dicta_df.empty:
-                        st.table(dicta_df[['ID', 'Asignatura', 'Días', 'Horario', 'Salón']])
-                    else:
-                        st.write("No dicta cursos en este horario.")
-                    # Secciones que recibe
-                    recibe_cods = scheduler.graduados_reciben[g_sel]
-                    recibe_df = df_master[df_master['Asignatura'].isin(recibe_cods)]
-                    st.markdown("**🎓 Cursos que recibe:**")
-                    if not recibe_df.empty:
-                        st.table(recibe_df[['ID', 'Asignatura', 'Persona', 'Días', 'Horario', 'Salón']])
-                    else:
-                        st.write("No se encontraron secciones de los cursos que recibe.")
-                else:
-                    st.info("No hay graduados registrados en esta instancia.")
                 
         with t3:
             conflictos = st.session_state.conflicts
