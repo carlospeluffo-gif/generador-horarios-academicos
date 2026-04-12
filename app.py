@@ -415,10 +415,7 @@ PATRONES = {
     4: [
     {"name": "Lu-Mi-Vi-Ju", "days": {"Lu": 1, "Mi": 1, "Vi": 1, "Ju": 1}},
     {"name": "Ma-Ju-Vi", "days": {"Ma": 1.5, "Ju": 1.5, "Vi": 1}},
-    {"name": "Lu-Mi", "days": {"Lu": 2, "Mi": 2}},
     {"name": "Ma-Ju", "days": {"Ma": 2, "Ju": 2}},
-    {"name": "Lu (Intensivo)", "days": {"Lu": 4}},
-    {"name": "Ma (Intensivo)", "days": {"Ma": 4}},
     ],
     5: [
         {"name": "Lu-Ma-Mi-Ju-Vi", "days": {"Lu": 1, "Ma": 1, "Mi": 1, "Ju": 1, "Vi": 1}},
