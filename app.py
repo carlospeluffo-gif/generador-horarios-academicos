@@ -382,6 +382,22 @@ def str_to_mins(t_str):
     return h * 60 + m
 
 PATRONES = {
+    1: [
+        {"name": "Lu", "days": {"Lu": 1}},
+        {"name": "Ma", "days": {"Ma": 1}},
+        {"name": "Mi", "days": {"Mi": 1}},
+        {"name": "Ju", "days": {"Ju": 1}},
+        {"name": "Vi", "days": {"Vi": 1}},
+    ],
+    2: [
+        {"name": "Lu-Mi", "days": {"Lu": 1, "Mi": 1}},
+        {"name": "Ma-Ju", "days": {"Ma": 1, "Ju": 1}},
+        {"name": "Lu (Intensivo)", "days": {"Lu": 2}},
+        {"name": "Ma (Intensivo)", "days": {"Ma": 2}},
+        {"name": "Mi (Intensivo)", "days": {"Mi": 2}},
+        {"name": "Ju (Intensivo)", "days": {"Ju": 2}},
+        {"name": "Vi (Intensivo)", "days": {"Vi": 2}},
+    ],
     3: [
         {"name": "Lu-Mi-Vi", "days": {"Lu": 1, "Mi": 1, "Vi": 1}},
         {"name": "Ma-Ju", "days": {"Ma": 1.5, "Ju": 1.5}},
@@ -395,7 +411,6 @@ PATRONES = {
         {"name": "Lu-Mi-Ju-Vi", "days": {"Lu": 1, "Mi": 1, "Ju": 1, "Vi": 1}},
         {"name": "Ma-Mi-Ju-Vi", "days": {"Ma": 1, "Mi": 1, "Ju": 1, "Vi": 1}},
         {"name": "Lu-Mi", "days": {"Lu": 2, "Mi": 2}},
-        {"name": "Lu-Vi", "days": {"Lu": 2, "Vi": 2}},
         {"name": "Ma-Ju", "days": {"Ma": 2, "Ju": 2}},
         {"name": "Mi-Vi", "days": {"Mi": 2, "Vi": 2}},
     ],
@@ -405,12 +420,8 @@ PATRONES = {
         {"name": "Lu-Ma-Ju-Vi", "days": {"Lu": 1, "Ma": 1, "Ju": 1, "Vi": 2}},
         {"name": "Lu-Mi-Ju-Vi", "days": {"Lu": 1, "Mi": 1, "Ju": 1, "Vi": 2}},
         {"name": "Ma-Mi-Ju-Vi", "days": {"Ma": 1, "Mi": 1, "Ju": 1, "Vi": 2}},
-        {"name": "Lu-Mi-Vi", "days": {"Lu": 2, "Mi": 2, "Vi": 1}},
-        {"name": "Ma-Ju-Vi", "days": {"Ma": 1.5, "Ju": 1.5, "Vi": 2}},
-        {"name": "Lu-Ma-Mi", "days": {"Lu": 2, "Ma": 1, "Mi": 2}},
     ]
 }
-
 def format_horario(patron, h_ini):
     parts = []
     for dia, contrib in patron['days'].items():
