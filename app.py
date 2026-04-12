@@ -1334,69 +1334,72 @@ class TabuScheduler:
         return False
 
     def calcular_solo_conflictos_duros(self, solucion):
-        """Calcula el costo ignorando las preferencias de los profesores."""
         costo = 0
+        cargas = {}
+        
         for i, s1 in enumerate(solucion):
+            p = s1['profesor']
+            cargas[p] = cargas.get(p, 0) + self.get_sec_creditos(s1['seccion'], p)
+            
+            # --- CONFLICTO: INTENSIVOS (NUEVO) ---
+            es_intensivo_sec = s1['seccion'].intensivo
+            quiere_intensivo_prof = self.profesores[p].get('intensivo', False)
+            if es_intensivo_sec != quiere_intensivo_prof:
+                costo += 20000  # Penalidad altísima
+            
             for j, s2 in enumerate(solucion):
                 if i >= j: continue
-                if s1['dia'] == s2['dia']:
-                    if self.hay_solapamiento(s1['inicio'], s1['fin'], s2['inicio'], s2['fin']):
-                        if s1['profesor'] == s2['profesor'] or s1['salon'] == s2['salon']:
-                            costo += 10000
+                # Choques de horario (Profesor o Salón)
+                if s1['dia'] == s2['dia'] and self.hay_solapamiento(s1['inicio'], s1['fin'], s2['inicio'], s2['fin']):
+                    if s1['profesor'] == s2['profesor'] or s1['salon'] == s2['salon']:
+                        costo += 10000
+        
+        # --- CONFLICTO: CARGAS ---
+        for prof, carga in cargas.items():
+            if prof in ["TBA", "GRADUADOS"]: continue
+            p_data = self.profesores[prof]
+            if carga > p_data['max']: costo += 15000
+            if carga < p_data['min']: costo += 5000
+            
         return costo
 
     def fase_reparacion_robusta(self, solucion_actual):
-        """
-        FASE 2: Reparación de Choques Y de Carga Académica.
-        Si un profesor está excedido, le pasa la materia a otro disponible.
-        """
         mejor_sol = deepcopy(solucion_actual)
         
-        for _ in range(150): # Más intentos para asegurar éxito
-            costo_duro = self.calcular_solo_conflictos_duros(mejor_sol)
-            if costo_duro == 0:
+        for _ in range(200): # Más iteraciones para problemas complejos
+            if self.calcular_solo_conflictos_duros(mejor_sol) == 0:
                 break
             
-            # --- PARTE A: REPARAR CARGA (ELIMINAR EXCESOS) ---
-            cargas = {}
-            for asign in mejor_sol:
-                p = asign['profesor']
-                cargas[p] = cargas.get(p, 0) + self.get_sec_creditos(asign['seccion'], p)
-            
+            # 1. REPARAR INTENSIVOS Y CARGA (Cambio de Profesor)
             for i, asign in enumerate(mejor_sol):
-                prof_actual = asign['profesor']
-                max_p = self.profesores[prof_actual]['max']
+                p_actual = asign['profesor']
+                es_intensivo_sec = asign['seccion'].intensivo
+                quiere_intensivo_prof = self.profesores[p_actual].get('intensivo', False)
                 
-                if cargas[prof_actual] > max_p:
-                    # Este profesor está explotado. Busquemos a alguien con espacio.
-                    candidatos = [p for p, data in self.profesores.items() 
-                                 if p != prof_actual and p != "TBA" and 
-                                 cargas.get(p, 0) + self.get_sec_creditos(asign['seccion'], p) <= data['max']]
-                    
+                # Si el profesor no coincide con el tipo de curso (Intensivo/No Intensivo)
+                if es_intensivo_sec != quiere_intensivo_prof:
+                    # Buscar un profesor que SÍ coincida con el tipo de curso
+                    candidatos = [p for p, d in self.profesores.items() 
+                                 if d.get('intensivo', False) == es_intensivo_sec and p not in ["TBA", "GRADUADOS"]]
                     if candidatos:
-                        nuevo_p = random.choice(candidatos)
-                        mejor_sol[i]['profesor'] = nuevo_p
-                        cargas[prof_actual] -= self.get_sec_creditos(asign['seccion'], prof_actual)
-                        cargas[nuevo_p] = cargas.get(nuevo_p, 0) + self.get_sec_creditos(asign['seccion'], nuevo_p)
+                        mejor_sol[i]['profesor'] = random.choice(candidatos)
 
-            # --- PARTE B: REPARAR CHOQUES HORARIOS (LO QUE YA TENÍAMOS) ---
+            # 2. REPARAR CHOQUES HORARIOS (Cambio de Tiempo/Salón)
             en_conflicto = [i for i, sec in enumerate(mejor_sol) if self.tiene_conflicto_duro_individual(sec, mejor_sol)]
-            if not en_conflicto: continue
-            
-            idx = random.choice(en_conflicto)
-            sec = mejor_sol[idx]
-            posibles = self.generar_todos_los_movimientos_posibles(sec)
-            
-            # Priorizamos huecos donde NO haya choque de profesor ni salón
-            legales = [p for p in posibles if not self.tiene_conflicto_duro_individual(p, [s for j,s in enumerate(mejor_sol) if i!=j])]
-            if legales:
-                mejor_sol[idx] = random.choice(legales)
-            else:
-                # Si no hay hueco, probamos cambiando al profesor por otro que esté libre a esa hora
-                mejor_sol[idx]['profesor'] = random.choice(list(self.profesores.keys()))
-
+            if en_conflicto:
+                idx = random.choice(en_conflicto)
+                # Buscamos una posición que sea legal para EL PROFESOR ACTUAL
+                posibles = self.generar_todos_los_movimientos_posibles(mejor_sol[idx])
+                legales = [p for p in posibles if not self.tiene_conflicto_duro_individual(p, [s for j,s in enumerate(mejor_sol) if idx!=j])]
+                
+                if legales:
+                    mejor_sol[idx] = random.choice(legales)
+                else:
+                    # Si no hay hueco, forzamos un cambio aleatorio para "agitar" el tablero
+                    mejor_sol[idx] = random.choice(posibles)
+                    
         return mejor_sol
-        
+
     def _compactar_solucion(self, sol, iteraciones=2000):
         if self._costo_total(sol, solo_duros=True) > 0:
             return sol
