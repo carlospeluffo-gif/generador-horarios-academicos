@@ -1323,6 +1323,50 @@ class TabuScheduler:
         nuevo[idx] = {'seccion': s, 'profesor': prof, 'salon': salon, 'patron': patron, 'ini': hora}
         return nuevo, self._costo_compactacion(nuevo)
 
+    def tiene_conflicto_duro_individual(self, sec, sol_completa):
+        """Chequea si una sección específica tiene choques duros."""
+        for otra in sol_completa:
+            if sec['id'] == otra['id']: continue
+            if sec['dia'] == otra['dia']:
+                if self.hay_solapamiento(sec['inicio'], sec['fin'], otra['inicio'], otra['fin']):
+                    if sec['profesor'] == otra['profesor'] or sec['salon'] == otra['salon']:
+                        return True
+        return False
+
+    def calcular_solo_conflictos_duros(self, solucion):
+        """Calcula el costo ignorando las preferencias de los profesores."""
+        costo = 0
+        for i, s1 in enumerate(solucion):
+            for j, s2 in enumerate(solucion):
+                if i >= j: continue
+                if s1['dia'] == s2['dia']:
+                    if self.hay_solapamiento(s1['inicio'], s1['fin'], s2['inicio'], s2['fin']):
+                        if s1['profesor'] == s2['profesor'] or s1['salon'] == s2['salon']:
+                            costo += 10000
+        return costo
+
+    def fase_reparacion_robusta(self, solucion_actual):
+        """FASE 2: Motor de choque para eliminar conflictos duros."""
+        mejor_sol = deepcopy(solucion_actual)
+        for _ in range(100):
+            costo_duro = self.calcular_solo_conflictos_duros(mejor_sol)
+            if costo_duro == 0: break
+            
+            en_conflicto = [i for i, sec in enumerate(mejor_sol) if self.tiene_conflicto_duro_individual(sec, mejor_sol)]
+            indices_a_quitar = set(en_conflicto)
+            while len(indices_a_quitar) < len(en_conflicto) + 2:
+                indices_a_quitar.add(random.randint(0, len(mejor_sol)-1))
+            
+            secciones_extraidas = [mejor_sol[i] for i in indices_a_quitar]
+            nueva_sol_parcial = [sec for i, sec in enumerate(mejor_sol) if i not in indices_a_quitar]
+            
+            for sec in secciones_extraidas:
+                posibles = self.generar_todos_los_movimientos_posibles(sec)
+                legales = [p for p in posibles if not self.tiene_conflicto_duro_individual(p, nueva_sol_parcial)]
+                nueva_sol_parcial.append(random.choice(legales) if legales else random.choice(posibles))
+            mejor_sol = nueva_sol_parcial
+        return mejor_sol
+
     def _compactar_solucion(self, sol, iteraciones=2000):
         if self._costo_total(sol, solo_duros=True) > 0:
             return sol
@@ -1390,6 +1434,71 @@ class TabuScheduler:
         
         return self.mejor_solucion, int(self.mejor_costo // 10000), self.historial_costos
 
+def fase_reparacion_robusta(self, solucion_actual):
+        """
+        FASE 2: Motor de choque que utiliza Ruina y Recreación.
+        Fuerza la legalidad eliminando lo que estorba.
+        """
+        mejor_sol = deepcopy(solucion_actual)
+        
+        # Intentamos reparar durante un máximo de 100 ciclos de reconstrucción
+        for _ in range(100):
+            costo_duro = self.calcular_solo_conflictos_duros(mejor_sol)
+            if costo_duro == 0:
+                return mejor_sol
+            
+            # Identificar quiénes causan el problema
+            en_conflicto = [i for i, sec in enumerate(mejor_sol) if self.tiene_conflicto_duro_individual(sec, mejor_sol)]
+            
+            # RUINA: Quitamos las conflictivas y 2 aleatorias para dar movilidad
+            indices_a_quitar = set(en_conflicto)
+            while len(indices_a_quitar) < len(en_conflicto) + 2:
+                indices_a_quitar.add(random.randint(0, len(mejor_sol)-1))
+            
+            secciones_extraidas = [mejor_sol[i] for i in indices_a_quitar]
+            nueva_sol_parcial = [sec for i, sec in enumerate(mejor_sol) if i not in indices_a_quitar]
+            
+            # RECREACIÓN: Reinsertar solo en lugares 100% legales
+            for sec in secciones_extraidas:
+                posibles = self.generar_todos_los_movimientos_posibles(sec)
+                # Filtro estricto: solo posiciones con costo duro 0
+                legales = [p for p in posibles if not self.tiene_conflicto_duro_individual(p, nueva_sol_parcial)]
+                
+                if legales:
+                    nueva_sol_parcial.append(random.choice(legales))
+                else:
+                    # Si no hay hueco, lo mandamos a un horario aleatorio 
+                    # para que en la siguiente iteración se mueva otra pieza
+                    nueva_sol_parcial.append(random.choice(posibles))
+            
+            mejor_sol = nueva_sol_parcial
+        return mejor_sol
+
+    def calcular_solo_conflictos_duros(self, solucion):
+        """Calcula el costo ignorando las preferencias de los profesores."""
+        costo = 0
+        for i, s1 in enumerate(solucion):
+            for j, s2 in enumerate(solucion):
+                if i >= j: continue
+                # Choque Profesor
+                if s1['profesor'] == s2['profesor'] and s1['dia'] == s2['dia']:
+                    if self.hay_solapamiento(s1['inicio'], s1['fin'], s2['inicio'], s2['fin']):
+                        costo += 10000
+                # Choque Salón
+                if s1['salon'] == s2['salon'] and s1['dia'] == s2['dia']:
+                    if self.hay_solapamiento(s1['inicio'], s1['fin'], s2['inicio'], s2['fin']):
+                        costo += 10000
+        return costo
+
+    def tiene_conflicto_duro_individual(self, sec, sol_completa):
+        """Chequea si una sección específica tiene choques duros."""
+        for otra in sol_completa:
+            if sec['id'] == otra['id']: continue
+            if sec['dia'] == otra['dia']:
+                if self.hay_solapamiento(sec['inicio'], sec['fin'], otra['inicio'], otra['fin']):
+                    if sec['profesor'] == otra['profesor'] or sec['salon'] == otra['salon']:
+                        return True
+        return False
 # ==============================================================================
 # 5. NUEVAS FUNCIONES DE VISUALIZACIÓN (MEJORADAS)
 # ==============================================================================
@@ -1819,11 +1928,29 @@ def main():
                     status = st.empty()
                     mejor_sol, conflictos, historial = scheduler.optimizar(iteraciones, bar, status)
                     
+                    # === FASE 2: REPARACIÓN ROBUSTA (Añadido aquí) ===
+                    # Calculamos si todavía quedan conflictos duros
+                    costo_duro_actual = scheduler.calcular_solo_conflictos_duros(mejor_sol)
+                    
+                    if costo_duro_actual > 0:
+                        status.warning(f"⚠️ Conflictos detectados ({costo_duro_actual // 10000}). Iniciando Reparación Robusta...")
+                        # Esta es la fase que fuerza el 0 absoluto
+                        mejor_sol = scheduler.fase_reparacion_robusta(mejor_sol)
+                        # Actualizamos los conflictos para los reportes
+                        conflictos = scheduler.calcular_costo(mejor_sol) 
+                    
+                    # === FASE 3: COMPACTACIÓN (Opcional pero recomendada) ===
+                    if scheduler.calcular_solo_conflictos_duros(mejor_sol) == 0:
+                        status.info("📦 Optimizando espacios (Compactación)...")
+                        mejor_sol = scheduler.compactar_horario(mejor_sol)
+
+                    # --- GUARDAR RESULTADOS EN SESSION STATE ---
                     st.session_state.elapsed_time = time.time() - start_time
                     st.session_state.conflicts = conflictos
                     st.session_state.historial = historial
                     st.session_state.scheduler = scheduler
                     st.session_state.mejor_sol = mejor_sol
+                    
                     
                     cargas_finales = {}
                     for asign in mejor_sol:
