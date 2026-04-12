@@ -873,10 +873,10 @@ class TabuScheduler:
         for prof, carga in carga_prof.items():
             prof_obj = self.profesores.get(prof)
             if prof_obj:
-                if carga > prof_obj.carga_max + 1.5:
-                    conflicts += 10000
-                if carga < prof_obj.carga_min - 1.5:
-                    conflicts += 10000
+                if carga > prof_obj.carga_max + 0.1:
+                    conflicts += 50000
+                if carga < prof_obj.carga_min - 0.1:
+                    conflicts += 50000
 
         # --- RESTRICCIÓN FUERTE: DOBLE ROL DE GRADUADOS ---
         for grad, codigos_recibe in self.graduados_reciben.items():
@@ -1593,10 +1593,15 @@ class TabuScheduler:
                         return True
         return False
 
-        def _corregir_cargas_final(self, sol):
-        """Intercambia secciones entre profesores para cumplir cargas min/max."""
+            def _corregir_cargas_final(self, sol):
+        """
+        Corrige de forma exhaustiva cualquier violación de carga mínima o máxima.
+        Intercambia secciones entre profesores para balancear cargas.
+        """
         mejor_sol = deepcopy(sol)
-        for _ in range(20):
+        max_intentos = 50
+        for _ in range(max_intentos):
+            # Calcular cargas actuales
             carga = {p: 0.0 for p in self.profesores}
             carga["GRADUADOS"] = 0.0
             carga["TBA"] = 0.0
@@ -1604,28 +1609,61 @@ class TabuScheduler:
                 p = asign['profesor']
                 carga[p] += self.get_sec_creditos(asign['seccion'], p)
             
-            sobrecargados = [p for p, obj in self.profesores.items() if carga[p] > obj.carga_max + 0.1]
-            subcargados = [p for p, obj in self.profesores.items() if carga[p] < obj.carga_min - 0.1]
-            if not sobrecargados and not subcargados:
-                break
+            sobrecargados = []
+            subcargados = []
+            for p, obj in self.profesores.items():
+                if carga[p] > obj.carga_max + 0.01:
+                    sobrecargados.append((p, carga[p] - obj.carga_max))
+                elif carga[p] < obj.carga_min - 0.01:
+                    subcargados.append((p, obj.carga_min - carga[p]))
             
-            if sobrecargados and subcargados:
-                prof_sobre = random.choice(sobrecargados)
-                prof_sub = random.choice(subcargados)
-                secciones_sobre = [(i, asign) for i, asign in enumerate(mejor_sol) if asign['profesor'] == prof_sobre]
-                random.shuffle(secciones_sobre)
-                for idx, asign in secciones_sobre:
-                    s = asign['seccion']
-                    if prof_sub in s.cands:
-                        cred_s = self.get_sec_creditos(s, prof_sub)
-                        nueva_carga_sub = carga[prof_sub] + cred_s
-                        nueva_carga_sobre = carga[prof_sobre] - self.get_sec_creditos(s, prof_sobre)
-                        if nueva_carga_sub <= self.profesores[prof_sub].carga_max + 0.1 and \
-                           nueva_carga_sobre >= self.profesores[prof_sobre].carga_min - 0.1:
-                            mejor_sol[idx]['profesor'] = prof_sub
-                            carga[prof_sobre] = nueva_carga_sobre
-                            carga[prof_sub] = nueva_carga_sub
+            if not sobrecargados and not subcargados:
+                break  # Perfecto
+            
+            # Intentar corregir un sobrecargado a la vez
+            if sobrecargados:
+                # Ordenar por mayor exceso
+                sobrecargados.sort(key=lambda x: x[1], reverse=True)
+                for prof_sobre, exceso in sobrecargados:
+                    # Obtener secciones de este profesor
+                    secciones_sobre = [(i, asign) for i, asign in enumerate(mejor_sol) if asign['profesor'] == prof_sobre]
+                    # Ordenar por créditos (preferir quitar secciones que igualen el exceso)
+                    secciones_sobre.sort(key=lambda x: self.get_sec_creditos(x[1]['seccion'], prof_sobre))
+                    
+                    for idx, asign in secciones_sobre:
+                        s = asign['seccion']
+                        cred_s = self.get_sec_creditos(s, prof_sobre)
+                        # Buscar un profesor subcargado compatible
+                        for prof_sub, deficit in subcargados:
+                            if prof_sub in s.cands and prof_sub in self.profesores:
+                                prof_obj_sub = self.profesores[prof_sub]
+                                nueva_carga_sub = carga[prof_sub] + cred_s
+                                if nueva_carga_sub <= prof_obj_sub.carga_max + 0.01:
+                                    # Realizar transferencia
+                                    mejor_sol[idx]['profesor'] = prof_sub
+                                    carga[prof_sobre] -= cred_s
+                                    carga[prof_sub] += cred_s
+                                    # Actualizar listas
+                                    if carga[prof_sobre] <= self.profesores[prof_sobre].carga_max + 0.01:
+                                        break  # Este sobrecargado ya está bien
+                        if carga[prof_sobre] <= self.profesores[prof_sobre].carga_max + 0.01:
                             break
+                # Recalcular cargas para la siguiente iteración
+                continue
+            
+            # Si no hay sobrecargados pero sí subcargados, intentar tomar de "TBA" o "GRADUADOS"
+            if subcargados and not sobrecargados:
+                for prof_sub, deficit in subcargados:
+                    # Buscar secciones asignadas a TBA o GRADUADOS que pueda tomar
+                    for idx, asign in enumerate(mejor_sol):
+                        if asign['profesor'] in ["TBA", "GRADUADOS"] and prof_sub in asign['seccion'].cands:
+                            s = asign['seccion']
+                            cred_s = self.get_sec_creditos(s, prof_sub)
+                            if carga[prof_sub] + cred_s <= self.profesores[prof_sub].carga_max + 0.01:
+                                mejor_sol[idx]['profesor'] = prof_sub
+                                carga[prof_sub] += cred_s
+                                if carga[prof_sub] >= self.profesores[prof_sub].carga_min - 0.01:
+                                    break
         return mejor_sol
         
     def optimizar(self, iteraciones=3000, bar=None, status_text=None):
