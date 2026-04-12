@@ -1116,9 +1116,17 @@ class TabuScheduler:
             -(self.profesores[p].prioridad_curso(s.cod) if p in self.profesores else 0)
         ))
 
-        mejores_opciones = []
+                mejores_opciones = []
         for _ in range(40):
             prof = random.choice(cand_profs)
+            # Calcular carga actual del profesor candidato en la solución (excluyendo idx)
+            carga_actual_cand = sum(self.get_sec_creditos(asign['seccion'], asign['profesor']) 
+                                    for j, asign in enumerate(sol) 
+                                    if j != idx and asign and asign['profesor'] == prof)
+            creditos_s = self.get_sec_creditos(s, prof)
+            if prof in self.profesores:
+                if carga_actual_cand + creditos_s > self.profesores[prof].carga_max + 0.1:
+                    continue  # No considerar este profesor por sobrecarga
             patrones = PATRONES.get(s.creditos, PATRONES[3])
             if prof in self.profesores:
                 prof_obj = self.profesores[prof]
@@ -1354,7 +1362,7 @@ class TabuScheduler:
     # --------------------------------------------------------------------------
     def _reparar_asignaciones_forzado(self, sol):
         mejor_sol = deepcopy(sol)
-        for _ in range(10):
+        for _ in range(15):  # Aumentar iteraciones
             carga = {p: 0.0 for p in self.profesores}
             carga["GRADUADOS"] = 0.0
             carga["TBA"] = 0.0
@@ -1365,9 +1373,9 @@ class TabuScheduler:
             sobrecargados = []
             subcargados = []
             for p, obj in self.profesores.items():
-                if carga[p] > obj.carga_max + 0.5:
+                if carga[p] > obj.carga_max + 0.1:
                     sobrecargados.append(p)
-                elif carga[p] < obj.carga_min - 0.5:
+                elif carga[p] < obj.carga_min - 0.1:
                     subcargados.append(p)
 
             secciones_intensivas_mal_asignadas = []
@@ -1415,7 +1423,7 @@ class TabuScheduler:
                 for p in candidatos:
                     prof_obj = self.profesores[p]
                     nueva_carga = carga[p] + self.get_sec_creditos(s, p)
-                    if nueva_carga > prof_obj.carga_max + 0.5:
+                    if nueva_carga > prof_obj.carga_max + 0.1:
                         continue
                     score = 0.0
                     if carga[p] < prof_obj.carga_min:
@@ -1477,11 +1485,12 @@ class TabuScheduler:
                     break
         return mejor_sol
 
-    def _asignar_seccion_greedy_cero(self, idx, sol):
+        def _asignar_seccion_greedy_cero(self, idx, sol):
         s = sol[idx]['seccion']
         cand_profs = [p for p in s.cands if p in self.profesores]
         if not cand_profs:
             cand_profs = ["GRADUADOS"] if "GRADUADOS" in s.cands else ["TBA"]
+        # Calcular cargas actuales (excluyendo la posición idx)
         carga_actual = {p: 0.0 for p in self.profesores}
         carga_actual["GRADUADOS"] = 0.0
         carga_actual["TBA"] = 0.0
@@ -1495,7 +1504,8 @@ class TabuScheduler:
             prof_obj = self.profesores[p]
             creditos = self.get_sec_creditos(s, p)
             nueva_carga = carga_actual[p] + creditos
-            if nueva_carga > prof_obj.carga_max + 0.5:
+            # Rechazar si excede carga máxima
+            if nueva_carga > prof_obj.carga_max + 0.1:
                 return -1000
             sc = 0.0
             if carga_actual[p] < prof_obj.carga_min:
@@ -1505,6 +1515,11 @@ class TabuScheduler:
 
         cand_profs.sort(key=score_prof, reverse=True)
         for prof in cand_profs:
+            # Verificar carga máxima nuevamente por si acaso
+            prof_obj = self.profesores.get(prof)
+            if prof_obj:
+                if carga_actual[prof] + self.get_sec_creditos(s, prof) > prof_obj.carga_max + 0.1:
+                    continue
             patrones = PATRONES.get(s.creditos, PATRONES[3])
             if prof in self.profesores:
                 prof_obj = self.profesores[prof]
@@ -1578,6 +1593,41 @@ class TabuScheduler:
                         return True
         return False
 
+        def _corregir_cargas_final(self, sol):
+        """Intercambia secciones entre profesores para cumplir cargas min/max."""
+        mejor_sol = deepcopy(sol)
+        for _ in range(20):
+            carga = {p: 0.0 for p in self.profesores}
+            carga["GRADUADOS"] = 0.0
+            carga["TBA"] = 0.0
+            for asign in mejor_sol:
+                p = asign['profesor']
+                carga[p] += self.get_sec_creditos(asign['seccion'], p)
+            
+            sobrecargados = [p for p, obj in self.profesores.items() if carga[p] > obj.carga_max + 0.1]
+            subcargados = [p for p, obj in self.profesores.items() if carga[p] < obj.carga_min - 0.1]
+            if not sobrecargados and not subcargados:
+                break
+            
+            if sobrecargados and subcargados:
+                prof_sobre = random.choice(sobrecargados)
+                prof_sub = random.choice(subcargados)
+                secciones_sobre = [(i, asign) for i, asign in enumerate(mejor_sol) if asign['profesor'] == prof_sobre]
+                random.shuffle(secciones_sobre)
+                for idx, asign in secciones_sobre:
+                    s = asign['seccion']
+                    if prof_sub in s.cands:
+                        cred_s = self.get_sec_creditos(s, prof_sub)
+                        nueva_carga_sub = carga[prof_sub] + cred_s
+                        nueva_carga_sobre = carga[prof_sobre] - self.get_sec_creditos(s, prof_sobre)
+                        if nueva_carga_sub <= self.profesores[prof_sub].carga_max + 0.1 and \
+                           nueva_carga_sobre >= self.profesores[prof_sobre].carga_min - 0.1:
+                            mejor_sol[idx]['profesor'] = prof_sub
+                            carga[prof_sobre] = nueva_carga_sobre
+                            carga[prof_sub] = nueva_carga_sub
+                            break
+        return mejor_sol
+        
     def optimizar(self, iteraciones=3000, bar=None, status_text=None):
         temp_inicial = 5000.0
         self.historial_costos = [self.mejor_costo]
@@ -1630,6 +1680,12 @@ class TabuScheduler:
             self.mejor_costo = self._costo_total(self.mejor_solucion)
             if bar:
                 bar.progress(1.0)
+                
+                # Corrección final de cargas (por si aún hay desbalance)
+        if self._costo_total(self.mejor_solucion, solo_duros=True) == 0:
+            self.mejor_solucion = self._corregir_cargas_final(self.mejor_solucion)
+            self.mejor_costo = self._costo_total(self.mejor_solucion)
+
         
         return self.mejor_solucion, int(self.mejor_costo // 10000), self.historial_costos
 
