@@ -1346,27 +1346,57 @@ class TabuScheduler:
         return costo
 
     def fase_reparacion_robusta(self, solucion_actual):
-        """FASE 2: Motor de choque para eliminar conflictos duros."""
+        """
+        FASE 2: Reparación de Choques Y de Carga Académica.
+        Si un profesor está excedido, le pasa la materia a otro disponible.
+        """
         mejor_sol = deepcopy(solucion_actual)
-        for _ in range(100):
+        
+        for _ in range(150): # Más intentos para asegurar éxito
             costo_duro = self.calcular_solo_conflictos_duros(mejor_sol)
-            if costo_duro == 0: break
+            if costo_duro == 0:
+                break
             
-            en_conflicto = [i for i, sec in enumerate(mejor_sol) if self.tiene_conflicto_duro_individual(sec, mejor_sol)]
-            indices_a_quitar = set(en_conflicto)
-            while len(indices_a_quitar) < len(en_conflicto) + 2:
-                indices_a_quitar.add(random.randint(0, len(mejor_sol)-1))
+            # --- PARTE A: REPARAR CARGA (ELIMINAR EXCESOS) ---
+            cargas = {}
+            for asign in mejor_sol:
+                p = asign['profesor']
+                cargas[p] = cargas.get(p, 0) + self.get_sec_creditos(asign['seccion'], p)
             
-            secciones_extraidas = [mejor_sol[i] for i in indices_a_quitar]
-            nueva_sol_parcial = [sec for i, sec in enumerate(mejor_sol) if i not in indices_a_quitar]
-            
-            for sec in secciones_extraidas:
-                posibles = self.generar_todos_los_movimientos_posibles(sec)
-                legales = [p for p in posibles if not self.tiene_conflicto_duro_individual(p, nueva_sol_parcial)]
-                nueva_sol_parcial.append(random.choice(legales) if legales else random.choice(posibles))
-            mejor_sol = nueva_sol_parcial
-        return mejor_sol
+            for i, asign in enumerate(mejor_sol):
+                prof_actual = asign['profesor']
+                max_p = self.profesores[prof_actual]['max']
+                
+                if cargas[prof_actual] > max_p:
+                    # Este profesor está explotado. Busquemos a alguien con espacio.
+                    candidatos = [p for p, data in self.profesores.items() 
+                                 if p != prof_actual and p != "TBA" and 
+                                 cargas.get(p, 0) + self.get_sec_creditos(asign['seccion'], p) <= data['max']]
+                    
+                    if candidatos:
+                        nuevo_p = random.choice(candidatos)
+                        mejor_sol[i]['profesor'] = nuevo_p
+                        cargas[prof_actual] -= self.get_sec_creditos(asign['seccion'], prof_actual)
+                        cargas[nuevo_p] = cargas.get(nuevo_p, 0) + self.get_sec_creditos(asign['seccion'], nuevo_p)
 
+            # --- PARTE B: REPARAR CHOQUES HORARIOS (LO QUE YA TENÍAMOS) ---
+            en_conflicto = [i for i, sec in enumerate(mejor_sol) if self.tiene_conflicto_duro_individual(sec, mejor_sol)]
+            if not en_conflicto: continue
+            
+            idx = random.choice(en_conflicto)
+            sec = mejor_sol[idx]
+            posibles = self.generar_todos_los_movimientos_posibles(sec)
+            
+            # Priorizamos huecos donde NO haya choque de profesor ni salón
+            legales = [p for p in posibles if not self.tiene_conflicto_duro_individual(p, [s for j,s in enumerate(mejor_sol) if i!=j])]
+            if legales:
+                mejor_sol[idx] = random.choice(legales)
+            else:
+                # Si no hay hueco, probamos cambiando al profesor por otro que esté libre a esa hora
+                mejor_sol[idx]['profesor'] = random.choice(list(self.profesores.keys()))
+
+        return mejor_sol
+        
     def _compactar_solucion(self, sol, iteraciones=2000):
         if self._costo_total(sol, solo_duros=True) > 0:
             return sol
@@ -1475,19 +1505,26 @@ def fase_reparacion_robusta(self, solucion_actual):
         return mejor_sol
 
     def calcular_solo_conflictos_duros(self, solucion):
-        """Calcula el costo ignorando las preferencias de los profesores."""
         costo = 0
+        cargas = {}
+        # 1. Costo por choques (Profesores y Salones)
         for i, s1 in enumerate(solucion):
+            p = s1['profesor']
+            cargas[p] = cargas.get(p, 0) + self.get_sec_creditos(s1['seccion'], p)
             for j, s2 in enumerate(solucion):
                 if i >= j: continue
-                # Choque Profesor
-                if s1['profesor'] == s2['profesor'] and s1['dia'] == s2['dia']:
-                    if self.hay_solapamiento(s1['inicio'], s1['fin'], s2['inicio'], s2['fin']):
+                if s1['dia'] == s2['dia'] and self.hay_solapamiento(s1['inicio'], s1['fin'], s2['inicio'], s2['fin']):
+                    if s1['profesor'] == s2['profesor'] or s1['salon'] == s2['salon']:
                         costo += 10000
-                # Choque Salón
-                if s1['salon'] == s2['salon'] and s1['dia'] == s2['dia']:
-                    if self.hay_solapamiento(s1['inicio'], s1['fin'], s2['inicio'], s2['fin']):
-                        costo += 10000
+        
+        # 2. Costo por Carga Académica (NUEVO)
+        for prof, carga in cargas.items():
+            if prof == "TBA" or prof == "GRADUADOS": continue
+            max_p = self.profesores[prof]['max']
+            min_p = self.profesores[prof]['min']
+            if carga > max_p: costo += 15000 # Penalidad mayor por exceder
+            if carga < min_p: costo += 5000  # Penalidad por no llegar al mínimo
+            
         return costo
 
     def tiene_conflicto_duro_individual(self, sec, sol_completa):
