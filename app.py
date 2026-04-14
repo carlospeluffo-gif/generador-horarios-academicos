@@ -1622,8 +1622,8 @@ def generar_heatmap_plotly(scheduler, solucion):
     fig.update_layout(
         title="Ocupación de Salones por Día y Hora",
         font=dict(color='#1a1a1a'),
-        paper_bgcolor='white',
-        plot_bgcolor='white',
+        paper_bgcolor='black',
+        plot_bgcolor='black',
         height=600
     )
     return fig
@@ -1666,8 +1666,8 @@ def generar_barras_apiladas_profesor(sol, scheduler):
         xaxis_title="Profesor",
         yaxis_title="Número de Clases",
         font=dict(color='#1a1a1a'),
-        paper_bgcolor='white',
-        plot_bgcolor='white',
+        paper_bgcolor='black',
+        plot_bgcolor='black',
         legend_title="Día",
         height=500
     )
