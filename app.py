@@ -872,10 +872,10 @@ class TabuScheduler:
         for prof, carga in carga_prof.items():
             prof_obj = self.profesores.get(prof)
             if prof_obj:
-                if carga > prof_obj.carga_max + 0.1:
-                    conflicts += 50000
-                if carga < prof_obj.carga_min - 0.1:
-                    conflicts += 50000
+                if carga > prof_obj.carga_max + 1.5:
+                    conflicts += 10000
+                if carga < prof_obj.carga_min - 1.5:
+                    conflicts += 10000
 
         # --- RESTRICCIÓN FUERTE: DOBLE ROL DE GRADUADOS ---
         for grad, codigos_recibe in self.graduados_reciben.items():
@@ -1513,76 +1513,6 @@ class TabuScheduler:
         # Si es necesario, se puede implementar más adelante.
         return False
 
-        def _reparar_cargas(self, sol):
-        """
-        Corrige cualquier violación de carga mínima/máxima mediante transferencia
-        de secciones entre profesores compatibles.
-        """
-        mejor_sol = deepcopy(sol)
-        for _ in range(20):  # Máximo 20 iteraciones de redistribución
-            # Calcular cargas actuales
-            carga = {p: 0.0 for p in self.profesores}
-            carga["GRADUADOS"] = 0.0
-            carga["TBA"] = 0.0
-            for asign in mejor_sol:
-                p = asign['profesor']
-                carga[p] += self.get_sec_creditos(asign['seccion'], p)
-
-            # Identificar desbalances
-            sobrecargados = []
-            subcargados = []
-            for p, obj in self.profesores.items():
-                if carga[p] > obj.carga_max + 0.01:
-                    sobrecargados.append((p, carga[p] - obj.carga_max))
-                elif carga[p] < obj.carga_min - 0.01:
-                    subcargados.append((p, obj.carga_min - carga[p]))
-
-            if not sobrecargados and not subcargados:
-                break  # Perfecto
-
-            # Si hay sobrecargados, intentar transferir secciones a subcargados
-            if sobrecargados and subcargados:
-                # Ordenar sobrecargados por exceso
-                sobrecargados.sort(key=lambda x: x[1], reverse=True)
-                for prof_sobre, exceso in sobrecargados:
-                    # Obtener secciones de este profesor (ordenadas por crédito)
-                    secciones_sobre = [(i, asign) for i, asign in enumerate(mejor_sol) if asign['profesor'] == prof_sobre]
-                    secciones_sobre.sort(key=lambda x: self.get_sec_creditos(x[1]['seccion'], prof_sobre))
-                    for idx, asign in secciones_sobre:
-                        s = asign['seccion']
-                        cred_s = self.get_sec_creditos(s, prof_sobre)
-                        # Buscar profesor subcargado que pueda tomar esta sección
-                        for prof_sub, deficit in subcargados:
-                            if prof_sub in s.cands and prof_sub in self.profesores:
-                                prof_obj_sub = self.profesores[prof_sub]
-                                nueva_carga_sub = carga[prof_sub] + cred_s
-                                if nueva_carga_sub <= prof_obj_sub.carga_max + 0.01:
-                                    # Transferir
-                                    mejor_sol[idx]['profesor'] = prof_sub
-                                    carga[prof_sobre] -= cred_s
-                                    carga[prof_sub] += cred_s
-                                    # Actualizar listas de subcargados/sobrecargados
-                                    if carga[prof_sobre] <= self.profesores[prof_sobre].carga_max + 0.01:
-                                        break  # Este profesor ya está dentro del límite
-                        if carga[prof_sobre] <= self.profesores[prof_sobre].carga_max + 0.01:
-                            break
-                # Recalcular para siguiente iteración
-                continue
-
-            # Si solo hay subcargados, intentar tomar de TBA/GRADUADOS
-            if subcargados and not sobrecargados:
-                for prof_sub, deficit in subcargados:
-                    for idx, asign in enumerate(mejor_sol):
-                        if asign['profesor'] in ["TBA", "GRADUADOS"] and prof_sub in asign['seccion'].cands:
-                            s = asign['seccion']
-                            cred_s = self.get_sec_creditos(s, prof_sub)
-                            if carga[prof_sub] + cred_s <= self.profesores[prof_sub].carga_max + 0.01:
-                                mejor_sol[idx]['profesor'] = prof_sub
-                                carga[prof_sub] += cred_s
-                                if carga[prof_sub] >= self.profesores[prof_sub].carga_min - 0.01:
-                                    break
-        return mejor_sol
-
     def optimizar(self, iteraciones=3000, bar=None, status_text=None):
         temp_inicial = 5000.0
         self.historial_costos = [self.mejor_costo]
@@ -1636,15 +1566,7 @@ class TabuScheduler:
             self.mejor_solucion = self._compactar_solucion(self.mejor_solucion, iteraciones=2000)
             self.mejor_costo = self._costo_total(self.mejor_solucion)
             if bar:
-                bar.progress(0.98)
-        
-        # --- NUEVA FASE 3: REPARACIÓN DE CARGAS (garantiza límites min/max) ---
-        if status_text:
-            status_text.markdown("**⚖️ Fase 3: Balanceo de cargas académicas (corrigiendo excesos/déficits)...**")
-        self.mejor_solucion = self._reparar_cargas(self.mejor_solucion)
-        self.mejor_costo = self._costo_total(self.mejor_solucion)
-        if bar:
-            bar.progress(1.0)
+                bar.progress(1.0)
         
         return self.mejor_solucion, int(self.mejor_costo // 10000), self.historial_costos
 
