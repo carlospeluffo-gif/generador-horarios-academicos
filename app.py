@@ -1661,18 +1661,15 @@ def generar_barras_apiladas_profesor(sol, scheduler):
         ))
     
     fig.update_layout(
-        title="Ocupación de Salones por Día y Hora",
-        font=dict(color='#000000'), # Negro puro para tu tesis
+        barmode='stack',
+        title="Distribución de Clases por Profesor y Día",
+        xaxis_title="Profesor",
+        yaxis_title="Número de Clases",
+        font=dict(color='#1a1a1a'),
         paper_bgcolor='white',
         plot_bgcolor='white',
-        height=800, # Aumentamos la altura para que las horas respiren mejor
-        yaxis=dict(
-            tickmode='array',
-            tickvals=etiquetas_horas,
-            autorange="reversed", # Para que las 07:30 AM queden arriba
-            dtick=1 # Fuerza a mostrar todas las etiquetas
-        ),
-        margin=dict(l=100, r=20, t=50, b=50) # Espacio para que las horas no se corten
+        legend_title="Día",
+        height=500
     )
     return fig
 
