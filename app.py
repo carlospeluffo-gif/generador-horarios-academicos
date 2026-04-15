@@ -404,7 +404,6 @@ PATRONES = {
         {"name": "Ma (Intensivo)", "days": {"Ma": 3}},
         {"name": "Ju (Intensivo)", "days": {"Ju": 3}},
         {"name": "Lu (Intensivo)", "days": {"Lu": 3}},
-        {"name": "vi (Intensivo)", "days": {"vi": 3}},
         {"name": "Mi (Intensivo)", "days": {"Mi": 3}},
         
     ],
