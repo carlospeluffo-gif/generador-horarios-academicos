@@ -659,13 +659,9 @@ class TabuScheduler:
         carga_actual["GRADUADOS"] = 0.0
         carga_actual["TBA"] = 0.0
         
-       capacidad_restante = {}
+        capacidad_restante = {}
         for p in self.profesores.values():
-    # Si el profesor acepta compensación, su capacidad es "infinita" a efectos de preasignación
-            if p.compensacion:
-                capacidad_restante[p.nombre] = float('inf')
-            else:
-                capacidad_restante[p.nombre] = p.carga_max
+            capacidad_restante[p.nombre] = p.carga_max
         
         secciones_unicas = []
         secciones_multiple = []
@@ -729,13 +725,11 @@ class TabuScheduler:
             pen = 0
             for p, c in carga_actual.items():
                 if p in self.profesores:
-                    prof = self.profesores[p]
-                    if c < prof.carga_min - 1.5:
-                        pen += (prof.carga_min - c) * 10
-            # No penalizar exceso si acepta compensación
-                    if not prof.compensacion and c > prof.carga_max + 1.5:
-                        pen += (c - prof.carga_max) * 10
-         return pen
+                    if c < self.profesores[p].carga_min - 0.0:
+                        pen += (self.profesores[p].carga_min - c) * 10
+                    elif c > self.profesores[p].carga_max + 0.0:
+                        pen += (c - self.profesores[p].carga_max) * 10
+            return pen
 
         penalidad_actual = calc_penalidad()
         T = 100.0
@@ -859,12 +853,10 @@ class TabuScheduler:
         for prof, carga in carga_prof.items():
             prof_obj = self.profesores.get(prof)
             if prof_obj:
-        # Si el profesor acepta compensación, NO se penaliza el exceso de carga máxima
-                if not prof_obj.compensacion and carga > prof_obj.carga_max + 0.0:
+                if carga > prof_obj.carga_max + 0.0:
                     conflicts += 10000
-        # La carga mínima siempre debe respetarse
                 if carga < prof_obj.carga_min - 0.0:
-                    conflicts += 20000
+                    conflicts += 10000
 
         # --- RESTRICCIÓN FUERTE: DOBLE ROL DE GRADUADOS ---
         for grad, codigos_recibe in self.graduados_reciben.items():
@@ -975,10 +967,10 @@ class TabuScheduler:
         for prof, carga in carga_prof.items():
             prof_obj = self.profesores.get(prof)
             if prof_obj:
-                if not prof_obj.compensacion and carga > prof_obj.carga_max + 0.0:
-                        conflictos_list.append(f"Profesor {prof} excede carga máxima ({carga:.1f} > {prof_obj.carga_max})")
+                if carga > prof_obj.carga_max + 0.0:
+                    conflictos_list.append(f"Profesor {prof} excede carga máxima ({carga:.1f} > {prof_obj.carga_max})")
                 if carga < prof_obj.carga_min - 0.0:
-                        conflictos_list.append(f"Profesor {prof} no alcanza carga mínima ({carga:.1f} < {prof_obj.carga_min})")
+                    conflictos_list.append(f"Profesor {prof} no alcanza carga mínima ({carga:.1f} < {prof_obj.carga_min})")
 
         # Conflictos de doble rol
         for grad, codigos_recibe in self.graduados_reciben.items():
@@ -1926,73 +1918,46 @@ def generar_reporte_pdf_html(scheduler, sol, cargas_finales, master_df):
     """
     return html
 
-import plotly.graph_objects as go
-
 def generar_figura_cientifica_carga(cargas_finales, scheduler):
-    # Filtrar solo profesores que existen en el scheduler
-    profesores = [p for p in cargas_finales.keys() if p in scheduler.profesores]
-    if not profesores:
-        fig = go.Figure()
-        fig.add_annotation(text="No hay datos de carga académica disponibles.",
-                           xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
-        fig.update_layout(height=400)
-        return fig
-
-    # Ordenar por carga asignada descendente
+    profesores = list(cargas_finales.keys())
     profesores.sort(key=lambda p: cargas_finales[p], reverse=True)
-    
     carga_asignada = [cargas_finales[p] for p in profesores]
     carga_min = [scheduler.profesores[p].carga_min for p in profesores]
     carga_max = [scheduler.profesores[p].carga_max for p in profesores]
     
-    # Usar nombres reales de los profesores
-    nombres = profesores
+    x_vals = list(range(len(profesores)))
     
     fig = go.Figure()
-    
-    # Barras de carga asignada (estilo original)
     fig.add_trace(go.Bar(
-        x=nombres,
+        x=x_vals,
         y=carga_asignada,
         name='Carga Asignada',
         marker=dict(color='lightgray', line=dict(color='black', width=1))
     ))
-    
-    # Línea de carga mínima (azul punteada)
     fig.add_trace(go.Scatter(
-        x=nombres,
+        x=x_vals,
         y=carga_min,
         mode='lines+markers',
         name='Carga Mínima',
         line=dict(color='blue', width=2, dash='dot'),
-        marker=dict(size=6, color='blue')
+        marker=dict(size=6)
     ))
-    
-    # Línea de carga máxima (naranja punteada)
     fig.add_trace(go.Scatter(
-        x=nombres,
+        x=x_vals,
         y=carga_max,
         mode='lines+markers',
         name='Carga Máxima',
         line=dict(color='orange', width=2, dash='dot'),
-        marker=dict(size=6, color='orange')
+        marker=dict(size=6)
     ))
-    
-    # Ajustar rango Y para que la línea de carga mínima sea visible incluso si es 0
-    y_max = max(max(carga_asignada, default=0), max(carga_max, default=0)) * 1.1
-    y_min = -0.5  # margen negativo para visualizar línea en cero
-    
     fig.update_layout(
         title="Análisis de Carga Académica por Profesor",
         xaxis=dict(
-            title="Profesor",
-            tickangle=-45,          # rotar etiquetas para legibilidad
-            tickfont=dict(size=10)
+            title="Profesores (índice)",
+            tickvals=x_vals,
+            ticktext=[f"P{i+1}" for i in x_vals]
         ),
-        yaxis=dict(
-            title="Cantidad de Créditos Semanales",
-            range=[y_min, y_max] if y_max > 0 else None
-        ),
+        yaxis=dict(title="Cantidad de Créditos Semanales"),
         font=dict(color='#1a1a1a'),
         paper_bgcolor='white',
         plot_bgcolor='white',
@@ -2001,9 +1966,8 @@ def generar_figura_cientifica_carga(cargas_finales, scheduler):
     )
     fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
     fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
-    
     return fig
-    
+
 def generar_plantilla():
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
