@@ -659,9 +659,13 @@ class TabuScheduler:
         carga_actual["GRADUADOS"] = 0.0
         carga_actual["TBA"] = 0.0
         
-        capacidad_restante = {}
+       capacidad_restante = {}
         for p in self.profesores.values():
-            capacidad_restante[p.nombre] = p.carga_max
+    # Si el profesor acepta compensación, su capacidad es "infinita" a efectos de preasignación
+            if p.compensacion:
+                capacidad_restante[p.nombre] = float('inf')
+            else:
+                capacidad_restante[p.nombre] = p.carga_max
         
         secciones_unicas = []
         secciones_multiple = []
@@ -725,11 +729,13 @@ class TabuScheduler:
             pen = 0
             for p, c in carga_actual.items():
                 if p in self.profesores:
-                    if c < self.profesores[p].carga_min - 1.5:
-                        pen += (self.profesores[p].carga_min - c) * 10
-                    elif c > self.profesores[p].carga_max + 1.5:
-                        pen += (c - self.profesores[p].carga_max) * 10
-            return pen
+                    prof = self.profesores[p]
+                    if c < prof.carga_min - 1.5:
+                        pen += (prof.carga_min - c) * 10
+            # No penalizar exceso si acepta compensación
+                    if not prof.compensacion and c > prof.carga_max + 1.5:
+                        pen += (c - prof.carga_max) * 10
+         return pen
 
         penalidad_actual = calc_penalidad()
         T = 100.0
@@ -853,10 +859,12 @@ class TabuScheduler:
         for prof, carga in carga_prof.items():
             prof_obj = self.profesores.get(prof)
             if prof_obj:
-                if carga > prof_obj.carga_max + 1.5:
+        # Si el profesor acepta compensación, NO se penaliza el exceso de carga máxima
+                if not prof_obj.compensacion and carga > prof_obj.carga_max + 0.0:
                     conflicts += 10000
-                if carga < prof_obj.carga_min - 1.5:
-                    conflicts += 10000
+        # La carga mínima siempre debe respetarse
+                if carga < prof_obj.carga_min - 0.0:
+                    conflicts += 20000
 
         # --- RESTRICCIÓN FUERTE: DOBLE ROL DE GRADUADOS ---
         for grad, codigos_recibe in self.graduados_reciben.items():
@@ -967,10 +975,10 @@ class TabuScheduler:
         for prof, carga in carga_prof.items():
             prof_obj = self.profesores.get(prof)
             if prof_obj:
-                if carga > prof_obj.carga_max + 1.5:
-                    conflictos_list.append(f"Profesor {prof} excede carga máxima ({carga:.1f} > {prof_obj.carga_max})")
-                if carga < prof_obj.carga_min - 1.5:
-                    conflictos_list.append(f"Profesor {prof} no alcanza carga mínima ({carga:.1f} < {prof_obj.carga_min})")
+                if not prof_obj.compensacion and carga > prof_obj.carga_max + 0.0:
+                        conflictos_list.append(f"Profesor {prof} excede carga máxima ({carga:.1f} > {prof_obj.carga_max})")
+                if carga < prof_obj.carga_min - 0.0:
+                        conflictos_list.append(f"Profesor {prof} no alcanza carga mínima ({carga:.1f} < {prof_obj.carga_min})")
 
         # Conflictos de doble rol
         for grad, codigos_recibe in self.graduados_reciben.items():
