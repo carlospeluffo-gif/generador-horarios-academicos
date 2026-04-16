@@ -1919,53 +1919,87 @@ def generar_reporte_pdf_html(scheduler, sol, cargas_finales, master_df):
     return html
 
 def generar_figura_cientifica_carga(cargas_finales, scheduler):
-    profesores = list(cargas_finales.keys())
+    # Filtrar solo profesores que existen en el scheduler (por seguridad)
+    profesores = [p for p in cargas_finales.keys() if p in scheduler.profesores]
+    if not profesores:
+        fig = go.Figure()
+        fig.add_annotation(text="No hay datos de carga académica disponibles.",
+                           xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
+        fig.update_layout(height=400)
+        return fig
+
+    # Ordenar por carga asignada descendente
     profesores.sort(key=lambda p: cargas_finales[p], reverse=True)
+    
     carga_asignada = [cargas_finales[p] for p in profesores]
     carga_min = [scheduler.profesores[p].carga_min for p in profesores]
     carga_max = [scheduler.profesores[p].carga_max for p in profesores]
     
-    x_vals = list(range(len(profesores)))
+    # Crear etiquetas legibles (nombre completo o iniciales)
+    # Si los nombres son largos, se puede abreviar: p.split()[0][:3] + "."
+    nombres_mostrar = [p.split()[0][:8] + ("..." if len(p.split()[0]) > 8 else "") for p in profesores]
     
     fig = go.Figure()
+    
+    # Barras de carga asignada
     fig.add_trace(go.Bar(
-        x=x_vals,
+        x=nombres_mostrar,
         y=carga_asignada,
         name='Carga Asignada',
-        marker=dict(color='lightgray', line=dict(color='black', width=1))
+        marker=dict(color='#A9CBB1', line=dict(color='#2E5A3B', width=1.5)),
+        hovertemplate='<b>%{x}</b><br>Carga Asignada: %{y:.1f} créditos<extra></extra>'
     ))
+    
+    # Línea de carga mínima
     fig.add_trace(go.Scatter(
-        x=x_vals,
+        x=nombres_mostrar,
         y=carga_min,
         mode='lines+markers',
         name='Carga Mínima',
-        line=dict(color='blue', width=2, dash='dot'),
-        marker=dict(size=6)
+        line=dict(color='#1f77b4', width=2.5, dash='dot'),
+        marker=dict(size=6, symbol='circle'),
+        hovertemplate='<b>%{x}</b><br>Carga Mínima: %{y:.1f} créditos<extra></extra>'
     ))
+    
+    # Línea de carga máxima
     fig.add_trace(go.Scatter(
-        x=x_vals,
+        x=nombres_mostrar,
         y=carga_max,
         mode='lines+markers',
         name='Carga Máxima',
-        line=dict(color='orange', width=2, dash='dot'),
-        marker=dict(size=6)
+        line=dict(color='#ff7f0e', width=2.5, dash='dot'),
+        marker=dict(size=6, symbol='diamond'),
+        hovertemplate='<b>%{x}</b><br>Carga Máxima: %{y:.1f} créditos<extra></extra>'
     ))
+    
     fig.update_layout(
         title="Análisis de Carga Académica por Profesor",
         xaxis=dict(
-            title="Profesores (índice)",
-            tickvals=x_vals,
-            ticktext=[f"P{i+1}" for i in x_vals]
+            title="Profesor",
+            tickangle=-45,          # Rotar etiquetas para mejor legibilidad
+            tickfont=dict(size=10)
         ),
-        yaxis=dict(title="Cantidad de Créditos Semanales"),
-        font=dict(color='#1a1a1a'),
+        yaxis=dict(
+            title="Créditos Semanales",
+            gridcolor='#E5E5E5'
+        ),
+        font=dict(color='#1a1a1a', size=12),
         paper_bgcolor='white',
         plot_bgcolor='white',
-        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5),
-        height=500
+        legend=dict(
+            orientation='h',
+            yanchor='bottom',
+            y=1.02,
+            xanchor='center',
+            x=0.5,
+            bgcolor='rgba(255,255,255,0.8)',
+            bordercolor='#ccc',
+            borderwidth=1
+        ),
+        height=550,
+        hovermode='x unified'
     )
-    fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
-    fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+    
     return fig
 
 def generar_plantilla():
