@@ -1920,82 +1920,134 @@ def generar_reporte_pdf_html(scheduler, sol, cargas_finales, master_df):
 
 import plotly.graph_objects as go
 
+import plotly.graph_objects as go
+
 def generar_figura_cientifica_carga(cargas_finales, scheduler):
-    # Filtrar solo profesores que existen en el scheduler
-    profesores = [p for p in cargas_finales.keys() if p in scheduler.profesores]
-    if not profesores:
+    # 1. Obtener TODOS los profesores (excluyendo 'TBA' y 'GRADUADOS' para el análisis científico)
+    profesores_reales = [p for p in scheduler.profesores.keys() if p not in ("TBA", "GRADUADOS")]
+    
+    if not profesores_reales:
         fig = go.Figure()
-        fig.add_annotation(text="No hay datos de carga académica disponibles.",
+        fig.add_annotation(text="No hay datos de profesores disponibles.",
                            xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
         fig.update_layout(height=400)
         return fig
 
-    # Ordenar por carga asignada descendente
-    profesores.sort(key=lambda p: cargas_finales[p], reverse=True)
+    # 2. Construir la data asegurando carga correcta (0 si no le tocó nada)
+    datos_profesores = []
+    for p in profesores_reales:
+        carga_actual = cargas_finales.get(p, 0.0) 
+        carga_min = scheduler.profesores[p].carga_min
+        carga_max = scheduler.profesores[p].carga_max
+        
+        datos_profesores.append({
+            'nombre_real': p,
+            'carga_asignada': carga_actual,
+            'carga_min': carga_min,
+            'carga_max': carga_max
+        })
+
+    # 3. Ordenar los profesores por carga asignada de mayor a menor para que la gráfica se vea analítica
+    datos_profesores.sort(key=lambda x: x['carga_asignada'], reverse=True)
     
-    carga_asignada = [cargas_finales[p] for p in profesores]
-    carga_min = [scheduler.profesores[p].carga_min for p in profesores]
-    carga_max = [scheduler.profesores[p].carga_max for p in profesores]
-    
-    # Usar nombres completos (o acortados si son muy largos)
-    nombres = [p.split()[0][:10] + "…" if len(p.split()[0]) > 10 else p.split()[0] for p in profesores]
-    
+    # 4. Asignar los alias P1, P2, P3... basándonos en el orden
+    leyenda_texto = "<b>Leyenda de Profesores:</b><br>"
+    for i, d in enumerate(datos_profesores):
+        d['alias'] = f"P{i+1}"
+        # Construimos el texto de la leyenda que irá abajo
+        leyenda_texto += f"<b>P{i+1}</b> = {d['nombre_real']} &nbsp;&nbsp;&nbsp;&nbsp; "
+        if (i + 1) % 5 == 0:  # Hacer un salto de línea cada 5 profesores para que no se corte
+            leyenda_texto += "<br>"
+
+    # 5. Extraer las listas finales para Plotly
+    nombres_alias = [d['alias'] for d in datos_profesores]
+    carga_asignada = [d['carga_asignada'] for d in datos_profesores]
+    carga_min = [d['carga_min'] for d in datos_profesores]
+    carga_max = [d['carga_max'] for d in datos_profesores]
+    nombres_completos = [d['nombre_real'] for d in datos_profesores]
+
     fig = go.Figure()
     
-    # Barras de carga asignada (estilo original)
+    # Barras de Carga Asignada
     fig.add_trace(go.Bar(
-        x=nombres,
+        x=nombres_alias,
         y=carga_asignada,
         name='Carga Asignada',
-        marker=dict(color='lightgray', line=dict(color='black', width=1))
+        customdata=nombres_completos,
+        marker=dict(color='#A9CBB1', line=dict(color='#2E5A3B', width=1.5)),
+        hovertemplate='<b>%{customdata} (%{x})</b><br>Carga Asignada: %{y:.1f} créditos<extra></extra>'
     ))
     
-    # Línea de carga mínima (azul punteada)
+    # Línea de Carga Mínima
     fig.add_trace(go.Scatter(
-        x=nombres,
+        x=nombres_alias,
         y=carga_min,
         mode='lines+markers',
         name='Carga Mínima',
-        line=dict(color='blue', width=2, dash='dot'),
-        marker=dict(size=6, color='blue')
+        customdata=nombres_completos,
+        line=dict(color='#1f77b4', width=2.5, dash='dot'),
+        marker=dict(size=6, symbol='circle'),
+        hovertemplate='<b>%{customdata} (%{x})</b><br>Carga Mínima: %{y:.1f} créditos<extra></extra>'
     ))
     
-    # Línea de carga máxima (naranja punteada)
+    # Línea de Carga Máxima
     fig.add_trace(go.Scatter(
-        x=nombres,
+        x=nombres_alias,
         y=carga_max,
         mode='lines+markers',
         name='Carga Máxima',
-        line=dict(color='orange', width=2, dash='dot'),
-        marker=dict(size=6, color='orange')
+        customdata=nombres_completos,
+        line=dict(color='#ff7f0e', width=2.5, dash='dot'),
+        marker=dict(size=6, symbol='diamond'),
+        hovertemplate='<b>%{customdata} (%{x})</b><br>Carga Máxima: %{y:.1f} créditos<extra></extra>'
     ))
     
-    # Ajustar rango Y para que las líneas bajas sean visibles
-    y_max = max(max(carga_asignada, default=0), max(carga_max, default=0)) * 1.1
-    y_min = -0.5  # Un pequeño margen negativo para evitar que la línea mínima toque el borde
-    
     fig.update_layout(
-        title="Análisis de Carga Académica por Profesor",
+        title="Análisis Científico de Carga Académica por Profesor",
         xaxis=dict(
-            title="Profesor",
-            tickangle=-45,
-            tickfont=dict(size=10)
+            title="Código de Profesor",
+            tickangle=0,
+            type='category' # Evita que Plotly reordene alfabéticamente
         ),
         yaxis=dict(
-            title="Cantidad de Créditos Semanales",
-            range=[y_min, y_max] if y_max > 0 else None
+            title="Créditos Semanales",
+            gridcolor='#E5E5E5'
         ),
-        font=dict(color='#1a1a1a'),
+        font=dict(color='#1a1a1a', size=12),
         paper_bgcolor='white',
         plot_bgcolor='white',
-        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5),
-        height=500
+        legend=dict(
+            orientation='h',
+            yanchor='bottom',
+            y=1.02,
+            xanchor='center',
+            x=0.5,
+            bgcolor='rgba(255,255,255,0.8)',
+            bordercolor='#ccc',
+            borderwidth=1
+        ),
+        height=650, # Aumenté un poco el height para que quepa la anotación
+        hovermode='x unified',
+        # Agregamos la leyenda de P1=Nombre abajo como anotación
+        annotations=[
+            dict(
+                x=0.0,
+                y=-0.3, # Posición debajo del gráfico
+                xref='paper',
+                yref='paper',
+                text=leyenda_texto,
+                showarrow=False,
+                align='left',
+                font=dict(size=10, color='#444'),
+                bordercolor='#ccc',
+                bgcolor='#fafafa',
+                borderpad=10
+            )
+        ],
+        margin=dict(b=150) # Margen bottom para dar espacio a la leyenda
     )
-    fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
-    fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
     
     return fig
-
 def generar_plantilla():
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
