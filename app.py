@@ -725,9 +725,9 @@ class TabuScheduler:
             pen = 0
             for p, c in carga_actual.items():
                 if p in self.profesores:
-                    if c < self.profesores[p].carga_min - 0.0:
+                    if c < self.profesores[p].carga_min - 1.5:
                         pen += (self.profesores[p].carga_min - c) * 10
-                    elif c > self.profesores[p].carga_max + 0.0:
+                    elif c > self.profesores[p].carga_max + 1.5:
                         pen += (c - self.profesores[p].carga_max) * 10
             return pen
 
@@ -853,9 +853,9 @@ class TabuScheduler:
         for prof, carga in carga_prof.items():
             prof_obj = self.profesores.get(prof)
             if prof_obj:
-                if carga > prof_obj.carga_max + 0.0:
+                if carga > prof_obj.carga_max + 1.5:
                     conflicts += 10000
-                if carga < prof_obj.carga_min - 0.0:
+                if carga < prof_obj.carga_min - 1.5:
                     conflicts += 10000
 
         # --- RESTRICCIÓN FUERTE: DOBLE ROL DE GRADUADOS ---
@@ -967,9 +967,9 @@ class TabuScheduler:
         for prof, carga in carga_prof.items():
             prof_obj = self.profesores.get(prof)
             if prof_obj:
-                if carga > prof_obj.carga_max + 0.0:
+                if carga > prof_obj.carga_max + 1.5:
                     conflictos_list.append(f"Profesor {prof} excede carga máxima ({carga:.1f} > {prof_obj.carga_max})")
-                if carga < prof_obj.carga_min - 0.0:
+                if carga < prof_obj.carga_min - 1.5:
                     conflictos_list.append(f"Profesor {prof} no alcanza carga mínima ({carga:.1f} < {prof_obj.carga_min})")
 
         # Conflictos de doble rol
