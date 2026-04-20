@@ -1736,11 +1736,9 @@ def generar_calendario_visual(solucion, scheduler, filtro_prof=None, filtro_salo
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
     nombres_dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
     
-    # Paleta Verde UPRM Premium
     COLOR_FONDO_TARJETA = 'rgba(232, 245, 233, 0.95)'
     COLOR_BORDE_IZQ = '#2e7d32'
     
-    # Detectar si estamos en modo "Vista Global" (Sin filtro de profesor)
     es_vista_global = filtro_prof is None
 
     # Filtrado previo
@@ -1764,12 +1762,10 @@ def generar_calendario_visual(solucion, scheduler, filtro_prof=None, filtro_salo
             if dia_abr not in dias_semana: continue
             dia_idx = dias_semana.index(dia_abr)
             
-            # Gestión de colisiones y ancho
             key = (dia_abr, h_ini_mins)
             offset_num = posiciones_ocupadas.get(key, 0)
             posiciones_ocupadas[key] = offset_num + 1
 
-            # Calculamos cuántas secciones coinciden exactamente en este bloque
             total_en_franja = sum(1 for a in asignaciones_validas if a['ini'] == h_ini_mins and dia_abr in a['patron']['days'])
             
             ancho_total = 0.9
@@ -1777,12 +1773,11 @@ def generar_calendario_visual(solucion, scheduler, filtro_prof=None, filtro_salo
             x_start = (dia_idx - 0.45) + (offset_num * ancho_card)
             x_end = x_start + ancho_card
 
-            # Tiempos
             h_fin_mins = h_ini_mins + int(duracion_bloques * 50)
             y_ini = h_ini_mins / 60
             y_fin = h_fin_mins / 60
 
-            # 1. Dibujar Tarjeta
+            # 1. Cuerpo de la Tarjeta
             fig.add_shape(
                 type="rect",
                 x0=x_start, x1=x_end,
@@ -1792,8 +1787,8 @@ def generar_calendario_visual(solucion, scheduler, filtro_prof=None, filtro_salo
                 layer="below"
             )
 
-            # 2. Borde acentuado
-            borde_ancho_rel = (x_end - x_start) * 0.12
+            # 2. Borde acentuado (Se ajusta al ancho de la card)
+            borde_ancho_rel = (x_end - x_start) * 0.15
             fig.add_shape(
                 type="rect",
                 x0=x_start, x1=x_start + borde_ancho_rel,
@@ -1803,16 +1798,23 @@ def generar_calendario_visual(solucion, scheduler, filtro_prof=None, filtro_salo
                 layer="below"
             )
 
-            # 3. CONTENIDO CONDICIONAL
+            # 3. CONTENIDO CON ROTACIÓN
             if es_vista_global:
-                # MODO TODO: Solo el código del curso (ej: MATE3171-01)
+                # MODO TODO: Texto rotado 90 grados para que no se solape
                 texto_display = f"<b>{sec.cod}</b>"
-                font_size = 9 if total_en_franja < 4 else 7
-                y_anchor_text = "middle"
-                y_pos = (y_ini + y_fin) / 2 # Centrado verticalmente
-                y_shift = 0
+                
+                fig.add_annotation(
+                    x=(x_start + x_end) / 2 + (borde_ancho_rel / 2), # Centrado en el espacio restante
+                    y=(y_ini + y_fin) / 2,
+                    text=texto_display,
+                    showarrow=False,
+                    textangle=-90, # ROTACIÓN A 90 GRADOS
+                    font=dict(size=10, color="#1a1a1a"),
+                    xanchor="center",
+                    yanchor="middle"
+                )
             else:
-                # MODO INDIVIDUAL: Detalle completo como en la foto
+                # MODO INDIVIDUAL: Detalle completo horizontal (como la foto original)
                 hora_label = f"{mins_to_str(h_ini_mins)} - {mins_to_str(h_fin_mins)}"
                 texto_display = (
                     f"<b>{sec.cod}</b><br>"
@@ -1820,22 +1822,18 @@ def generar_calendario_visual(solucion, scheduler, filtro_prof=None, filtro_salo
                     f"<span style='font-size:10px;'>📍 {salon_nombre}</span><br>"
                     f"<span style='font-size:10px;'>👤 {prof_nombre}</span>"
                 )
-                font_size = 11
-                y_anchor_text = "top"
-                y_pos = y_ini
-                y_shift = -4
-
-            fig.add_annotation(
-                x=x_start + borde_ancho_rel + 0.01,
-                y=y_pos,
-                text=texto_display,
-                showarrow=False,
-                xanchor="left",
-                yanchor=y_anchor_text,
-                align="left",
-                font=dict(size=font_size, color="#1a1a1a"),
-                yshift=y_shift
-            )
+                
+                fig.add_annotation(
+                    x=x_start + borde_ancho_rel + 0.01,
+                    y=y_ini,
+                    text=texto_display,
+                    showarrow=False,
+                    xanchor="left",
+                    yanchor="top",
+                    align="left",
+                    font=dict(size=11, color="#1a1a1a"),
+                    yshift=-4
+                )
 
     fig.update_layout(
         xaxis=dict(
