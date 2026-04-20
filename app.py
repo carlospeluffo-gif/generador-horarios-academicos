@@ -1730,90 +1730,117 @@ def generar_evolucion_fitness_plotly(historial):
     fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
     return fig
 
-def generar_calendario_visual(sol, scheduler, filtro_prof=None, filtro_salon=None, filtro_curso=None):
-    dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
-    eventos = []
-    for a in sol:
-        if filtro_prof and a['profesor'] != filtro_prof:
-            continue
-        if filtro_salon and a['salon'] != filtro_salon:
-            continue
-        if filtro_curso and filtro_curso not in a['seccion'].cod:
-            continue
-        
-        for dia, contrib in a['patron']['days'].items():
-            inicio = a['ini']
-            duracion = contrib * 50
-            fin = inicio + duracion
-            hora_inicio = mins_to_str(inicio)
-            hora_fin = mins_to_str(fin)
-            texto = f"<b>{a['profesor']}</b><br>{a['seccion'].cod}<br>{a['salon']}<br>{hora_inicio} - {hora_fin}"
-            eventos.append({
-                'Dia': dia,
-                'Inicio': inicio,
-                'Fin': fin,
-                'Profesor': a['profesor'],
-                'Seccion': a['seccion'].cod,
-                'Salon': a['salon'],
-                'Texto': texto
-            })
-    
-    if not eventos:
-        return go.Figure()
-    
-    df = pd.DataFrame(eventos)
-    dia_a_idx = {d: i for i, d in enumerate(dias_semana)}
-    df['Dia_idx'] = df['Dia'].map(dia_a_idx)
-    
-    profes = df['Profesor'].unique()
-    colores = px.colors.qualitative.Plotly[:len(profes)]
-    color_map = {p: colores[i % len(colores)] for i, p in enumerate(profes)}
-    
+def generar_calendario_visual(solucion, scheduler, filtro_prof=None, filtro_salon=None, filtro_curso=None):
+    """
+    Genera un calendario visual usando Plotly con estilo de tarjetas (cards) verdes
+    y borde acentuado a la izquierda.
+    """
     fig = go.Figure()
-    for _, row in df.iterrows():
-        fig.add_trace(go.Scatter(
-            x=[row['Inicio'], row['Fin'], row['Fin'], row['Inicio'], row['Inicio']],
-            y=[row['Dia_idx']-0.4, row['Dia_idx']-0.4, row['Dia_idx']+0.4, row['Dia_idx']+0.4, row['Dia_idx']-0.4],
-            fill='toself',
-            fillcolor=color_map[row['Profesor']],
-            line=dict(width=1, color='black'),
-            name=row['Profesor'],
-            legendgroup=row['Profesor'],
-            showlegend=False,
-            hoverinfo='text',
-            hovertext=row['Texto']
-        ))
     
-    for prof, color in color_map.items():
-        fig.add_trace(go.Scatter(
-            x=[None], y=[None],
-            mode='markers',
-            marker=dict(size=10, color=color),
-            name=prof,
-            legendgroup=prof,
-            showlegend=True
-        ))
+    dias_semana = ['L', 'M', 'W', 'J', 'V']
+    nombres_dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
     
+    # Colores Verdes para el diseño
+    COLOR_FONDO_TARJETA = 'rgba(232, 245, 233, 0.9)'  # Verde muy claro (#e8f5e9)
+    COLOR_BORDE_TARJETA = '#2e7d32'                     # Verde oscuro (#2e7d32)
+    COLOR_TEXTO = '#1a1a1a'
+    
+    # 1. Configurar el fondo y los ejes del calendario
     fig.update_layout(
-        title="Horario Semanal - Vista Calendario",
         xaxis=dict(
-            title="Hora del día",
-            tickvals=list(range(420, 1140, 60)),
-            ticktext=[mins_to_str(m).replace(' AM', '').replace(' PM', '') for m in range(420, 1140, 60)],
-            range=[scheduler.limite_operativo[0]-30, scheduler.limite_operativo[1]+30]
+            tickmode='array',
+            tickvals=[0, 1, 2, 3, 4],
+            ticktext=nombres_dias,
+            showgrid=True,
+            gridcolor='#e0e0e0',
+            gridwidth=1,
+            zeroline=False,
+            side='top' # Días en la parte superior
         ),
         yaxis=dict(
-            title="Día",
-            tickvals=list(range(len(dias_semana))),
-            ticktext=dias_semana
+            tickmode='array',
+            tickvals=list(range(7, 19)), # De 7 AM a 6 PM (ajusta según tu necesidad)
+            ticktext=[f"{h}:00" for h in range(7, 19)],
+            autorange="reversed", # Que la mañana quede arriba
+            showgrid=True,
+            gridcolor='#e0e0e0',
+            gridwidth=1,
+            zeroline=False,
         ),
-        font=dict(color='#1a1a1a'),
-        paper_bgcolor='white',
         plot_bgcolor='white',
-        height=600,
-        hovermode='closest',
-        legend=dict(title="Profesor", orientation='h', yanchor='bottom', y=1.02)
+        paper_bgcolor='rgba(0,0,0,0)',
+        margin=dict(l=40, r=20, t=40, b=20),
+        showlegend=False,
+        hovermode="closest"
     )
+
+    # 2. Filtrar y dibujar cada sección asignada
+    for asig in solucion:
+        # [!] Lógica de filtrado (Mantenla igual a la que ya tenías)
+        if filtro_prof and asig.profesor.nombre != filtro_prof: continue
+        if filtro_salon and asig.salon.codigo != filtro_salon: continue
+        if filtro_curso and asig.seccion.curso.codigo != filtro_curso: continue
+
+        # Extraer datos (Ajusta estos nombres de variables según tu clase 'Seccion' y 'Horario')
+        curso_nombre = asig.seccion.curso.codigo
+        profesor_nombre = asig.profesor.nombre
+        salon_nombre = asig.salon.codigo
+        
+        # Iterar sobre los días que se reúne esta sección
+        for dia_char in asig.seccion.horario.dias:
+            if dia_char not in dias_semana: continue
+            dia_idx = dias_semana.index(dia_char)
+            
+            # Convertir hora_inicio y hora_fin a formato decimal para el eje Y (ej. 8:30 -> 8.5)
+            h_in = asig.seccion.horario.hora_inicio.hour + (asig.seccion.horario.hora_inicio.minute / 60)
+            h_fin = asig.seccion.horario.hora_fin.hour + (asig.seccion.horario.hora_fin.minute / 60)
+            
+            hora_str = f"{asig.seccion.horario.hora_inicio.strftime('%I:%M %p')} - {asig.seccion.horario.hora_fin.strftime('%I:%M %p')}"
+
+            # --- DIBUJAR LA TARJETA ---
+            
+            # A. Fondo Verde Claro
+            fig.add_shape(
+                type="rect",
+                x0=dia_idx - 0.48, x1=dia_idx + 0.48,
+                y0=h_in, y1=h_fin,
+                fillcolor=COLOR_FONDO_TARJETA,
+                line=dict(width=0), # Sin borde general
+                layer="below"
+            )
+
+            # B. Borde Izquierdo Verde Oscuro
+            fig.add_shape(
+                type="rect",
+                x0=dia_idx - 0.48, x1=dia_idx - 0.43, # Más angosto para simular un borde
+                y0=h_in, y1=h_fin,
+                fillcolor=COLOR_BORDE_TARJETA,
+                line=dict(width=0),
+                layer="below"
+            )
+
+            # C. Texto de la Tarjeta (HTML dentro del tooltip de Plotly)
+            texto_tarjeta = (
+                f"<span style='font-size: 13px; font-family: sans-serif;'>"
+                f"<b>{curso_nombre}</b><br>"
+                f"<span style='color: #555;'>🕒 {hora_str}</span><br>"
+                f"📍 {salon_nombre}<br>"
+                f"👤 {profesor_nombre}"
+                f"</span>"
+            )
+
+            # Anotación (El texto que se ve)
+            fig.add_annotation(
+                x=dia_idx - 0.38, # Posicionado justo a la derecha del borde oscuro
+                y=h_in + 0.05,    # Ligeramente por debajo del borde superior
+                text=texto_tarjeta,
+                showarrow=False,
+                xanchor="left",
+                yanchor="top",
+                font=dict(color=COLOR_TEXTO),
+                align="left"
+            )
+
     return fig
 
 def generar_reporte_pdf_html(scheduler, sol, cargas_finales, master_df):
