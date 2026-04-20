@@ -1732,140 +1732,115 @@ def generar_evolucion_fitness_plotly(historial):
 
 def generar_calendario_visual(solucion, scheduler, filtro_prof=None, filtro_salon=None, filtro_curso=None):
     fig = go.Figure()
-    
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
     nombres_dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
     
-    # Colores Premium (Verde UPRM)
+    # Colores Premium
     COLOR_FONDO_TARJETA = 'rgba(232, 245, 233, 0.95)'
     COLOR_BORDE_IZQ = '#2e7d32'
     
-    # Determinamos si estamos viendo "Todos"
-    es_vista_global = filtro_prof is None and filtro_salon is None and filtro_curso is None
+    # 1. Identificar si es Vista Global (Muchos datos) o Individual (Filtros)
+    # Se considera global si no hay filtros activos
+    es_vista_global = (filtro_prof is None or filtro_prof == 'Todos') and \
+                      (filtro_salon is None or filtro_salon == 'Todos') and \
+                      (filtro_curso is None or filtro_curso == 'Todos')
 
-    # 1. Filtrar las asignaciones según la selección del usuario
+    # 2. Filtrar datos
     asignaciones_validas = []
+    mapa_densidad = {} # Para el modo rápido
+
     for asign in solucion:
-        if filtro_prof and asign['profesor'] != filtro_prof: continue
-        if filtro_salon and asign['salon'] != filtro_salon: continue
-        if filtro_curso and not asign['seccion'].cod.startswith(filtro_curso): continue
+        if filtro_prof and filtro_prof != 'Todos' and asign['profesor'] != filtro_prof: continue
+        if filtro_salon and filtro_salon != 'Todos' and asign['salon'] != filtro_salon: continue
+        if filtro_curso and filtro_curso != 'Todos' and not asign['seccion'].cod.startswith(filtro_curso): continue
+        
         asignaciones_validas.append(asign)
+        
+        # Llenar mapa de densidad para la vista rápida
+        for dia_abr in asign['patron']['days']:
+            if dia_abr in dias_semana:
+                key = (dia_abr, asign['ini'])
+                if key not in mapa_densidad: mapa_densidad[key] = []
+                mapa_densidad[key].append(f"<b>{asign['seccion'].cod}</b> ({asign['salon']})")
 
-    # 2. Diccionario para manejar colisiones (evitar que se encimen)
-    posiciones_ocupadas = {}
-
-    for asign in asignaciones_validas:
-        sec = asign['seccion']
-        prof_nombre = asign['profesor']
-        salon_nombre = asign['salon']
-        patron = asign['patron']
-        h_ini_mins = asign['ini']
-
-        for dia_abr, duracion_bloques in patron['days'].items():
-            if dia_abr not in dias_semana: continue
+    # --- MODO A: VISTA GLOBAL (MAPA DE CALOR) -> ULTRA RÁPIDO ---
+    if es_vista_global and len(asignaciones_validas) > 40:
+        for (dia_abr, h_ini_mins), cursos in mapa_densidad.items():
             dia_idx = dias_semana.index(dia_abr)
+            y_pos = h_ini_mins / 60
+            cantidad = len(cursos)
             
-            # Lógica de posicionamiento horizontal
-            key = (dia_abr, h_ini_mins)
-            offset_num = posiciones_ocupadas.get(key, 0)
-            posiciones_ocupadas[key] = offset_num + 1
+            intensidad = min(cantidad / 12, 1.0) 
+            color_resalte = f'rgba(46, 125, 50, {0.2 + (intensidad * 0.8)})'
 
-            # Calcular cuántos cursos hay en este mismo bloque
-            total_en_franja = sum(1 for a in asignaciones_validas if a['ini'] == h_ini_mins and dia_abr in a['patron']['days'])
-            
-            ancho_total = 0.9
-            ancho_card = ancho_total / total_en_franja
-            x_start = (dia_idx - 0.45) + (offset_num * ancho_card)
-            x_end = x_start + ancho_card
+            fig.add_trace(go.Scatter(
+                x=[dia_idx], y=[y_pos + 0.4],
+                mode="markers+text",
+                marker=dict(symbol="square", size=45, color=color_resalte, line=dict(width=1, color="white")),
+                text=str(cantidad),
+                textfont=dict(color="white" if intensidad > 0.4 else "black", size=13, family="Arial Black"),
+                hoverinfo="text",
+                hovertext=f"<b>{dia_abr} {mins_to_str(h_ini_mins)}</b><br>Cursos: {cantidad}<br><br>" + "<br>".join(cursos[:15]),
+                showlegend=False
+            ))
 
-            # Tiempos
-            h_fin_mins = h_ini_mins + int(duracion_bloques * 50)
-            y_ini = h_ini_mins / 60
-            y_fin = h_fin_mins / 60
+    # --- MODO B: VISTA INDIVIDUAL (TARJETAS PREMIUM) -> ESTÉTICA FOTO ---
+    else:
+        posiciones_ocupadas = {}
+        for asign in asignaciones_validas:
+            sec = asign['seccion']
+            prof_nombre = asign['profesor']
+            salon_nombre = asign['salon']
+            patron = asign['patron']
+            h_ini_mins = asign['ini']
 
-            # --- DIBUJAR RECTÁNGULO DE LA TARJETA ---
-            fig.add_shape(
-                type="rect",
-                x0=x_start, x1=x_end,
-                y0=y_ini, y1=y_fin,
-                fillcolor=COLOR_FONDO_TARJETA,
-                line=dict(color="#c8e6c9", width=0.5),
-                layer="below"
-            )
-
-            # --- DIBUJAR BORDE IZQUIERDO ---
-            borde_ancho_rel = (x_end - x_start) * 0.15
-            fig.add_shape(
-                type="rect",
-                x0=x_start, x1=x_start + borde_ancho_rel,
-                y0=y_ini, y1=y_fin,
-                fillcolor=COLOR_BORDE_IZQ,
-                line=dict(width=0),
-                layer="below"
-            )
-
-            # --- CONTENIDO DINÁMICO (TODO vs INDIVIDUAL) ---
-            if es_vista_global:
-                # MODO "TODOS": Texto rotado y simplificado
-                fig.add_annotation(
-                    x=(x_start + x_end) / 2 + (borde_ancho_rel / 2),
-                    y=(y_ini + y_fin) / 2,
-                    text=f"<b>{sec.cod}</b>",
-                    showarrow=False,
-                    textangle=-90,
-                    font=dict(size=9, color="#1a1a1a"),
-                    xanchor="center",
-                    yanchor="middle"
-                )
-            else:
-                # MODO INDIVIDUAL: Estética igual a la foto
-                hora_label = f"{mins_to_str(h_ini_mins)} - {mins_to_str(h_fin_mins)}"
-                texto_card = (
-                    f"<b>{sec.cod}</b><br>"
-                    f"<span style='font-size:10px;'>🕒 {hora_label}</span><br>"
-                    f"<span style='font-size:10px;'>📍 {salon_nombre}</span><br>"
-                    f"<span style='font-size:10px;'>👤 {prof_nombre}</span>"
-                )
+            for dia_abr, duracion_bloques in patron['days'].items():
+                if dia_abr not in dias_semana: continue
+                dia_idx = dias_semana.index(dia_abr)
                 
+                # Gestión de colisiones por si hay solapes leves
+                key = (dia_abr, h_ini_mins)
+                offset = posiciones_ocupadas.get(key, 0)
+                posiciones_ocupadas[key] = offset + 1
+                
+                total_en_franja = sum(1 for a in asignaciones_validas if a['ini'] == h_ini_mins and dia_abr in a['patron']['days'])
+                ancho_card = 0.9 / max(total_en_franja, 1)
+                x_start = (dia_idx - 0.45) + (offset * ancho_card)
+                x_end = x_start + ancho_card
+
+                y_ini = h_ini_mins / 60
+                y_fin = (h_ini_mins + int(duracion_bloques * 50)) / 60
+
+                # Dibujar Tarjeta
+                fig.add_shape(type="rect", x0=x_start, x1=x_end, y0=y_ini, y1=y_fin,
+                              fillcolor=COLOR_FONDO_TARJETA, line=dict(color="#c8e6c9", width=0.5))
+
+                # Borde Verde Izquierdo
+                borde_w = (x_end - x_start) * 0.12
+                fig.add_shape(type="rect", x0=x_start, x1=x_start + borde_w, y0=y_ini, y1=y_fin,
+                              fillcolor=COLOR_BORDE_IZQ, line=dict(width=0))
+
+                # Texto detallado (como la foto)
+                hora_label = f"{mins_to_str(h_ini_mins)} - {mins_to_str(int(y_fin*60))}"
                 fig.add_annotation(
-                    x=x_start + borde_ancho_rel + 0.02,
-                    y=y_ini,
-                    text=texto_card,
-                    showarrow=False,
-                    xanchor="left",
-                    yanchor="top",
-                    align="left",
-                    font=dict(size=11, color="#1a1a1a"),
-                    yshift=-5
+                    x=x_start + borde_w + 0.02, y=y_ini,
+                    text=f"<b>{sec.cod}</b><br><span style='font-size:10px;'>🕒 {hora_label}<br>📍 {salon_nombre}<br>👤 {prof_nombre}</span>",
+                    showarrow=False, xanchor="left", yanchor="top", align="left",
+                    font=dict(size=11), yshift=-5
                 )
 
-    # Configuración final del layout
+    # Configuración de Layout común
     fig.update_layout(
-        xaxis=dict(
-            tickmode='array',
-            tickvals=list(range(5)),
-            ticktext=nombres_dias,
-            range=[-0.6, 4.6],
-            fixedrange=True,
-            side='top'
-        ),
-        yaxis=dict(
-            tickmode='linear',
-            tick0=7,
-            dtick=1,
-            range=[19.5, 7], 
-            ticktext=[f"{h}:00" for h in range(7, 21)],
-            tickvals=list(range(7, 21)),
-            gridcolor="#f0f0f0"
-        ),
+        xaxis=dict(tickmode='array', tickvals=list(range(5)), ticktext=nombres_dias, side='top', range=[-0.6, 4.6]),
+        yaxis=dict(range=[20, 7], tickvals=list(range(7, 21)), gridcolor="#f0f0f0", fixedrange=True),
         margin=dict(l=50, r=20, t=50, b=20),
         height=850,
         plot_bgcolor='white',
-        showlegend=False
+        hoverlabel=dict(bgcolor="white", font_size=12)
     )
     
     return fig
-
+    
 def generar_reporte_pdf_html(scheduler, sol, cargas_finales, master_df):
     total_secciones = len(sol)
     secciones_tba = sum(1 for a in sol if a['profesor'] == 'TBA')
