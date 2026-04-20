@@ -1736,23 +1736,21 @@ def generar_calendario_visual(solucion, scheduler, filtro_prof=None, filtro_salo
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
     nombres_dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
     
-    # Paleta Verde
+    # Paleta Verde UPRM Premium
     COLOR_FONDO_TARJETA = 'rgba(232, 245, 233, 0.95)'
     COLOR_BORDE_IZQ = '#2e7d32'
     
-    # --- LÓGICA PARA EVITAR SOBREPOSICIÓN ---
-    # Diccionario para contar cuántas clases hay por (día, hora)
-    conteo_franja = {}
-    # Lista temporal para procesar las asignaciones que pasan el filtro
-    asignaciones_validas = []
+    # Detectar si estamos en modo "Vista Global" (Sin filtro de profesor)
+    es_vista_global = filtro_prof is None
 
+    # Filtrado previo
+    asignaciones_validas = []
     for asign in solucion:
         if filtro_prof and asign['profesor'] != filtro_prof: continue
         if filtro_salon and asign['salon'] != filtro_salon: continue
         if filtro_curso and not asign['seccion'].cod.startswith(filtro_curso): continue
         asignaciones_validas.append(asign)
 
-    # Registro de posiciones para el desplazamiento
     posiciones_ocupadas = {}
 
     for asign in asignaciones_validas:
@@ -1766,19 +1764,15 @@ def generar_calendario_visual(solucion, scheduler, filtro_prof=None, filtro_salo
             if dia_abr not in dias_semana: continue
             dia_idx = dias_semana.index(dia_abr)
             
-            # Identificador de colisión (Día + Hora)
+            # Gestión de colisiones y ancho
             key = (dia_abr, h_ini_mins)
             offset_num = posiciones_ocupadas.get(key, 0)
             posiciones_ocupadas[key] = offset_num + 1
 
-            # Ajuste de ancho y posición X según la cantidad de colisiones
-            # Si hay muchos, las tarjetas se hacen más delgadas
-            ancho_total = 0.9
-            max_colisiones = 1 # Por defecto 1
-            
-            # Determinamos cuántas hay en total para esa franja
+            # Calculamos cuántas secciones coinciden exactamente en este bloque
             total_en_franja = sum(1 for a in asignaciones_validas if a['ini'] == h_ini_mins and dia_abr in a['patron']['days'])
             
+            ancho_total = 0.9
             ancho_card = ancho_total / total_en_franja
             x_start = (dia_idx - 0.45) + (offset_num * ancho_card)
             x_end = x_start + ancho_card
@@ -1787,9 +1781,8 @@ def generar_calendario_visual(solucion, scheduler, filtro_prof=None, filtro_salo
             h_fin_mins = h_ini_mins + int(duracion_bloques * 50)
             y_ini = h_ini_mins / 60
             y_fin = h_fin_mins / 60
-            hora_label = f"{mins_to_str(h_ini_mins)} - {mins_to_str(h_fin_mins)}"
 
-            # 1. Cuerpo de la tarjeta
+            # 1. Dibujar Tarjeta
             fig.add_shape(
                 type="rect",
                 x0=x_start, x1=x_end,
@@ -1799,37 +1792,51 @@ def generar_calendario_visual(solucion, scheduler, filtro_prof=None, filtro_salo
                 layer="below"
             )
 
-            # 2. Borde acentuado (solo si hay espacio suficiente)
-            borde_ancho = (x_end - x_start) * 0.1
+            # 2. Borde acentuado
+            borde_ancho_rel = (x_end - x_start) * 0.12
             fig.add_shape(
                 type="rect",
-                x0=x_start, x1=x_start + borde_ancho,
+                x0=x_start, x1=x_start + borde_ancho_rel,
                 y0=y_ini, y1=y_fin,
                 fillcolor=COLOR_BORDE_IZQ,
                 line=dict(width=0),
                 layer="below"
             )
 
-            # 3. Texto dinámico (se reduce si hay muchas colisiones)
-            font_size = 10 if total_en_franja <= 2 else 8
-            
-            fig.add_annotation(
-                x=x_start + borde_ancho + 0.01,
-                y=y_ini,
-                text=(
+            # 3. CONTENIDO CONDICIONAL
+            if es_vista_global:
+                # MODO TODO: Solo el código del curso (ej: MATE3171-01)
+                texto_display = f"<b>{sec.cod}</b>"
+                font_size = 9 if total_en_franja < 4 else 7
+                y_anchor_text = "middle"
+                y_pos = (y_ini + y_fin) / 2 # Centrado verticalmente
+                y_shift = 0
+            else:
+                # MODO INDIVIDUAL: Detalle completo como en la foto
+                hora_label = f"{mins_to_str(h_ini_mins)} - {mins_to_str(h_fin_mins)}"
+                texto_display = (
                     f"<b>{sec.cod}</b><br>"
-                    f"{hora_label}<br>"
-                    f"📍 {salon_nombre}" + (f"<br>👤 {prof_nombre}" if total_en_franja < 3 else "")
-                ),
+                    f"<span style='font-size:10px;'>🕒 {hora_label}</span><br>"
+                    f"<span style='font-size:10px;'>📍 {salon_nombre}</span><br>"
+                    f"<span style='font-size:10px;'>👤 {prof_nombre}</span>"
+                )
+                font_size = 11
+                y_anchor_text = "top"
+                y_pos = y_ini
+                y_shift = -4
+
+            fig.add_annotation(
+                x=x_start + borde_ancho_rel + 0.01,
+                y=y_pos,
+                text=texto_display,
                 showarrow=False,
                 xanchor="left",
-                yanchor="top",
+                yanchor=y_anchor_text,
                 align="left",
                 font=dict(size=font_size, color="#1a1a1a"),
-                yshift=-2
+                yshift=y_shift
             )
 
-    # Configuración de Layout
     fig.update_layout(
         xaxis=dict(
             tickmode='array',
@@ -1843,13 +1850,13 @@ def generar_calendario_visual(solucion, scheduler, filtro_prof=None, filtro_salo
             tickmode='linear',
             tick0=7,
             dtick=1,
-            range=[20, 7], 
+            range=[19.5, 7], 
             ticktext=[f"{h}:00" for h in range(7, 21)],
             tickvals=list(range(7, 21)),
-            gridcolor="#eeeeee"
+            gridcolor="#f0f0f0"
         ),
         margin=dict(l=50, r=20, t=50, b=20),
-        height=900,
+        height=850,
         plot_bgcolor='white',
         showlegend=False
     )
