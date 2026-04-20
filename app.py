@@ -1731,93 +1731,111 @@ def generar_evolucion_fitness_plotly(historial):
     return fig
 
 def generar_calendario_visual(solucion, scheduler, filtro_prof=None, filtro_salon=None, filtro_curso=None):
-    """
-    Genera un calendario visual usando Plotly con estilo de tarjetas verdes.
-    Adaptado a la estructura: asignacion['seccion'], asignacion['profesor'], etc.
-    """
     fig = go.Figure()
     
-    # Mapeo de días para el eje X
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
     nombres_dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
     
-    # Paleta de colores Verde (Referencia imagen)
-    COLOR_FONDO_TARJETA = 'rgba(232, 245, 233, 0.95)' # Verde muy claro
-    COLOR_BORDE_IZQ = '#2e7d32'                      # Verde fuerte
-    COLOR_TEXTO_PRINCIPAL = '#1b5e20'               # Verde oscuro para texto
+    # Paleta Verde
+    COLOR_FONDO_TARJETA = 'rgba(232, 245, 233, 0.95)'
+    COLOR_BORDE_IZQ = '#2e7d32'
     
+    # --- LÓGICA PARA EVITAR SOBREPOSICIÓN ---
+    # Diccionario para contar cuántas clases hay por (día, hora)
+    conteo_franja = {}
+    # Lista temporal para procesar las asignaciones que pasan el filtro
+    asignaciones_validas = []
+
     for asign in solucion:
-        # Extraer objetos de la asignación (basado en tu estructura de TabuScheduler)
+        if filtro_prof and asign['profesor'] != filtro_prof: continue
+        if filtro_salon and asign['salon'] != filtro_salon: continue
+        if filtro_curso and not asign['seccion'].cod.startswith(filtro_curso): continue
+        asignaciones_validas.append(asign)
+
+    # Registro de posiciones para el desplazamiento
+    posiciones_ocupadas = {}
+
+    for asign in asignaciones_validas:
         sec = asign['seccion']
         prof_nombre = asign['profesor']
         salon_nombre = asign['salon']
         patron = asign['patron']
         h_ini_mins = asign['ini']
 
-        # Filtros
-        if filtro_prof and prof_nombre != filtro_prof: continue
-        if filtro_salon and salon_nombre != filtro_salon: continue
-        if filtro_curso and not sec.cod.startswith(filtro_curso): continue
-
-        # Dibujar la sección en cada día que le corresponde
         for dia_abr, duracion_bloques in patron['days'].items():
             if dia_abr not in dias_semana: continue
             dia_idx = dias_semana.index(dia_abr)
             
-            # Calcular horas para el eje Y
+            # Identificador de colisión (Día + Hora)
+            key = (dia_abr, h_ini_mins)
+            offset_num = posiciones_ocupadas.get(key, 0)
+            posiciones_ocupadas[key] = offset_num + 1
+
+            # Ajuste de ancho y posición X según la cantidad de colisiones
+            # Si hay muchos, las tarjetas se hacen más delgadas
+            ancho_total = 0.9
+            max_colisiones = 1 # Por defecto 1
+            
+            # Determinamos cuántas hay en total para esa franja
+            total_en_franja = sum(1 for a in asignaciones_validas if a['ini'] == h_ini_mins and dia_abr in a['patron']['days'])
+            
+            ancho_card = ancho_total / total_en_franja
+            x_start = (dia_idx - 0.45) + (offset_num * ancho_card)
+            x_end = x_start + ancho_card
+
+            # Tiempos
             h_fin_mins = h_ini_mins + int(duracion_bloques * 50)
             y_ini = h_ini_mins / 60
             y_fin = h_fin_mins / 60
-            
-            # Texto de la hora (ej: 08:00 AM - 08:50 AM)
             hora_label = f"{mins_to_str(h_ini_mins)} - {mins_to_str(h_fin_mins)}"
 
-            # 1. Dibujar el cuerpo de la tarjeta (Fondo verde claro)
+            # 1. Cuerpo de la tarjeta
             fig.add_shape(
                 type="rect",
-                x0=dia_idx - 0.45, x1=dia_idx + 0.45,
+                x0=x_start, x1=x_end,
                 y0=y_ini, y1=y_fin,
                 fillcolor=COLOR_FONDO_TARJETA,
-                line=dict(color="#c8e6c9", width=1),
+                line=dict(color="#c8e6c9", width=0.5),
                 layer="below"
             )
 
-            # 2. Dibujar el borde acentuado a la izquierda (Verde oscuro)
+            # 2. Borde acentuado (solo si hay espacio suficiente)
+            borde_ancho = (x_end - x_start) * 0.1
             fig.add_shape(
                 type="rect",
-                x0=dia_idx - 0.45, x1=dia_idx - 0.41,
+                x0=x_start, x1=x_start + borde_ancho,
                 y0=y_ini, y1=y_fin,
                 fillcolor=COLOR_BORDE_IZQ,
                 line=dict(width=0),
                 layer="below"
             )
 
-            # 3. Añadir el texto (Curso, Hora, Salón, Prof)
-            # Nota: sec.cod suele ser "MATE3171-01"
+            # 3. Texto dinámico (se reduce si hay muchas colisiones)
+            font_size = 10 if total_en_franja <= 2 else 8
+            
             fig.add_annotation(
-                x=dia_idx - 0.38,
+                x=x_start + borde_ancho + 0.01,
                 y=y_ini,
                 text=(
                     f"<b>{sec.cod}</b><br>"
-                    f"<span style='font-size:10px;'>🕒 {hora_label}</span><br>"
-                    f"<span style='font-size:10px;'>📍 {salon_nombre}</span><br>"
-                    f"<span style='font-size:10px;'>👤 {prof_nombre}</span>"
+                    f"{hora_label}<br>"
+                    f"📍 {salon_nombre}" + (f"<br>👤 {prof_nombre}" if total_en_franja < 3 else "")
                 ),
                 showarrow=False,
                 xanchor="left",
                 yanchor="top",
                 align="left",
-                font=dict(size=11, color="#1a1a1a"),
-                yshift=-5 # Pequeño margen superior interno
+                font=dict(size=font_size, color="#1a1a1a"),
+                yshift=-2
             )
 
-    # Configuración de los ejes
+    # Configuración de Layout
     fig.update_layout(
         xaxis=dict(
             tickmode='array',
             tickvals=list(range(5)),
             ticktext=nombres_dias,
-            range=[-0.5, 4.5],
+            range=[-0.6, 4.6],
             fixedrange=True,
             side='top'
         ),
@@ -1825,13 +1843,13 @@ def generar_calendario_visual(solucion, scheduler, filtro_prof=None, filtro_salo
             tickmode='linear',
             tick0=7,
             dtick=1,
-            range=[19, 7], # De 7 AM a 7 PM invertido
-            ticktext=[f"{h}:00" for h in range(7, 20)],
-            tickvals=list(range(7, 20)),
+            range=[20, 7], 
+            ticktext=[f"{h}:00" for h in range(7, 21)],
+            tickvals=list(range(7, 21)),
             gridcolor="#eeeeee"
         ),
         margin=dict(l=50, r=20, t=50, b=20),
-        height=800,
+        height=900,
         plot_bgcolor='white',
         showlegend=False
     )
