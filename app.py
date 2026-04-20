@@ -460,7 +460,7 @@ class Seccion:
 
 class Profesor:
     def __init__(self, nombre, carga_min, carga_max, pref_dias, pref_horas,
-                 bloqueo_dias, bloqueo_ini, bloqueo_fin,
+                 hora_entrada, hora_salida,
                  preferencias_cursos, compensacion, acepta_grandes, cursos_intensivos=0):
         self.nombre = nombre.upper().strip()
         self.carga_min = float(carga_min) if pd.notnull(carga_min) and carga_min != '' else 0.0
@@ -477,6 +477,10 @@ class Profesor:
                 elif token in ('LU', 'MA', 'MI', 'JU', 'VI'): self.pref_dias_set.add(token)
         self.pref_horas = pref_horas if isinstance(pref_horas, str) else 'ANY'
         
+        # Nuevos campos (sin uso en restricciones por ahora, solo almacenados)
+        self.hora_entrada = hora_entrada
+        self.hora_salida = hora_salida
+        
         self.preferencias = []
         if isinstance(preferencias_cursos, list):
             self.preferencias = [c.upper().strip() for c in preferencias_cursos if c and str(c).upper() != 'NAN']
@@ -488,32 +492,6 @@ class Profesor:
             self.cursos_intensivos = int(cursos_intensivos)
         except:
             self.cursos_intensivos = 0
-
-        self.bloqueos = []
-        if bloqueo_dias and isinstance(bloqueo_dias, str) and bloqueo_dias.strip():
-            dias_map = {'L': 'Lu', 'M': 'Ma', 'MI': 'Mi', 'J': 'Ju', 'V': 'Vi'}
-            dias_limpios = bloqueo_dias.upper().replace(' ', '')
-            if ',' in dias_limpios:
-                dias_limpios = dias_limpios.replace(',', '')
-            dias_set = set()
-            i = 0
-            while i < len(dias_limpios):
-                if dias_limpios[i:i+2] == 'MI':
-                    dias_set.add('Mi')
-                    i += 2
-                else:
-                    letra = dias_limpios[i]
-                    if letra in dias_map:
-                        dias_set.add(dias_map[letra])
-                    i += 1
-            if dias_set:
-                try:
-                    start_min = str_to_mins(bloqueo_ini) if bloqueo_ini and pd.notnull(bloqueo_ini) else None
-                    end_min = str_to_mins(bloqueo_fin) if bloqueo_fin and pd.notnull(bloqueo_fin) else None
-                    if start_min is not None and end_min is not None:
-                        self.bloqueos.append((dias_set, start_min, end_min))
-                except:
-                    pass
 
     def prioridad_curso(self, curso_cod):
         for idx, pref in enumerate(self.preferencias):
@@ -573,9 +551,8 @@ class TabuScheduler:
                     carga_max=r.get('CARGA_MAX', 15),
                     pref_dias=r.get('PREF_DIAS', ''),
                     pref_horas=r.get('PREF_HORAS', 'ANY'),
-                    bloqueo_dias=r.get('BLOQUEO_DIAS', ''),
-                    bloqueo_ini=r.get('BLOQUEO_HORA_INI', ''),
-                    bloqueo_fin=r.get('BLOQUEO_HORA_FIN', ''),
+                    hora_entrada=r.get('HORA_ENTRADA', ''),
+                    hora_salida=r.get('HORA_SALIDA', ''),
                     preferencias_cursos=prefs,
                     compensacion=r.get('COMPENSACION', 'NO'),
                     acepta_grandes=r.get('ACEPTA_GRANDES', 0),
@@ -816,12 +793,7 @@ class TabuScheduler:
                             if dia not in prof_obj.pref_dias_set:
                                 soft_penalty += 15
 
-                for (dias_set, start, end) in prof_obj.bloqueos:
-                    for dia in patron['days'].keys():
-                        if dia in dias_set:
-                            fin = ini + int(patron['days'][dia] * 50)
-                            if max(ini, start) < min(fin, end):
-                                conflicts += 10000
+                # Eliminado chequeo de bloqueos por columnas antiguas
 
             for dia, contrib in patron['days'].items():
                 fin = ini + int(contrib * 50)
@@ -936,12 +908,7 @@ class TabuScheduler:
                     conflictos_list.append(f"Sección {s.cod}: Prof {prof} NO tiene clase intensiva pero solicitó SÍ intensivos.")
                 if prof_obj.acepta_grandes == 0 and s.es_grande:
                     conflictos_list.append(f"Sección {s.cod}: Prof {prof} no acepta grandes.")
-                for (dias_set, start, end) in prof_obj.bloqueos:
-                    for dia in patron['days'].keys():
-                        if dia in dias_set:
-                            fin = ini + int(patron['days'][dia] * 50)
-                            if max(ini, start) < min(fin, end):
-                                conflictos_list.append(f"Sección {s.cod}: Prof {prof} tiene bloqueo el {dia}.")
+                # Sin chequeo de bloqueos
             
             for dia, contrib in patron['days'].items():
                 fin = ini + int(contrib * 50)
@@ -1043,14 +1010,7 @@ class TabuScheduler:
                 
                 for ini in inicios_posibles:
                     for salon in salones_posibles:
-                        if prof in self.profesores:
-                            bloqueado = False
-                            for (dias_set, start, end) in self.profesores[prof].bloqueos:
-                                if dia in dias_set and max(ini, start) < min(ini+duracion, end):
-                                    bloqueado = True
-                                    break
-                            if bloqueado:
-                                continue
+                        # Sin chequeo de bloqueos
                         
                         conflicto = False
                         for j, asign in enumerate(sol):
@@ -1987,9 +1947,8 @@ def generar_plantilla():
             'CARGA_MAX': [15, 12],
             'PREF_DIAS': ['LMV', 'MJ'],
             'PREF_HORAS': ['AM', 'PM'],
-            'BLOQUEO_DIAS': ['', ''],
-            'BLOQUEO_HORA_INI': ['', ''],
-            'BLOQUEO_HORA_FIN': ['', ''],
+            'HORA_ENTRADA': ['08:00', '13:00'],
+            'HORA_SALIDA': ['17:00', '20:00'],
             'PREF1': ['MATE3171', 'MATE3172'],
             'PREF2': ['', ''],
             'PREF3': ['', ''],
@@ -2110,7 +2069,7 @@ def main():
             st.download_button("💾 EXPORTAR EXCEL PLATINUM", exportar_todo(edited), "Horario_Final_UPRM.xlsx", use_container_width=True)
             
         with t2:
-            f1, f2, f3 = st.tabs(["Por Profesor", "Por Curso", "Por Salón"])
+            f1, f2, f3, f4 = st.tabs(["Por Profesor", "Por Curso", "Por Salón", "Por Graduados"])
             df_master = st.session_state.master
             with f1:
                 lista_profes = sorted([p for p in df_master['Persona'].unique() if p != "GRADUADOS"])
@@ -2130,6 +2089,14 @@ def main():
                     sl = st.selectbox("Seleccionar Salón", lista_salones)
                     subset = df_master[df_master['Salón'] == sl]
                     st.table(subset[['ID', 'Asignatura', 'Persona', 'Días', 'Horario']])
+            with f4:
+                lista_grads = sorted([p for p in df_master['Persona'].unique() if p.upper().startswith('GRADUADO')])
+                if lista_grads:
+                    g = st.selectbox("Seleccionar Graduado", lista_grads)
+                    subset = df_master[df_master['Persona'] == g]
+                    st.table(subset[['ID', 'Asignatura', 'Estudiantes (Cupo)', 'Créditos Reales', 'Días', 'Horario', 'Salón']])
+                else:
+                    st.info("No hay graduados con asignación de docencia en este horario.")
                 
         with t3:
             conflictos = st.session_state.conflicts
