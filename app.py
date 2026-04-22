@@ -1649,7 +1649,7 @@ class TabuScheduler:
                 if status_text:
                     duros = int(self.mejor_costo // 10000)
                     costo_total = self.mejor_costo
-                    fitness_actual = 10000 / (10000 + costo_total)
+                    fitness_actual = 1 / (1 + costo_total)
                     costo_suave = costo_total - (duros * 10000)
                     if costo_total > 0:
                         pct_suave = (costo_suave / costo_total) * 100
@@ -1784,7 +1784,7 @@ def generar_barras_apiladas_profesor(sol, scheduler):
     return fig
 
 def generar_evolucion_fitness_plotly(historial):
-    fitness = [10000 / (10000 + c) for c in historial]
+    fitness = [1 / (1 + c) for c in historial]
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         y=fitness,
