@@ -801,7 +801,7 @@ class TabuScheduler:
                     if prof_obj.pref_dias_set:
                         for dia in patron['days'].keys():
                             if dia not in prof_obj.pref_dias_set:
-                                soft_penalty += 10000
+                                soft_penalty += 30000
 
             # --- NUEVO: Restricción fuerte HORA_ENTRADA / HORA_SALIDA ---
             if prof != "GRADUADOS" and prof in self.profesores:
