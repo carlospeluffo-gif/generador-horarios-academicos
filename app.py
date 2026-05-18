@@ -466,25 +466,18 @@ class Profesor:
         self.carga_min = float(carga_min) if pd.notnull(carga_min) and carga_min != '' else 0.0
         self.carga_max = float(carga_max) if pd.notnull(carga_max) and carga_max != '' else 12.0
         
-        # --- PARSEO MEJORADO DE PREF_DIAS (sin duplicados, mapeo robusto) ---
         self.pref_dias_set = set()
         if pref_dias and isinstance(pref_dias, str):
-            pref_dias = pref_dias.upper().strip()
-            if pref_dias not in ['ANY', 'NONE', '']:
-                tokens = pref_dias.replace(',', ' ').replace('-', ' ').split()
-                for token in tokens:
-                    if token in ('L', 'LU', 'LUNES'): self.pref_dias_set.add('Lu')
-                    elif token in ('M', 'MA', 'MARTES'): self.pref_dias_set.add('Ma')
-                    elif token in ('W', 'MI', 'MIERCOLES', 'X'): self.pref_dias_set.add('Mi')
-                    elif token in ('J', 'JU', 'JUEVES'): self.pref_dias_set.add('Ju')
-                    elif token in ('V', 'VI', 'VIERNES'): self.pref_dias_set.add('Vi')
-                    # Si ya es Lu, Ma, Mi, Ju, Vi se añade directamente
-                    elif token in ('LU', 'MA', 'MI', 'JU', 'VI'):
-                        self.pref_dias_set.add(token.capitalize().replace('Lu','Lu').replace('Ma','Ma').replace('Mi','Mi').replace('Ju','Ju').replace('Vi','Vi'))
-        
+            for token in pref_dias.replace(',', ' ').upper().split():
+                if token in ('L', 'LU'): self.pref_dias_set.add('Lu')
+                elif token in ('M', 'MA'): self.pref_dias_set.add('Ma')
+                elif token in ('W', 'MI'): self.pref_dias_set.add('Mi')
+                elif token in ('J', 'JU'): self.pref_dias_set.add('Ju')
+                elif token in ('V', 'VI'): self.pref_dias_set.add('Vi')
+                elif token in ('LU', 'MA', 'MI', 'JU', 'VI'): self.pref_dias_set.add(token)
         self.pref_horas = pref_horas if isinstance(pref_horas, str) else 'ANY'
         
-        # --- Parseo de HORA_ENTRADA y HORA_SALIDA a minutos ---
+        # --- NUEVO: Parseo de HORA_ENTRADA y HORA_SALIDA a minutos ---
         self.hora_entrada_min = None
         self.hora_salida_min = None
         if hora_entrada and pd.notnull(hora_entrada) and str(hora_entrada).strip():
@@ -518,6 +511,7 @@ class Profesor:
 
 def compatible_tipo(tipos_permitidos_curso, salon_tipo):
     """Verifica si el tipo de salón (entero o float) está permitido para el curso."""
+    # Normalizar el tipo del salón a string (ej: 1.0 -> '1', 2.0 -> '2', 3.0 -> '3')
     if isinstance(salon_tipo, float):
         if salon_tipo >= 2.9:
             salon_cat = '3'
@@ -528,10 +522,11 @@ def compatible_tipo(tipos_permitidos_curso, salon_tipo):
     else:
         salon_cat = str(int(salon_tipo))
     
+    # El curso permite el salón si su categoría está en la lista de permitidos
     return salon_cat in tipos_permitidos_curso
 
 # ==============================================================================
-# 4. MOTOR DE OPTIMIZACIÓN MEJORADO (CON PREF_DIAS COMO RESTRICCIÓN DURA)
+# 4. MOTOR DE OPTIMIZACIÓN MEJORADO (CON REPARACIÓN AGRESIVA REFORZADA)
 # ==============================================================================
 class TabuScheduler:
     def __init__(self, df_cursos, df_profes, df_salones, zona, df_grad=None):
@@ -582,6 +577,7 @@ class TabuScheduler:
         for _, r in df_cursos.iterrows():
             cod_base = str(r['CODIGO']).strip().upper()
             if cod_base not in cursos_agrupados:
+                # El tipo de salón se pasa como string (ya normalizado en main)
                 tipo_salon = r.get('TIPO_SALON', '1')
                 cursos_agrupados[cod_base] = {
                     'creditos': int(r['CREDITOS']),
@@ -797,24 +793,17 @@ class TabuScheduler:
                 elif prof_obj.cursos_intensivos == 1 and puede_ser_intensivo and not es_intensivo:
                     conflicts += 10000
 
-            # --- NUEVO: PREF_DIAS como restricción DURA ---
-            if prof != "GRADUADOS" and prof in self.profesores:
-                prof_obj = self.profesores[prof]
-                if prof_obj.pref_dias_set:
-                    for dia in patron['days'].keys():
-                        if dia not in prof_obj.pref_dias_set:
-                            conflicts += 10000   # Ahora es duro, siempre evaluado
-            # ------------------------------------------------
-
-            if not solo_duros:
-                if prof != "GRADUADOS" and prof in self.profesores:
-                    prof_obj = self.profesores[prof]
+                if not solo_duros:
                     if prof_obj.pref_horas == 'AM' and ini >= 720:
                         soft_penalty += 30
                     elif prof_obj.pref_horas == 'PM' and ini < 720:
                         soft_penalty += 30
+                    if prof_obj.pref_dias_set:
+                        for dia in patron['days'].keys():
+                            if dia not in prof_obj.pref_dias_set:
+                                soft_penalty += 10000
 
-            # --- Restricción fuerte HORA_ENTRADA / HORA_SALIDA ---
+            # --- NUEVO: Restricción fuerte HORA_ENTRADA / HORA_SALIDA ---
             if prof != "GRADUADOS" and prof in self.profesores:
                 prof_obj = self.profesores[prof]
                 if prof_obj.hora_entrada_min is not None or prof_obj.hora_salida_min is not None:
@@ -824,6 +813,7 @@ class TabuScheduler:
                             conflicts += 10000
                         if prof_obj.hora_salida_min is not None and fin_bloque > prof_obj.hora_salida_min:
                             conflicts += 10000
+            # ------------------------------------------------------------
 
             for dia, contrib in patron['days'].items():
                 fin = ini + int(contrib * 50)
@@ -938,11 +928,6 @@ class TabuScheduler:
                     conflictos_list.append(f"Sección {s.cod}: Prof {prof} NO tiene clase intensiva pero solicitó SÍ intensivos.")
                 if prof_obj.acepta_grandes == 0 and s.es_grande:
                     conflictos_list.append(f"Sección {s.cod}: Prof {prof} no acepta grandes.")
-                # Reporte de PREF_DIAS
-                if prof_obj.pref_dias_set:
-                    for dia in patron['days'].keys():
-                        if dia not in prof_obj.pref_dias_set:
-                            conflictos_list.append(f"Sección {s.cod}: Prof {prof} asignado en día {dia} no preferido.")
             
             # --- NUEVO: Reporte de violación horario laboral ---
             if prof != "GRADUADOS" and prof in self.profesores:
@@ -1043,11 +1028,6 @@ class TabuScheduler:
 
         random.shuffle(patrones)
         for patron in patrones:
-            # --- Verificación de PREF_DIAS antes de evaluar días ---
-            if prof in self.profesores and self.profesores[prof].pref_dias_set:
-                if any(dia not in self.profesores[prof].pref_dias_set for dia in patron['days']):
-                    continue  # Este patrón usa un día no preferido, descartar
-
             for dia, contrib in patron['days'].items():
                 duracion = contrib * 50
                 inicios_posibles = [ini for ini in self.bloques if ini >= self.limite_operativo[0] and ini + duracion <= self.limite_operativo[1]]
@@ -1128,12 +1108,6 @@ class TabuScheduler:
             if not patrones:
                 patrones = PATRONES.get(s.creditos, PATRONES[3])
 
-            # Filtrar patrones que respeten PREF_DIAS
-            if prof in self.profesores and self.profesores[prof].pref_dias_set:
-                patrones = [p for p in patrones if all(dia in self.profesores[prof].pref_dias_set for dia in p['days'])]
-                if not patrones:
-                    continue   # No hay patrón válido para este profesor
-
             patron = random.choice(patrones)
             horas_posibles = set(self.bloques)
             for dia, contrib in patron['days'].items():
@@ -1199,7 +1173,10 @@ class TabuScheduler:
                         costo += 30
                     elif prof_obj.pref_horas == 'PM' and hora < 720:
                         costo += 30
-                    # PREF_DIAS ya no suma aquí porque es duro, ya filtrado
+                    if prof_obj.pref_dias_set:
+                        for dia in patron['days'].keys():
+                            if dia not in prof_obj.pref_dias_set:
+                                costo += 10000
                 mejores_opciones.append((costo, prof, patron, hora, salon))
 
         if not mejores_opciones:
@@ -1278,12 +1255,6 @@ class TabuScheduler:
         
         if not patrones:
             patrones = PATRONES.get(s.creditos, PATRONES[3])
-        
-        # Respetar PREF_DIAS del profesor
-        if prof_obj.pref_dias_set:
-            patrones = [p for p in patrones if all(dia in prof_obj.pref_dias_set for dia in p['days'])]
-        if not patrones:
-            return nuevo, self._costo_compactacion(nuevo)
         
         mejores_opciones = []
         for _ in range(20):
@@ -1376,33 +1347,45 @@ class TabuScheduler:
     # FASE DE REPARACIÓN AGRESIVA REFORZADA (Garantiza factibilidad)
     # --------------------------------------------------------------------------
     def _reparar_solucion(self, sol, max_intentos=15):
+        """
+        Intenta reparar una solución con conflictos duros mediante:
+        - Destrucción de secciones conflictivas + aleatorias.
+        - Reinserción voraz buscando solo huecos con 0 conflictos.
+        - Búsqueda local tabú enfocada en conflictos duros.
+        """
         mejor_sol = deepcopy(sol)
         mejor_costo = self._costo_total(mejor_sol, solo_duros=True)
         if mejor_costo == 0:
             return mejor_sol
 
+        # Parámetros para búsqueda tabú de reparación
         tabu_tenure = 7
         tabu_list = {}
         max_iter_rep = 2000
         temp_rep = 200.0
 
         for intento in range(max_intentos):
+            # Identificar secciones conflictivas
             conflictivas = set()
             for idx, asign in enumerate(mejor_sol):
                 temp_sin = mejor_sol[:idx] + mejor_sol[idx+1:]
                 if self._costo_total(temp_sin, solo_duros=True) < mejor_costo:
                     conflictivas.add(idx)
+            # Añadir un 20% adicional aleatorio para romper bloqueos
             no_conflictivas = [i for i in range(len(mejor_sol)) if i not in conflictivas]
             extra_destruir = random.sample(no_conflictivas, min(int(len(no_conflictivas)*0.2), len(no_conflictivas)))
             a_destruir = list(conflictivas) + extra_destruir
 
+            # Marcar como TBA
             nuevo = deepcopy(mejor_sol)
             for idx in a_destruir:
                 nuevo[idx] = self._crear_asignacion_temporal(nuevo[idx]['seccion'], prof="TBA", salon="TBA")
 
+            # Reinsertar greedy
             for idx in a_destruir:
                 exito = self._asignar_seccion_greedy_cero(idx, nuevo)
                 if not exito:
+                    # Intentar con búsqueda tabú simple
                     self._reparar_asignacion_tabu(idx, nuevo, tabu_tenure)
             
             nuevo_costo = self._costo_total(nuevo, solo_duros=True)
@@ -1412,6 +1395,7 @@ class TabuScheduler:
                 if mejor_costo == 0:
                     break
 
+            # Si aún no es factible, aplicar recocido simulado enfocado en duros
             if mejor_costo > 0:
                 actual = deepcopy(mejor_sol)
                 costo_actual = mejor_costo
@@ -1431,6 +1415,7 @@ class TabuScheduler:
         return mejor_sol
 
     def _mutar_solucion_solo_duros(self, sol):
+        """Mutación que solo evalúa conflictos duros, ignorando preferencias suaves."""
         nuevo = deepcopy(sol)
         idx = random.randint(0, len(nuevo)-1)
         s = nuevo[idx]['seccion']
@@ -1453,12 +1438,6 @@ class TabuScheduler:
                         patrones = intensivos + [p for p in patrones if not any(c >= 3 for c in p['days'].values())]
             if not patrones:
                 patrones = PATRONES.get(s.creditos, PATRONES[3])
-
-            # Respetar PREF_DIAS
-            if prof in self.profesores and self.profesores[prof].pref_dias_set:
-                patrones = [p for p in patrones if all(dia in self.profesores[prof].pref_dias_set for dia in p['days'])]
-                if not patrones:
-                    continue
 
             patron = random.choice(patrones)
             horas_posibles = set(self.bloques)
@@ -1490,6 +1469,7 @@ class TabuScheduler:
                 continue
             salon = random.choice(salones_cand)
 
+            # Solo evaluar conflictos duros
             temp_asign = {'seccion': s, 'profesor': prof, 'salon': salon, 'patron': patron, 'ini': hora}
             temp_sol = sol[:idx] + [temp_asign] + sol[idx+1:]
             costo_duros = self._costo_total(temp_sol, solo_duros=True)
@@ -1503,6 +1483,7 @@ class TabuScheduler:
         return nuevo, mejor[0]
 
     def _asignar_seccion_greedy_cero(self, idx, sol):
+        """Intenta asignar la sección idx a un slot que cause 0 conflictos duros."""
         s = sol[idx]['seccion']
         cand_profs = [p for p in s.cands if p in self.profesores]
         if not cand_profs:
@@ -1522,9 +1503,6 @@ class TabuScheduler:
                         patrones = intensivos + [p for p in patrones if not any(c >= 3 for c in p['days'].values())]
             if not patrones:
                 patrones = PATRONES.get(s.creditos, PATRONES[3])
-            # Respetar PREF_DIAS
-            if prof in self.profesores and self.profesores[prof].pref_dias_set:
-                patrones = [p for p in patrones if all(dia in self.profesores[prof].pref_dias_set for dia in p['days'])]
             random.shuffle(patrones)
             for patron in patrones:
                 horas_posibles = list(self.bloques)
@@ -1603,6 +1581,7 @@ class TabuScheduler:
         return False
 
     def _reparar_asignacion_tabu(self, idx, sol, tenure):
+        """Búsqueda tabú simple para una sola sección conflictiva."""
         s = sol[idx]['seccion']
         mejor_asign = None
         mejor_costo = float('inf')
@@ -1616,11 +1595,6 @@ class TabuScheduler:
                 patrones = [p for p in patrones if not (prof_obj.cursos_intensivos == 0 and any(c >= 3 for c in p['days'].values()))]
             if not patrones:
                 patrones = PATRONES.get(s.creditos, PATRONES[3])
-            # Respetar PREF_DIAS
-            if prof in self.profesores and self.profesores[prof].pref_dias_set:
-                patrones = [p for p in patrones if all(dia in self.profesores[prof].pref_dias_set for dia in p['days'])]
-                if not patrones:
-                    continue
             patron = random.choice(patrones)
             hora = random.choice(self.bloques)
             
@@ -1840,15 +1814,19 @@ def generar_calendario_visual(solucion, scheduler, filtro_prof=None, filtro_salo
     dias_semana = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']
     nombres_dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
     
+    # Colores Premium
     COLOR_FONDO_TARJETA = 'rgba(232, 245, 233, 0.95)'
     COLOR_BORDE_IZQ = '#2e7d32'
     
+    # 1. Identificar si es Vista Global (Muchos datos) o Individual (Filtros)
+    # Se considera global si no hay filtros activos
     es_vista_global = (filtro_prof is None or filtro_prof == 'Todos') and \
                       (filtro_salon is None or filtro_salon == 'Todos') and \
                       (filtro_curso is None or filtro_curso == 'Todos')
 
+    # 2. Filtrar datos
     asignaciones_validas = []
-    mapa_densidad = {}
+    mapa_densidad = {} # Para el modo rápido
 
     for asign in solucion:
         if filtro_prof and filtro_prof != 'Todos' and asign['profesor'] != filtro_prof: continue
@@ -1857,12 +1835,14 @@ def generar_calendario_visual(solucion, scheduler, filtro_prof=None, filtro_salo
         
         asignaciones_validas.append(asign)
         
+        # Llenar mapa de densidad para la vista rápida
         for dia_abr in asign['patron']['days']:
             if dia_abr in dias_semana:
                 key = (dia_abr, asign['ini'])
                 if key not in mapa_densidad: mapa_densidad[key] = []
                 mapa_densidad[key].append(f"<b>{asign['seccion'].cod}</b> ({asign['salon']})")
 
+    # --- MODO A: VISTA GLOBAL (MAPA DE CALOR) -> ULTRA RÁPIDO ---
     if es_vista_global and len(asignaciones_validas) > 40:
         for (dia_abr, h_ini_mins), cursos in mapa_densidad.items():
             dia_idx = dias_semana.index(dia_abr)
@@ -1882,6 +1862,8 @@ def generar_calendario_visual(solucion, scheduler, filtro_prof=None, filtro_salo
                 hovertext=f"<b>{dia_abr} {mins_to_str(h_ini_mins)}</b><br>Cursos: {cantidad}<br><br>" + "<br>".join(cursos[:15]),
                 showlegend=False
             ))
+
+    # --- MODO B: VISTA INDIVIDUAL (TARJETAS PREMIUM) -> ESTÉTICA FOTO ---
     else:
         posiciones_ocupadas = {}
         for asign in asignaciones_validas:
@@ -1895,6 +1877,7 @@ def generar_calendario_visual(solucion, scheduler, filtro_prof=None, filtro_salo
                 if dia_abr not in dias_semana: continue
                 dia_idx = dias_semana.index(dia_abr)
                 
+                # Gestión de colisiones por si hay solapes leves
                 key = (dia_abr, h_ini_mins)
                 offset = posiciones_ocupadas.get(key, 0)
                 posiciones_ocupadas[key] = offset + 1
@@ -1907,13 +1890,16 @@ def generar_calendario_visual(solucion, scheduler, filtro_prof=None, filtro_salo
                 y_ini = h_ini_mins / 60
                 y_fin = (h_ini_mins + int(duracion_bloques * 50)) / 60
 
+                # Dibujar Tarjeta
                 fig.add_shape(type="rect", x0=x_start, x1=x_end, y0=y_ini, y1=y_fin,
                               fillcolor=COLOR_FONDO_TARJETA, line=dict(color="#c8e6c9", width=0.5))
 
+                # Borde Verde Izquierdo
                 borde_w = (x_end - x_start) * 0.12
                 fig.add_shape(type="rect", x0=x_start, x1=x_start + borde_w, y0=y_ini, y1=y_fin,
                               fillcolor=COLOR_BORDE_IZQ, line=dict(width=0))
 
+                # Texto detallado (como la foto)
                 hora_label = f"{mins_to_str(h_ini_mins)} - {mins_to_str(int(y_fin*60))}"
                 fig.add_annotation(
                     x=x_start + borde_w + 0.02, y=y_ini,
@@ -1922,6 +1908,7 @@ def generar_calendario_visual(solucion, scheduler, filtro_prof=None, filtro_salo
                     font=dict(size=11), yshift=-5
                 )
 
+    # Configuración de Layout común
     fig.update_layout(
         xaxis=dict(tickmode='array', tickvals=list(range(5)), ticktext=nombres_dias, side='top', range=[-0.6, 4.6]),
         yaxis=dict(range=[20, 7], tickvals=list(range(7, 21)), gridcolor="#f0f0f0", fixedrange=True),
@@ -2054,7 +2041,7 @@ def generar_plantilla():
             'DEMANDA': [120, 150],
             'CUPO': [30, 30],
             'CANDIDATOS': ['PEREZ, GONZALEZ', 'RODRIGUEZ'],
-            'TIPO_SALON': ['1', '1,3']
+            'TIPO_SALON': ['1', '1,3']   # Ejemplo con múltiples tipos
         })
         df_cursos.to_excel(writer, sheet_name='Cursos', index=False)
         
@@ -2126,11 +2113,13 @@ def main():
                 with st.spinner("Balanceando cargas, consolidando secciones y resolviendo..."):
                     xls = pd.ExcelFile(file)
                     df_cursos = pd.read_excel(xls, 'Cursos')
+                    # Normalizar TIPO_SALON: convertir a string y reemplazar punto por coma
                     df_cursos['TIPO_SALON'] = df_cursos['TIPO_SALON'].astype(str).str.replace('.', ',', regex=False)
                     
                     df_profes = pd.read_excel(xls, 'Profesores')
                     df_salones = pd.read_excel(xls, 'Salones')
                     
+                    # Leer hoja Graduados si existe
                     df_grad = None
                     if 'Graduados' in xls.sheet_names:
                         df_grad = pd.read_excel(xls, 'Graduados')
