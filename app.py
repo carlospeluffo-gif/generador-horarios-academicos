@@ -794,15 +794,14 @@ class TabuScheduler:
                     conflicts += 10000
 
                 if not solo_duros:
-                        if prof_obj.pref_horas == 'AM' and ini >= 720:
-                            soft_penalty += 30
-                        elif prof_obj.pref_horas == 'PM' and ini < 720:
-                            soft_penalty += 30
-                    # PREF_DIAS es restricción DURA (fuera del bloque solo_duros)
+                    if prof_obj.pref_horas == 'AM' and ini >= 720:
+                        soft_penalty += 30
+                    elif prof_obj.pref_horas == 'PM' and ini < 720:
+                        soft_penalty += 30
                     if prof_obj.pref_dias_set:
                         for dia in patron['days'].keys():
                             if dia not in prof_obj.pref_dias_set:
-                                conflicts += 10000
+                                soft_penalty += 10000
 
             # --- NUEVO: Restricción fuerte HORA_ENTRADA / HORA_SALIDA ---
             if prof != "GRADUADOS" and prof in self.profesores:
@@ -887,8 +886,7 @@ class TabuScheduler:
                 salones_por_prof_tipo[key].add(salon)
         for (prof, tipo), salones in salones_por_prof_tipo.items():
             if len(salones) > 1:
-                # Penalización fuerte: cada salón extra cuesta 500 pts (antes era 2)
-                soft_penalty += (len(salones) - 1) * 500
+                soft_penalty += (len(salones) - 1) * 2
         
         return conflicts + soft_penalty
 
@@ -1025,12 +1023,6 @@ class TabuScheduler:
             elif prof_obj.cursos_intensivos == 1 and puede_ser_intensivo:
                 patrones_int = [p for p in patrones if any(c >= 3 for c in p['days'].values())]
                 if patrones_int: patrones = patrones_int
-            # FILTRAR por PREF_DIAS (restricción dura)
-            if prof_obj.pref_dias_set:
-                patrones_filtrados = [p for p in patrones
-                                      if all(dia in prof_obj.pref_dias_set for dia in p['days'].keys())]
-                if patrones_filtrados:
-                    patrones = patrones_filtrados
                 
         if not patrones: patrones = PATRONES.get(s.creditos, PATRONES[3])
 
@@ -1046,20 +1038,6 @@ class TabuScheduler:
                 
                 salones_posibles = [sl['CODIGO'] for sl in self.salones if sl['CAPACIDAD'] >= s.cupo]
                 salones_posibles = [sl for sl in salones_posibles if compatible_tipo(s.tipos_permitidos, self.salon_tipo.get(sl, 1))]
-                
-                # Priorizar el salón que el profesor ya usa (para clases del mismo tipo)
-                salon_ya_usado = None
-                if prof not in ["TBA", "GRADUADOS"]:
-                    for asign_existente in sol:
-                        if asign_existente and asign_existente.get('profesor') == prof:
-                            salon_candidato = asign_existente['salon']
-                            # Solo reusar si el tipo es compatible
-                            if (salon_candidato in salones_posibles and
-                                    self.salon_capacidad.get(salon_candidato, 0) >= s.cupo):
-                                salon_ya_usado = salon_candidato
-                                break
-                if salon_ya_usado and salon_ya_usado in salones_posibles:
-                    salones_posibles = [salon_ya_usado] + [s2 for s2 in salones_posibles if s2 != salon_ya_usado]
                 
                 for ini in inicios_posibles:
                     for salon in salones_posibles:
@@ -1127,12 +1105,6 @@ class TabuScheduler:
                     intensivos = [p for p in PATRONES.get(s.creditos, PATRONES[3]) if any(c >= 3 for c in p['days'].values())]
                     if intensivos:
                         patrones = intensivos + [p for p in patrones if not any(c >= 3 for c in p['days'].values())]
-                # FILTRAR por PREF_DIAS (restricción dura)
-                if prof_obj.pref_dias_set:
-                    patrones_filtrados = [p for p in patrones
-                                          if all(dia in prof_obj.pref_dias_set for dia in p['days'].keys())]
-                    if patrones_filtrados:
-                        patrones = patrones_filtrados
             if not patrones:
                 patrones = PATRONES.get(s.creditos, PATRONES[3])
 
@@ -1464,12 +1436,6 @@ class TabuScheduler:
                     intensivos = [p for p in PATRONES.get(s.creditos, PATRONES[3]) if any(c >= 3 for c in p['days'].values())]
                     if intensivos:
                         patrones = intensivos + [p for p in patrones if not any(c >= 3 for c in p['days'].values())]
-                # FILTRAR por PREF_DIAS (restricción dura)
-                if prof_obj.pref_dias_set:
-                    patrones_filtrados = [p for p in patrones
-                                          if all(dia in prof_obj.pref_dias_set for dia in p['days'].keys())]
-                    if patrones_filtrados:
-                        patrones = patrones_filtrados
             if not patrones:
                 patrones = PATRONES.get(s.creditos, PATRONES[3])
 
