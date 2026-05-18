@@ -695,8 +695,6 @@ class TabuScheduler:
             return [(cupo, False) for cupo in cupos]
 
         if sobrante <= (cupo_tipico / 2):
-            for i in range(sobrante):
-                cupos[i % len(cupos)] += 1
             return [(cupo, False) for cupo in cupos]
 
         resultado.extend((cupo, False) for cupo in cupos)
@@ -2095,10 +2093,21 @@ def generar_calendario_visual(solucion, scheduler, filtro_prof=None, filtro_salo
                     f"{salon_nombre}<br>{prof_nombre}"
                 )
                 fig.add_shape(type="rect", x0=x0, x1=x1, y0=y_ini + 0.03, y1=y_fin - 0.03,
-                              fillcolor=color_clase, line=dict(color=color_clase_borde, width=1))
+                              fillcolor=color_clase, line=dict(color=color_clase_borde, width=2))
                 fig.add_annotation(x=(x0 + x1) / 2, y=(y_ini + y_fin) / 2, text=texto,
                                    showarrow=False, align="center",
                                    font=dict(color="white", size=10))
+                if int(duracion_bloques * 50) > 50:
+                    fig.add_shape(type="line", x0=x0, x1=x1, y0=y_fin - 0.03, y1=y_fin - 0.03,
+                                  line=dict(color="#ffffff", width=3))
+                    fig.add_annotation(
+                        x=(x0 + x1) / 2,
+                        y=y_fin - 0.09,
+                        text=f"fin {mins_to_str(int(y_fin * 60)).replace(' AM', '').replace(' PM', '')}",
+                        showarrow=False,
+                        align="center",
+                        font=dict(color="white", size=9)
+                    )
         fig.update_layout(
             xaxis=dict(range=[0, 7], visible=False, fixedrange=True),
             yaxis=dict(range=[hora_fin, hora_inicio - 0.95], visible=False, fixedrange=True),
