@@ -773,6 +773,9 @@ class TabuScheduler:
         problemas = []
 
         for s in self.secciones:
+            if getattr(s, "profesor_pendiente_permitido", False):
+                continue
+
             candidatos = [p for p in s.cands if p in self.profesores]
 
             if not candidatos and "GRADUADOS" not in s.cands:
@@ -985,7 +988,7 @@ class TabuScheduler:
                 if fin > self.limite_operativo[1] or ini < self.limite_operativo[0]:
                     conflicts += 10000
                 
-                if prof != "GRADUADOS":
+                if prof not in ["GRADUADOS", "TBA"]:
                     clave = (prof, dia)
                     if clave not in occ_prof: occ_prof[clave] = []
                     for (ini_ex, fin_ex) in occ_prof[clave]:
@@ -1134,7 +1137,7 @@ class TabuScheduler:
                 if dia in ["Ma", "Ju"] and max(ini, self.hora_universal[0]) < min(fin, self.hora_universal[1]):
                     conflictos_list.append(f"Sección {s.cod}: violación de hora universal el {dia}")
                 
-                if prof != "GRADUADOS":
+                if prof not in ["GRADUADOS", "TBA"]:
                     clave = (prof, dia)
                     if clave not in occ_prof: occ_prof[clave] = []
                     for (ini_ex, fin_ex) in occ_prof[clave]:
@@ -2030,8 +2033,13 @@ def generar_calendario_visual(solucion, scheduler, filtro_prof=None, filtro_salo
     else:
         dias_individual = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa']
         nombres_individual = ['(L) Lunes', '(K) Martes', '(M) Miercoles', '(J) Jueves', '(V) Viernes', '(S) Sabado']
-        hora_inicio = 7
-        hora_fin = 21
+        slot_starts = list(scheduler.bloques)
+        if not slot_starts:
+            slot_starts = list(range(scheduler.limite_operativo[0], scheduler.limite_operativo[1], 60))
+        primer_slot = min(slot_starts)
+        ultimo_slot = max(slot_starts)
+        hora_inicio = primer_slot / 60
+        hora_fin = (ultimo_slot + 60) / 60
         color_header = '#0f6f3a'
         color_header_2 = '#138044'
         color_celda = '#e9e9e9'
@@ -2049,13 +2057,15 @@ def generar_calendario_visual(solucion, scheduler, filtro_prof=None, filtro_salo
                           fillcolor=color_header, line=dict(color=color_linea, width=2))
             fig.add_annotation(x=x0 + 0.5, y=hora_inicio - 0.48, text=f"<b>{nombre_dia}</b>",
                                showarrow=False, font=dict(color="white", size=14))
-        for h in range(hora_inicio, hora_fin):
-            fig.add_shape(type="rect", x0=0, x1=1, y0=h, y1=h + 1,
+        for inicio_mins in slot_starts:
+            y0 = inicio_mins / 60
+            y1 = (inicio_mins + 50) / 60
+            fig.add_shape(type="rect", x0=0, x1=1, y0=y0, y1=y1,
                           fillcolor=color_header_2, line=dict(color=color_linea, width=2))
-            fig.add_annotation(x=0.5, y=h + 0.5, text=f"{h:02d}:00 - {h:02d}:50",
+            fig.add_annotation(x=0.5, y=(y0 + y1) / 2, text=f"{mins_to_str(inicio_mins).replace(' AM', '').replace(' PM', '')} - {mins_to_str(inicio_mins + 50).replace(' AM', '').replace(' PM', '')}",
                                showarrow=False, font=dict(color="white", size=13))
             for dia_idx in range(len(dias_individual)):
-                fig.add_shape(type="rect", x0=dia_idx + 1, x1=dia_idx + 2, y0=h, y1=h + 1,
+                fig.add_shape(type="rect", x0=dia_idx + 1, x1=dia_idx + 2, y0=y0, y1=y1,
                               fillcolor=color_celda, line=dict(color=color_linea, width=2))
 
         posiciones_ocupadas_grid = {}
@@ -2082,7 +2092,6 @@ def generar_calendario_visual(solucion, scheduler, filtro_prof=None, filtro_salo
                 x1 = x0 + ancho - 0.02
                 texto = (
                     f"<b>{sec.cod}</b><br>"
-                    f"{mins_to_str(h_ini_mins)} - {mins_to_str(int(y_fin * 60))}<br>"
                     f"{salon_nombre}<br>{prof_nombre}"
                 )
                 fig.add_shape(type="rect", x0=x0, x1=x1, y0=y_ini + 0.03, y1=y_fin - 0.03,
