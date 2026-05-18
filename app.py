@@ -456,7 +456,7 @@ class Seccion:
         base = self.cod.split('-')[0].upper().replace(" ", "")
         self.es_fusionable = base in ["MATE3171", "MATE3172", "MATE3173"]
         self.prof_preasignado = None  
-        self.es_grande = self.cupo >= 85
+        self.es_grande = self.cupo >= 65
 
 class Profesor:
     def __init__(self, nombre, carga_min, carga_max, pref_dias, pref_horas,
@@ -612,22 +612,36 @@ class TabuScheduler:
         for cod_base, datos in cursos_agrupados.items():
             demanda_total = datos['demanda']
             cupo_tipico = datos['cupo_tipico']
-            
-            candidatos_list = [c.strip().upper() for c in str(datos['candidatos']).split(',') if c.strip() and str(c).upper() != 'NAN']
-            acepta_comp = any(c in self.profesores and self.profesores[c].compensacion for c in candidatos_list)
-            
-            if acepta_comp and demanda_total > cupo_tipico:
-                cupo_efectivo = min(demanda_total, 85)
-            else:
-                cupo_efectivo = cupo_tipico
+            candidatos_originales = datos['candidatos']
+            candidatos_list = [c.strip().upper() for c in str(candidatos_originales).split(',') if c.strip() and str(c).upper() != 'NAN']
+            candidatos_grandes = [
+                c for c in candidatos_list
+                if c in self.profesores
+                and self.profesores[c].acepta_grandes == 1
+                and self.profesores[c].compensacion
+            ]
 
-            num_secciones = math.ceil(demanda_total / cupo_efectivo) if demanda_total > 0 else 1
-            est_sec = [cupo_efectivo] * (num_secciones - 1)
-            resto = demanda_total - sum(est_sec)
-            est_sec.append(resto if resto > 0 else cupo_efectivo)
-            
-            for i, cupo in enumerate(est_sec):
-                self.secciones.append(Seccion(f"{cod_base}-{i+1:02d}", datos['creditos'], cupo, datos['candidatos'], datos['tipo_salon']))
+            secciones_plan = []
+            demanda_restante = demanda_total
+
+            if candidatos_grandes and demanda_total >= 65:
+                cupo_grande = min(demanda_total, 85)
+                secciones_plan.append((cupo_grande, ", ".join(candidatos_grandes), False))
+                demanda_restante -= cupo_grande
+
+            for cupo, es_seccion_sobrante in self._dividir_demanda_normal(demanda_restante, cupo_tipico):
+                candidatos_seccion = "TBA" if es_seccion_sobrante else candidatos_originales
+                secciones_plan.append((cupo, candidatos_seccion, es_seccion_sobrante))
+
+            if not secciones_plan:
+                secciones_plan.append((cupo_tipico, candidatos_originales, False))
+
+            for i, (cupo, candidatos_seccion, es_seccion_sobrante) in enumerate(secciones_plan):
+                seccion = Seccion(
+                    f"{cod_base}-{i+1:02d}", datos['creditos'], cupo, candidatos_seccion, datos['tipo_salon']
+                )
+                seccion.profesor_pendiente_permitido = es_seccion_sobrante
+                self.secciones.append(seccion)
 
         self._preasignar_profesores_robusto()
 
@@ -660,6 +674,34 @@ class TabuScheduler:
         if prof_name in self.profesores and self.profesores[prof_name].compensacion:
             return get_creditos_reales(s.creditos, s.cupo)
         return float(s.creditos)
+
+    def _dividir_demanda_normal(self, demanda_total, cupo_tipico):
+        if demanda_total <= 0:
+            return []
+
+        if cupo_tipico <= 0:
+            cupo_tipico = 30
+
+        secciones_llenas = demanda_total // cupo_tipico
+        sobrante = demanda_total % cupo_tipico
+
+        if secciones_llenas == 0:
+            return [(demanda_total, False)]
+
+        cupos = [cupo_tipico] * secciones_llenas
+        resultado = []
+
+        if sobrante == 0:
+            return [(cupo, False) for cupo in cupos]
+
+        if sobrante <= (cupo_tipico / 2):
+            for i in range(sobrante):
+                cupos[i % len(cupos)] += 1
+            return [(cupo, False) for cupo in cupos]
+
+        resultado.extend((cupo, False) for cupo in cupos)
+        resultado.append((sobrante, True))
+        return resultado
 
     def _es_salon_especial(self, seccion):
         return set(seccion.tipos_permitidos) != {"1"}
@@ -781,6 +823,10 @@ class TabuScheduler:
         for s in secciones_unicas:
             prof = s.cands[0]
             creditos = self.get_sec_creditos(s, prof)
+            if s.es_grande and prof in capacidad_restante and capacidad_restante[prof] < creditos:
+                s.prof_preasignado = "TBA"
+                carga_actual["TBA"] += self.get_sec_creditos(s, "TBA")
+                continue
             s.prof_preasignado = prof
             carga_actual[prof] += creditos
             if prof in capacidad_restante:
@@ -812,6 +858,10 @@ class TabuScheduler:
                     asignado = True
                     break
             if not asignado:
+                if s.es_grande:
+                    s.prof_preasignado = "TBA"
+                    carga_actual["TBA"] += self.get_sec_creditos(s, "TBA")
+                    continue
                 prof = candidatos_ordenados[0]
                 s.prof_preasignado = prof
                 creditos = self.get_sec_creditos(s, prof)
@@ -876,7 +926,7 @@ class TabuScheduler:
             patron = asign['patron']
             ini = asign['ini']
             
-            if prof == "TBA" or salon == "TBA":
+            if (prof == "TBA" and not getattr(s, "profesor_pendiente_permitido", False)) or salon == "TBA":
                 conflicts += 10000
                 if solo_duros: continue
             
@@ -1038,7 +1088,8 @@ class TabuScheduler:
             patron = asign['patron']
             ini = asign['ini']
             
-            if prof == "TBA": conflictos_list.append(f"Sección {s.cod}: profesor TBA")
+            if prof == "TBA" and not getattr(s, "profesor_pendiente_permitido", False):
+                conflictos_list.append(f"Sección {s.cod}: profesor TBA")
             if salon == "TBA": conflictos_list.append(f"Sección {s.cod}: salón TBA")
             
             salon_info = next((sl for sl in self.salones if sl['CODIGO'] == salon), None)
@@ -1977,6 +2028,80 @@ def generar_calendario_visual(solucion, scheduler, filtro_prof=None, filtro_salo
 
     # --- MODO B: VISTA INDIVIDUAL (TARJETAS PREMIUM) -> ESTÉTICA FOTO ---
     else:
+        dias_individual = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa']
+        nombres_individual = ['(L) Lunes', '(K) Martes', '(M) Miercoles', '(J) Jueves', '(V) Viernes', '(S) Sabado']
+        hora_inicio = 7
+        hora_fin = 21
+        color_header = '#0f6f3a'
+        color_header_2 = '#138044'
+        color_celda = '#e9e9e9'
+        color_linea = '#ffffff'
+        color_clase = 'rgba(34, 139, 76, 0.92)'
+        color_clase_borde = '#064f28'
+
+        fig.add_shape(type="rect", x0=0, x1=1, y0=hora_inicio - 0.95, y1=hora_inicio,
+                      fillcolor=color_header, line=dict(color=color_linea, width=2))
+        fig.add_annotation(x=0.5, y=hora_inicio - 0.48, text="<b>Horas</b>",
+                           showarrow=False, font=dict(color="white", size=14))
+        for idx, nombre_dia in enumerate(nombres_individual):
+            x0 = idx + 1
+            fig.add_shape(type="rect", x0=x0, x1=x0 + 1, y0=hora_inicio - 0.95, y1=hora_inicio,
+                          fillcolor=color_header, line=dict(color=color_linea, width=2))
+            fig.add_annotation(x=x0 + 0.5, y=hora_inicio - 0.48, text=f"<b>{nombre_dia}</b>",
+                               showarrow=False, font=dict(color="white", size=14))
+        for h in range(hora_inicio, hora_fin):
+            fig.add_shape(type="rect", x0=0, x1=1, y0=h, y1=h + 1,
+                          fillcolor=color_header_2, line=dict(color=color_linea, width=2))
+            fig.add_annotation(x=0.5, y=h + 0.5, text=f"{h:02d}:00 - {h:02d}:50",
+                               showarrow=False, font=dict(color="white", size=13))
+            for dia_idx in range(len(dias_individual)):
+                fig.add_shape(type="rect", x0=dia_idx + 1, x1=dia_idx + 2, y0=h, y1=h + 1,
+                              fillcolor=color_celda, line=dict(color=color_linea, width=2))
+
+        posiciones_ocupadas_grid = {}
+        for asign in asignaciones_validas:
+            sec = asign['seccion']
+            prof_nombre = asign['profesor']
+            salon_nombre = asign['salon']
+            patron = asign['patron']
+            h_ini_mins = asign['ini']
+            for dia_abr, duracion_bloques in patron['days'].items():
+                if dia_abr not in dias_individual:
+                    continue
+                dia_idx = dias_individual.index(dia_abr)
+                y_ini = h_ini_mins / 60
+                y_fin = (h_ini_mins + int(duracion_bloques * 50)) / 60
+                if y_fin <= hora_inicio or y_ini >= hora_fin:
+                    continue
+                key = (dia_abr, h_ini_mins)
+                offset = posiciones_ocupadas_grid.get(key, 0)
+                posiciones_ocupadas_grid[key] = offset + 1
+                total_en_franja = sum(1 for a in asignaciones_validas if a['ini'] == h_ini_mins and dia_abr in a['patron']['days'])
+                ancho = 0.94 / max(total_en_franja, 1)
+                x0 = dia_idx + 1.03 + (offset * ancho)
+                x1 = x0 + ancho - 0.02
+                texto = (
+                    f"<b>{sec.cod}</b><br>"
+                    f"{mins_to_str(h_ini_mins)} - {mins_to_str(int(y_fin * 60))}<br>"
+                    f"{salon_nombre}<br>{prof_nombre}"
+                )
+                fig.add_shape(type="rect", x0=x0, x1=x1, y0=y_ini + 0.03, y1=y_fin - 0.03,
+                              fillcolor=color_clase, line=dict(color=color_clase_borde, width=1))
+                fig.add_annotation(x=(x0 + x1) / 2, y=(y_ini + y_fin) / 2, text=texto,
+                                   showarrow=False, align="center",
+                                   font=dict(color="white", size=10))
+        fig.update_layout(
+            xaxis=dict(range=[0, 7], visible=False, fixedrange=True),
+            yaxis=dict(range=[hora_fin, hora_inicio - 0.95], visible=False, fixedrange=True),
+            margin=dict(l=10, r=10, t=20, b=10),
+            height=760,
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            hoverlabel=dict(bgcolor="white", font_size=12),
+            showlegend=False
+        )
+        return fig
+
         posiciones_ocupadas = {}
         for asign in asignaciones_validas:
             sec = asign['seccion']
