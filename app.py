@@ -5,6 +5,7 @@ import random
 import io
 import time
 import math
+import re
 from datetime import time as dtime
 import matplotlib.pyplot as plt
 import plotly.express as px
@@ -363,6 +364,81 @@ def str_to_mins(t_str):
     if ampm == "AM" and h == 12: h = 0
     return h * 60 + m
 
+def parsear_candidatos_curso(candidatos_raw):
+    """
+    Acepta dos formatos en la columna CANDIDATOS:
+    - Formato existente: "PROF 1, PROF 2"
+    - Formato con secciones: "PROF 1 (2x60), PROF 2 (2), PROF 3 (1)"
+
+    En el segundo formato, el primer numero es la cantidad de secciones y el
+    segundo, si existe, es el cupo de cada una.
+    """
+    if isinstance(candidatos_raw, list):
+        partes = candidatos_raw
+    else:
+        if candidatos_raw is None or pd.isna(candidatos_raw):
+            partes = []
+        else:
+            partes = str(candidatos_raw).split(',')
+
+    candidatos = []
+    asignaciones = []
+    usa_formato_con_secciones = False
+
+    for parte in partes:
+        texto = str(parte).strip()
+        if not texto or texto.upper() == "NAN":
+            continue
+
+        match = re.match(
+            r"^(?P<nombre>.*?)\s*(?:\(\s*(?P<cantidad>\d+)\s*(?:[xX*×]\s*(?P<cupo>\d+))?\s*\))?\s*$",
+            texto
+        )
+        if not match:
+            nombre = texto.upper()
+            cantidad = None
+            cupo = None
+        else:
+            nombre = match.group("nombre").strip().upper()
+            cantidad = match.group("cantidad")
+            cupo = match.group("cupo")
+
+        if not nombre:
+            continue
+
+        if nombre not in candidatos:
+            candidatos.append(nombre)
+
+        if cantidad is not None:
+            usa_formato_con_secciones = True
+            asignaciones.append({
+                "nombre": nombre,
+                "cantidad": int(cantidad),
+                "cupo": int(cupo) if cupo is not None else None,
+            })
+        else:
+            asignaciones.append({
+                "nombre": nombre,
+                "cantidad": None,
+                "cupo": None,
+            })
+
+    if not usa_formato_con_secciones:
+        return candidatos, []
+
+    asignaciones_normalizadas = []
+    for asignacion in asignaciones:
+        cantidad = asignacion["cantidad"] if asignacion["cantidad"] is not None else 1
+        if cantidad <= 0:
+            continue
+        asignaciones_normalizadas.append({
+            "nombre": asignacion["nombre"],
+            "cantidad": cantidad,
+            "cupo": asignacion["cupo"],
+        })
+
+    return candidatos, asignaciones_normalizadas
+
 PATRONES = {
     1: [
         {"name": "Lu", "days": {"Lu": 1}},
@@ -435,11 +511,8 @@ class Seccion:
         self.creditos = int(creditos)
         self.cupo = int(cupo)
         
-        if isinstance(candidatos_raw, list):
-            raw_list = [c.strip().upper() for c in candidatos_raw if c.strip()]
-        else:
-            raw_list = [c.strip().upper() for c in str(candidatos_raw).split(',') if c.strip() and str(c).upper() != 'NAN']
-        self.cands = list(set(raw_list))
+        raw_list, _ = parsear_candidatos_curso(candidatos_raw)
+        self.cands = list(dict.fromkeys(raw_list))
         
         # Procesar TIPO_SALON como lista de strings (ej: "1,3" -> ['1','3'])
         if isinstance(tipo_salon_str, (int, float)):
@@ -613,25 +686,32 @@ class TabuScheduler:
             demanda_total = datos['demanda']
             cupo_tipico = datos['cupo_tipico']
             candidatos_originales = datos['candidatos']
-            candidatos_list = [c.strip().upper() for c in str(candidatos_originales).split(',') if c.strip() and str(c).upper() != 'NAN']
-            candidatos_grandes = [
-                c for c in candidatos_list
-                if c in self.profesores
-                and self.profesores[c].acepta_grandes == 1
-                and self.profesores[c].compensacion
-            ]
-
+            candidatos_list, asignaciones_candidatos = parsear_candidatos_curso(candidatos_originales)
             secciones_plan = []
-            demanda_restante = demanda_total
 
-            if candidatos_grandes and demanda_total >= 65:
-                cupo_grande = min(demanda_total, 85)
-                secciones_plan.append((cupo_grande, ", ".join(candidatos_grandes), False))
-                demanda_restante -= cupo_grande
+            if asignaciones_candidatos:
+                for asignacion in asignaciones_candidatos:
+                    cupo_asignado = asignacion["cupo"] if asignacion["cupo"] is not None else cupo_tipico
+                    for _ in range(asignacion["cantidad"]):
+                        secciones_plan.append((cupo_asignado, asignacion["nombre"], False))
+            else:
+                candidatos_grandes = [
+                    c for c in candidatos_list
+                    if c in self.profesores
+                    and self.profesores[c].acepta_grandes == 1
+                    and self.profesores[c].compensacion
+                ]
 
-            for cupo, es_seccion_sobrante in self._dividir_demanda_normal(demanda_restante, cupo_tipico):
-                candidatos_seccion = "TBA" if es_seccion_sobrante else candidatos_originales
-                secciones_plan.append((cupo, candidatos_seccion, es_seccion_sobrante))
+                demanda_restante = demanda_total
+
+                if candidatos_grandes and demanda_total >= 65:
+                    cupo_grande = min(demanda_total, 85)
+                    secciones_plan.append((cupo_grande, ", ".join(candidatos_grandes), False))
+                    demanda_restante -= cupo_grande
+
+                for cupo, es_seccion_sobrante in self._dividir_demanda_normal(demanda_restante, cupo_tipico):
+                    candidatos_seccion = "TBA" if es_seccion_sobrante else candidatos_originales
+                    secciones_plan.append((cupo, candidatos_seccion, es_seccion_sobrante))
 
             if not secciones_plan:
                 secciones_plan.append((cupo_tipico, candidatos_originales, False))
@@ -2291,12 +2371,12 @@ def generar_plantilla():
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df_cursos = pd.DataFrame({
-            'CODIGO': ['MATE3171', 'MATE3172'],
-            'CREDITOS': [3, 3],
-            'DEMANDA': [120, 150],
-            'CUPO': [30, 30],
-            'CANDIDATOS': ['PEREZ, GONZALEZ', 'RODRIGUEZ'],
-            'TIPO_SALON': ['1', '1,3']   # Ejemplo con múltiples tipos
+            'CODIGO': ['MATE3171', 'MATE3172', 'MATE4999'],
+            'CREDITOS': [3, 3, 3],
+            'DEMANDA': [120, 150, 180],
+            'CUPO': [30, 30, 30],
+            'CANDIDATOS': ['PEREZ, GONZALEZ', 'RODRIGUEZ', 'PEREZ (2x60), GONZALEZ (2)'],
+            'TIPO_SALON': ['1', '1,3', '1']   # Ejemplo con múltiples tipos
         })
         df_cursos.to_excel(writer, sheet_name='Cursos', index=False)
         
