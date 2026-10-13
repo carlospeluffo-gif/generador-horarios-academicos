@@ -1830,7 +1830,7 @@ class TabuScheduler:
         # --- FASE DE REPARACIÓN AGRESIVA REFORZADA ---
         if self._costo_total(self.mejor_solucion, solo_duros=True) > 0:
             if status_text:
-                status_text.markdown("**🔧 Fase de Reparación Intensiva (búsqueda tabú + recocido)...**")
+                status_text.markdown("**🔧 Fase de Reparación ...**")
             self.mejor_solucion = self._reparar_solucion(self.mejor_solucion, max_intentos=20)
             self.mejor_costo = self._costo_total(self.mejor_solucion)
             self.historial_costos.append(self.mejor_costo)
