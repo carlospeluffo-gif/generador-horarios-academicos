@@ -381,6 +381,9 @@ def parsear_candidatos_curso(candidatos_raw):
     (n) y (nxcupo) son cantidades fijas. Un nombre sin cantidad conserva
     cantidad=None: solo podrá cubrir demanda restante, sin asignación mínima.
     También se acepta (n sec). Los nombres se comparan en mayúsculas.
+    Un profesor puede repetirse con instrucciones fijas de distintos cupos:
+    "PROFESOR (1), PROFESOR (1x60)" crea una sección con CUPO y otra de 60.
+    Esas instrucciones van juntas en la misma celda de CANDIDATOS.
     """
     if isinstance(candidatos_raw, list):
         partes = candidatos_raw
@@ -421,8 +424,18 @@ def parsear_candidatos_curso(candidatos_raw):
             cantidad = None
             cupo = None
         if nombre in candidatos:
-            raise ValueError(f"Candidato repetido en el mismo curso: {nombre}.")
-        candidatos.append(nombre)
+            # Varias instrucciones fijas del mismo profesor pueden tener cupos
+            # diferentes. La lista de candidatos sigue sin nombres duplicados.
+            anteriores = [a for a in asignaciones if a["nombre"] == nombre]
+            if cantidad is None or any(a["cantidad"] is None for a in anteriores):
+                raise ValueError(
+                    f"Candidato repetido sin cantidades claras: {nombre}. "
+                    "Para fijar dos tamaños, usa por ejemplo "
+                    f"{nombre} (1), {nombre} (1x60). "
+                    "Cada aparición repetida debe indicar su cantidad."
+                )
+        else:
+            candidatos.append(nombre)
         asignaciones.append({"nombre": nombre, "cantidad": cantidad, "cupo": cupo})
 
     return candidatos, asignaciones if tiene_cantidades else []
