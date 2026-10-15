@@ -347,6 +347,17 @@ def get_creditos_reales(creditos_base, cupo):
             max_extra = max(max_extra, extra)
     return float(creditos_base) + max_extra
 
+def excel_bool(valor):
+    if valor is None or pd.isna(valor):
+        return False
+    texto = str(valor).strip().upper()
+    if texto in ('SI', 'SÍ', 'YES', 'TRUE', 'VERDADERO', '1'):
+        return True
+    try:
+        return float(valor) == 1.0
+    except:
+        return False
+
 def mins_to_str(m):
     h, mins = divmod(int(m), 60)
     am_pm = "AM" if h < 12 else "PM"
@@ -560,7 +571,7 @@ class Profesor:
         if isinstance(preferencias_cursos, list):
             self.preferencias = [c.upper().strip() for c in preferencias_cursos if c and str(c).upper() != 'NAN']
             
-        self.compensacion = str(compensacion).upper().strip() in ('SI', 'SÍ', 'YES', '1')
+        self.compensacion = excel_bool(compensacion)
         self.acepta_grandes = int(acepta_grandes) if pd.notnull(acepta_grandes) and acepta_grandes != '' else 0
         
         try:
