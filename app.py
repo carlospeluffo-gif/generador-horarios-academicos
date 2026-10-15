@@ -2379,7 +2379,7 @@ def main():
         file = st.file_uploader("Subir Protocolo Excel", type=['xlsx'])
         st.download_button(
             label="📥 Descargar Plantilla",
-            data=generar_plantilla(),
+            data=generar_plantilla,
             file_name="PLANTILLA.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
