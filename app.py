@@ -5,7 +5,6 @@ import random
 import io
 import time
 import math
-import re
 from datetime import time as dtime
 import matplotlib.pyplot as plt
 import plotly.express as px
@@ -347,17 +346,6 @@ def get_creditos_reales(creditos_base, cupo):
             max_extra = max(max_extra, extra)
     return float(creditos_base) + max_extra
 
-def excel_bool(valor):
-    if valor is None or pd.isna(valor):
-        return False
-    texto = str(valor).strip().upper()
-    if texto in ('SI', 'SÍ', 'YES', 'TRUE', 'VERDADERO', '1'):
-        return True
-    try:
-        return float(valor) == 1.0
-    except:
-        return False
-
 def mins_to_str(m):
     h, mins = divmod(int(m), 60)
     am_pm = "AM" if h < 12 else "PM"
@@ -374,72 +362,6 @@ def str_to_mins(t_str):
     if ampm == "PM" and h != 12: h += 12
     if ampm == "AM" and h == 12: h = 0
     return h * 60 + m
-
-def parsear_candidatos_curso(candidatos_raw):
-    """Devuelve candidatos y, si hay cantidades, sus instrucciones de sección.
-
-    (n) y (nxcupo) son cantidades fijas. Un nombre sin cantidad conserva
-    cantidad=None: solo podrá cubrir demanda restante, sin asignación mínima.
-    También se acepta (n sec). Los nombres se comparan en mayúsculas.
-    Un profesor puede repetirse con instrucciones fijas de distintos cupos:
-    "PROFESOR (1), PROFESOR (1x60)" crea una sección con CUPO y otra de 60.
-    Esas instrucciones van juntas en la misma celda de CANDIDATOS.
-    """
-    if isinstance(candidatos_raw, list):
-        partes = candidatos_raw
-    elif candidatos_raw is None or pd.isna(candidatos_raw):
-        partes = []
-    else:
-        partes = re.split(r",|\r?\n|<br\s*/?>", str(candidatos_raw), flags=re.IGNORECASE)
-
-    candidatos = []
-    asignaciones = []
-    tiene_cantidades = False
-    for parte in partes:
-        if parte is None or pd.isna(parte):
-            continue
-        texto = str(parte).strip()
-        if not texto or texto.upper() == "NAN":
-            continue
-        match = re.fullmatch(
-            r"(?P<nombre>.+?)\s*\(\s*(?P<cantidad>\d+)\s*"
-            r"(?:sec(?:ciones?)?\.?\s*)?"
-            r"(?:[xX*×]\s*(?P<cupo>\d+)\s*)?\)",
-            texto, flags=re.IGNORECASE,
-        )
-        if match:
-            nombre = match.group("nombre").strip().upper()
-            cantidad = int(match.group("cantidad"))
-            cupo = int(match.group("cupo")) if match.group("cupo") is not None else None
-            if cupo is not None and cupo <= 0:
-                raise ValueError(f"El cupo indicado para {nombre} debe ser positivo.")
-            tiene_cantidades = True
-        else:
-            if re.search(r"\(\s*[+-]?\d", texto):
-                raise ValueError(
-                    f"Cantidad o cupo inválido en CANDIDATOS: {texto}. "
-                    "Usa Nombre (3), Nombre (3 sec) o Nombre (3x30)."
-                )
-            nombre = texto.upper()
-            cantidad = None
-            cupo = None
-        if nombre in candidatos:
-            # Varias instrucciones fijas del mismo profesor pueden tener cupos
-            # diferentes. La lista de candidatos sigue sin nombres duplicados.
-            anteriores = [a for a in asignaciones if a["nombre"] == nombre]
-            if cantidad is None or any(a["cantidad"] is None for a in anteriores):
-                raise ValueError(
-                    f"Candidato repetido sin cantidades claras: {nombre}. "
-                    "Para fijar dos tamaños, usa por ejemplo "
-                    f"{nombre} (1), {nombre} (1x60). "
-                    "Cada aparición repetida debe indicar su cantidad."
-                )
-        else:
-            candidatos.append(nombre)
-        asignaciones.append({"nombre": nombre, "cantidad": cantidad, "cupo": cupo})
-
-    return candidatos, asignaciones if tiene_cantidades else []
-
 
 PATRONES = {
     1: [
@@ -513,8 +435,11 @@ class Seccion:
         self.creditos = int(creditos)
         self.cupo = int(cupo)
         
-        raw_list, _ = parsear_candidatos_curso(candidatos_raw)
-        self.cands = list(dict.fromkeys(raw_list))
+        if isinstance(candidatos_raw, list):
+            raw_list = [c.strip().upper() for c in candidatos_raw if c.strip()]
+        else:
+            raw_list = [c.strip().upper() for c in str(candidatos_raw).split(',') if c.strip() and str(c).upper() != 'NAN']
+        self.cands = list(set(raw_list))
         
         # Procesar TIPO_SALON como lista de strings (ej: "1,3" -> ['1','3'])
         if isinstance(tipo_salon_str, (int, float)):
@@ -562,7 +487,7 @@ class Profesor:
         if isinstance(preferencias_cursos, list):
             self.preferencias = [c.upper().strip() for c in preferencias_cursos if c and str(c).upper() != 'NAN']
             
-        self.compensacion = excel_bool(compensacion)
+        self.compensacion = str(compensacion).upper().strip() in ('SI', 'SÍ', 'YES', '1')
         self.acepta_grandes = int(acepta_grandes) if pd.notnull(acepta_grandes) and acepta_grandes != '' else 0
         
         try:
@@ -687,64 +612,35 @@ class TabuScheduler:
         for cod_base, datos in cursos_agrupados.items():
             demanda_total = datos['demanda']
             cupo_tipico = datos['cupo_tipico']
-            if demanda_total < 0:
-                raise ValueError(f"{cod_base}: DEMANDA no puede ser negativa.")
-            if cupo_tipico <= 0:
-                raise ValueError(f"{cod_base}: CUPO debe ser mayor que cero.")
+            candidatos_originales = datos['candidatos']
+            candidatos_list = [c.strip().upper() for c in str(candidatos_originales).split(',') if c.strip() and str(c).upper() != 'NAN']
+            candidatos_grandes = [
+                c for c in candidatos_list
+                if c in self.profesores
+                and self.profesores[c].acepta_grandes == 1
+                and self.profesores[c].compensacion
+            ]
 
-            candidatos_list, instrucciones = parsear_candidatos_curso(datos['candidatos'])
-            fijas = [a for a in instrucciones if a['cantidad'] is not None]
-            libres = (
-                [a['nombre'] for a in instrucciones if a['cantidad'] is None]
-                if instrucciones else candidatos_list
-            )
             secciones_plan = []
-            plazas_fijas = 0
+            demanda_restante = demanda_total
 
-            # Una cantidad entre paréntesis fija únicamente esas secciones.
-            # Esa persona no entra en la bolsa de secciones adicionales.
-            for asignacion in fijas:
-                cupo_fijo = asignacion['cupo'] if asignacion['cupo'] is not None else cupo_tipico
-                for _ in range(asignacion['cantidad']):
-                    secciones_plan.append((cupo_fijo, asignacion['nombre'], True))
-                    plazas_fijas += cupo_fijo
+            if candidatos_grandes and demanda_total >= 65:
+                cupo_grande = min(demanda_total, 85)
+                secciones_plan.append((cupo_grande, ", ".join(candidatos_grandes), False))
+                demanda_restante -= cupo_grande
 
-            demanda_restante = max(0, demanda_total - plazas_fijas)
-            if demanda_restante > 0 and not libres:
-                raise ValueError(
-                    f"{cod_base}: las secciones fijas cubren {plazas_fijas} plazas "
-                    f"de una demanda de {demanda_total}. Faltan {demanda_restante} "
-                    "plazas y no hay candidatos sin cantidad para cubrirlas. "
-                    "Agrega candidatos sin paréntesis o revisa las cantidades/cupos fijos."
-                )
+            for cupo, es_seccion_sobrante in self._dividir_demanda_normal(demanda_restante, cupo_tipico):
+                candidatos_seccion = "TBA" if es_seccion_sobrante else candidatos_originales
+                secciones_plan.append((cupo, candidatos_seccion, es_seccion_sobrante))
 
-            # Se conserva la política existente de grupos grandes, pero solo
-            # entre los candidatos libres y para la demanda aún no cubierta.
-            if demanda_restante > 0:
-                candidatos_grandes = [
-                    c for c in libres
-                    if c in self.profesores
-                    and self.profesores[c].acepta_grandes == 1
-                    and self.profesores[c].compensacion
-                ]
-                if candidatos_grandes and demanda_restante >= 65:
-                    cupo_grande = min(demanda_restante, 85)
-                    secciones_plan.append((cupo_grande, ", ".join(candidatos_grandes), False))
-                    demanda_restante -= cupo_grande
+            if not secciones_plan:
+                secciones_plan.append((cupo_tipico, candidatos_originales, False))
 
-                # Toda sección adicional conserva la bolsa completa de candidatos
-                # libres. El motor elige quién la dicta; nadie recibe una por defecto.
-                for cupo, _ in self._dividir_demanda_normal(demanda_restante, cupo_tipico):
-                    secciones_plan.append((cupo, ", ".join(libres), False))
-
-            for i, (cupo, candidatos_seccion, es_fija) in enumerate(secciones_plan):
+            for i, (cupo, candidatos_seccion, es_seccion_sobrante) in enumerate(secciones_plan):
                 seccion = Seccion(
-                    f"{cod_base}-{i+1:02d}", datos['creditos'], cupo,
-                    candidatos_seccion, datos['tipo_salon']
+                    f"{cod_base}-{i+1:02d}", datos['creditos'], cupo, candidatos_seccion, datos['tipo_salon']
                 )
-                seccion.profesor_pendiente_permitido = False
-                seccion.asignacion_fija = es_fija
-                seccion.profesor_fijo = candidatos_seccion if es_fija else None
+                seccion.profesor_pendiente_permitido = es_seccion_sobrante
                 self.secciones.append(seccion)
 
         self._preasignar_profesores_robusto()
@@ -780,21 +676,30 @@ class TabuScheduler:
         return float(s.creditos)
 
     def _dividir_demanda_normal(self, demanda_total, cupo_tipico):
-        """Cubre todo el remanente sin superar el cupo normal por sección.
-
-        Un remanente pequeño también necesita plaza: nunca se descarta ni
-        se crea una sección sin profesor permitido por defecto.
-        """
         if demanda_total <= 0:
             return []
-        if cupo_tipico <= 0:
-            raise ValueError("CUPO debe ser mayor que cero.")
-        llenas, sobrante = divmod(demanda_total, cupo_tipico)
-        resultado = [(cupo_tipico, False) for _ in range(llenas)]
-        if sobrante:
-            resultado.append((sobrante, False))
-        return resultado
 
+        if cupo_tipico <= 0:
+            cupo_tipico = 30
+
+        secciones_llenas = demanda_total // cupo_tipico
+        sobrante = demanda_total % cupo_tipico
+
+        if secciones_llenas == 0:
+            return [(demanda_total, False)]
+
+        cupos = [cupo_tipico] * secciones_llenas
+        resultado = []
+
+        if sobrante == 0:
+            return [(cupo, False) for cupo in cupos]
+
+        if sobrante <= (cupo_tipico / 2):
+            return [(cupo, False) for cupo in cupos]
+
+        resultado.extend((cupo, False) for cupo in cupos)
+        resultado.append((sobrante, True))
+        return resultado
 
     def _es_salon_especial(self, seccion):
         return set(seccion.tipos_permitidos) != {"1"}
@@ -2386,12 +2291,12 @@ def generar_plantilla():
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df_cursos = pd.DataFrame({
-            'CODIGO': ['MATE3171', 'MATE3172', 'MATE4999'],
-            'CREDITOS': [3, 3, 3],
-            'DEMANDA': [120, 150, 180],
-            'CUPO': [30, 30, 30],
-            'CANDIDATOS': ['PEREZ, GONZALEZ', 'RODRIGUEZ', 'PEREZ (2x60), GONZALEZ (2)'],
-            'TIPO_SALON': ['1', '1,3', '1']   # Ejemplo con múltiples tipos
+            'CODIGO': ['MATE3171', 'MATE3172'],
+            'CREDITOS': [3, 3],
+            'DEMANDA': [120, 150],
+            'CUPO': [30, 30],
+            'CANDIDATOS': ['PEREZ, GONZALEZ', 'RODRIGUEZ'],
+            'TIPO_SALON': ['1', '1,3']   # Ejemplo con múltiples tipos
         })
         df_cursos.to_excel(writer, sheet_name='Cursos', index=False)
         
