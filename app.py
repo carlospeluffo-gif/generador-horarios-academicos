@@ -12,6 +12,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from copy import deepcopy
+from itertools import combinations
 
 # ==============================================================================
 # 1. ESTÉTICA (IDENTIDAD UPRM - DISEÑO PREMIUM)
@@ -713,6 +714,7 @@ class TabuScheduler:
         
         self.salon_tipo = {s['CODIGO']: s['TIPO'] for s in self.salones}
         self.salon_capacidad = {s['CODIGO']: s['CAPACIDAD'] for s in self.salones}
+        self._planes_tipos_salones_cache = {}
 
         # Profesores
         self.profesores = {}
@@ -1110,22 +1112,97 @@ class TabuScheduler:
             patrones = [p for p in patrones if set(p['days']).issubset(prof_obj.pref_dias_set)]
         return patrones
 
+    def _salones_compatibles_seccion(self, seccion):
+        return [sl['CODIGO'] for sl in self.salones
+                if sl['CAPACIDAD'] >= seccion.cupo
+                and compatible_tipo(seccion.tipos_permitidos, sl['TIPO'])]
+
+    def _planes_tipos_salones(self, secciones):
+        """Conjuntos mínimos de tipos que cubren todas las clases y sus cupos.
+
+        Si {1,3} y {1} pueden usar tipo 1, no se autoriza abrir un segundo tipo.
+        Si un grupo grande solo cabe en tipo 3 y otro curso exige tipo 1,
+        se permite la excepción {1,3}. Cada tipo conservará un solo salón.
+        """
+        dominios = {tuple(sorted({self.salon_tipo[sl]
+                    for sl in self._salones_compatibles_seccion(s)})) for s in secciones}
+        if not dominios or () in dominios:
+            return ()
+        clave = tuple(sorted(dominios))
+        cache = self._planes_tipos_salones_cache
+        if clave not in cache:
+            tipos = sorted({tipo for dominio in dominios for tipo in dominio})
+            planes = []
+            for cantidad in range(1, len(tipos) + 1):
+                planes = [frozenset(plan) for plan in combinations(tipos, cantidad)
+                          if all(set(plan).intersection(d) for d in dominios)]
+                if planes:
+                    break
+            cache[clave] = tuple(planes)
+        return cache[clave]
+
     def _salones_validos_para(self, seccion, prof, sol=None, idx=None):
-        salones_base = [sl['CODIGO'] for sl in self.salones
-            if sl['CAPACIDAD'] >= seccion.cupo and compatible_tipo(seccion.tipos_permitidos, sl['TIPO'])]
-        if prof not in self.profesores or self._es_salon_especial(seccion):
+        salones_base = self._salones_compatibles_seccion(seccion)
+        if prof not in self.profesores:
             return salones_base
-        # Reservar desde la primera clase un salón que sirva para todas las
-        # secciones normales que este docente tiene obligatoriamente.
-        cupo_obligado = max([seccion.cupo] + [s.cupo for s in self.secciones
-            if s.cands == [prof] and not self._es_salon_especial(s)])
-        salones_base = [sl for sl in salones_base if self.salon_capacidad[sl] >= cupo_obligado]
-        previos = {a['salon'] for j, a in enumerate(sol or [])
-            if j != idx and a and a['profesor'] == prof and a['salon'] != 'TBA'
-            and not self._es_salon_especial(a['seccion'])}
-        if previos:
-            return [sl for sl in salones_base if previos == {sl}]
-        return salones_base
+        otras = [a for j, a in enumerate(sol or [])
+                 if j != idx and a and a['profesor'] == prof and a['salon'] != 'TBA']
+        # Incluir las clases obligatorias aún sin colocar evita escoger un
+        # salón pequeño o un tipo opcional que bloquearía sus otras materias.
+        requeridas = {s.cod: s for s in self.secciones if s.cands == [prof]}
+        requeridas.update({a['seccion'].cod: a['seccion'] for a in otras})
+        requeridas[seccion.cod] = seccion
+        planes = self._planes_tipos_salones(requeridas.values())
+        por_tipo = {}
+        for a in otras:
+            tipo = self.salon_tipo.get(a['salon'])
+            if tipo is not None:
+                por_tipo.setdefault(tipo, set()).add(a['salon'])
+        if any(len(salones) > 1 for salones in por_tipo.values()):
+            return []
+        tipos_usados = set(por_tipo)
+        dominios = [(s, set(self._salones_compatibles_seccion(s))) for s in requeridas.values()]
+        validos = []
+        for salon in salones_base:
+            tipo = self.salon_tipo[salon]
+            if tipo in por_tipo and por_tipo[tipo] != {salon}:
+                continue
+            for plan in planes:
+                if tipo not in plan or not tipos_usados.issubset(plan):
+                    continue
+                # Reservar capacidad para todas las clases que necesariamente
+                # usarán este tipo dentro del plan, no solo para la actual.
+                obligadas_tipo = [opciones for s, opciones in dominios
+                    if {self.salon_tipo[sl] for sl in opciones}.intersection(plan) == {tipo}]
+                if all(salon in opciones for opciones in obligadas_tipo):
+                    validos.append(salon)
+                    break
+        return validos
+
+    def _evaluar_salon_por_profesor(self, sol):
+        grupos = {}
+        for a in sol:
+            if a and a['profesor'] in self.profesores and a['salon'] in self.salon_tipo:
+                grupos.setdefault(a['profesor'], []).append(a)
+        conflictos, mensajes = 0, []
+        for prof, asignaciones in grupos.items():
+            por_tipo = {}
+            for a in asignaciones:
+                por_tipo.setdefault(self.salon_tipo[a['salon']], set()).add(a['salon'])
+            for tipo, salones in por_tipo.items():
+                if len(salones) > 1:
+                    conflictos += len(salones) - 1
+                    mensajes.append(f"Profesor {prof}: usa varios salones del tipo {tipo:g} "
+                        f"({', '.join(sorted(salones))}); debe conservar uno por tipo necesario.")
+            planes = self._planes_tipos_salones(a['seccion'] for a in asignaciones)
+            if planes:
+                necesarios = len(planes[0])
+                if len(por_tipo) > necesarios:
+                    conflictos += len(por_tipo) - necesarios
+                    mensajes.append(f"Profesor {prof}: usa {len(por_tipo)} tipos de salón, "
+                        f"pero sus clases y cupos solo requieren {necesarios}. "
+                        "Las materias compatibles deben compartir salón.")
+        return conflictos, mensajes
 
     def validar_factibilidad_inicial(self):
         problemas = []
@@ -1388,27 +1465,8 @@ class TabuScheduler:
                                     conflicts += 10000
         # ------------------------------------------------------------
 
-        # --- RESTRICCION FUERTE: MISMO SALON PARA CURSOS NORMALES ---
-        salones_normales_por_prof = {}
-        for asign in sol:
-            prof = asign['profesor']
-            if prof not in self.profesores:
-                continue
-
-            seccion = asign['seccion']
-            if self._es_salon_especial(seccion):
-                continue
-
-            salon = asign['salon']
-            if salon == "TBA":
-                continue
-
-            salones_normales_por_prof.setdefault(prof, set()).add(salon)
-
-        for prof, salones in salones_normales_por_prof.items():
-            if len(salones) > 1:
-                conflicts += 10000 * (len(salones) - 1)
-        # ------------------------------------------------------------
+        # Regla fuerte para TODAS las materias, incluidas listas como 1,3 o 1,6.
+        conflicts += 10000 * self._evaluar_salon_por_profesor(sol)[0]
 
         if solo_duros:
             return conflicts
@@ -1519,43 +1577,84 @@ class TabuScheduler:
                                 fin_r = ini_r + int(contrib_r * 50)
                                 if max(ini_d, ini_r) < min(fin_d, fin_r):
                                     conflictos_list.append(f"Graduado {grad}: conflicto de doble rol entre {d['seccion'].cod} y {r['seccion'].cod} el {dia_d}")
-        salones_normales_por_prof = {}
-        for asign in sol:
-            prof = asign['profesor']
-            if prof not in self.profesores:
-                continue
-            if self._es_salon_especial(asign['seccion']):
-                continue
-            if asign['salon'] == "TBA":
-                continue
-            salones_normales_por_prof.setdefault(prof, set()).add(asign['salon'])
-
-        for prof, salones in salones_normales_por_prof.items():
-            if len(salones) > 1:
-                conflictos_list.append(
-                    f"Profesor {prof}: usa multiples salones normales {sorted(salones)}"
-                )
+        conflictos_list.extend(self._evaluar_salon_por_profesor(sol)[1])
 
         return conflictos_list
 
     def _construir_solucion_greedy(self):
-        mejor, mejor_costo = None, float('inf')
-        dominios = {}
+        # Construir juntas las clases de cada docente. Una elección válida para
+        # una sección puede dejar sin espacio a sus otras clases obligatorias.
+        grupos = {}
         for i, s in enumerate(self.secciones):
-            prof = s.prof_preasignado
-            dominios[i] = (len(self._salones_validos_para(s, prof)),
-                sum(len(self._horas_validas_para_profesor(s, prof, p))
-                    for p in self._patrones_validos_para_profesor(s, prof)))
-        for _ in range(24):
+            grupos.setdefault(s.prof_preasignado, []).append(i)
+        dificultad = {}
+        for prof, indices in grupos.items():
+            opciones = [sum(len(self._horas_validas_para_profesor(self.secciones[i], prof, p))
+                           for p in self._patrones_validos_para_profesor(self.secciones[i], prof))
+                        for i in indices]
+            # Menos alternativas por clase y más clases: colocar antes.
+            dificultad[prof] = math.prod(opciones) ** (1 / len(indices)) / len(indices)
+
+        mejor, mejor_costo = None, float('inf')
+        for _ in range(8):
             sol = [None] * len(self.secciones)
-            asignado = [False] * len(self.secciones)
-            orden = list(range(len(self.secciones)))
+            orden = list(grupos)
             random.shuffle(orden)
-            orden.sort(key=lambda i: (dominios[i][0] * dominios[i][1], -self.secciones[i].creditos))
-            for i in orden:
-                self._asignar_seccion(i, self.secciones[i].prof_preasignado, sol, asignado)
-            # Las pendientes se completan al final. No contaminan las
-            # comprobaciones locales de las secciones que sí tienen hueco.
+            orden.sort(key=lambda p: dificultad[p])
+            for prof in orden:
+                indices = grupos[prof]
+                nodos_grupo = 0
+
+                def buscar_grupo(pendientes):
+                    nonlocal nodos_grupo
+                    if not pendientes:
+                        return True
+                    nodos_grupo += 1
+                    if nodos_grupo > 2000:
+                        return False  # Presupuesto local; la reparación podrá continuar.
+                    dominios = []
+                    for i in pendientes:
+                        s = self.secciones[i]
+                        opciones = []
+                        patrones = list(self._patrones_validos_para_profesor(s, prof))
+                        random.shuffle(patrones)
+                        for patron in patrones:
+                            horas = self._horas_validas_para_profesor(s, prof, patron)
+                            random.shuffle(horas)
+                            salones = self._salones_validos_para(s, prof, sol, i)
+                            random.shuffle(salones)
+                            salones.sort(key=lambda sl: self.salon_capacidad[sl])
+                            for ini in horas:
+                                for salon in salones:
+                                    a = {'seccion': s, 'profesor': prof, 'salon': salon,
+                                         'patron': patron, 'ini': ini}
+                                    if self._asignacion_local_valida(i, a, sol):
+                                        opciones.append(a)
+                        # Si otra clase se quedó sin opciones, deshacer la
+                        # elección anterior antes de seguir con otro docente.
+                        if not opciones:
+                            return False
+                        dominios.append((i, opciones))
+                    i, opciones = min(dominios,
+                        key=lambda par: (len(par[1]), -self.secciones[par[0]].creditos))
+                    restantes = [j for j in pendientes if j != i]
+                    for a in opciones:
+                        sol[i] = a
+                        if buscar_grupo(restantes):
+                            return True
+                        sol[i] = None
+                        if nodos_grupo > 2000:
+                            break
+                    return False
+
+                if not buscar_grupo(indices):
+                    for i in indices:
+                        sol[i] = None
+                    for i in indices:
+                        self._asignar_seccion(i, prof, sol, [bool(a) for a in sol])
+
+            # Solo si se agotó la construcción se conservan asignaciones
+            # temporales para el reparador. Nunca pasan la validación si chocan.
             for i, a in enumerate(sol):
                 if a is None:
                     sol[i] = self._crear_asignacion_temporal(self.secciones[i], prof=self.secciones[i].prof_preasignado)
