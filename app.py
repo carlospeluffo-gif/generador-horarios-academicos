@@ -358,6 +358,67 @@ def excel_bool(valor):
     except:
         return False
 
+def normalizar_codigo_curso(codigo):
+    """Compara el código completo, ignorando mayúsculas y espacios."""
+    return re.sub(r"\s+", "", str(codigo)).upper()
+
+
+def parsear_cursos_intensivos(valor, nombre="Profesor"):
+    """Lee 0/vacío o 1,DIA,CURSO; devuelve {codigo_curso: dia_interno}.
+
+    Ejemplo: 1,W,MATE6026 -> {'MATE6026': 'Mi'}.
+    Para varias materias: 1,W,MATE6026;1,J,MATE6000.
+    Un 1 sin día y curso se rechaza para no afectar todas las materias.
+    """
+    if valor is None or pd.isna(valor):
+        return {}
+    texto = str(valor).strip().upper()
+    if texto in {"", "0", "0.0", "NO", "FALSE", "FALSO"}:
+        return {}
+
+    mapa_dias = {
+        'L': 'Lu', 'LU': 'Lu', 'LUNES': 'Lu',
+        'M': 'Ma', 'MA': 'Ma', 'MARTES': 'Ma',
+        'W': 'Mi', 'MI': 'Mi', 'MIERCOLES': 'Mi', 'MIÉRCOLES': 'Mi',
+        'J': 'Ju', 'JU': 'Ju', 'JUEVES': 'Ju',
+        'V': 'Vi', 'VI': 'Vi', 'VIERNES': 'Vi',
+    }
+    solicitudes = {}
+    for entrada in re.split(r"[;\r\n]+", texto):
+        if not entrada.strip():
+            continue
+        partes = [parte.strip() for parte in entrada.split(',')]
+        if len(partes) != 3 or partes[0] != '1' or not partes[2]:
+            raise ValueError(
+                f"{nombre}: CURSOS_INTENSIVOS inválido: {entrada!r}. "
+                "Usa 0 o 1,DIA,CURSO, por ejemplo 1,W,MATE6026. "
+                "El valor 1 solo ya no basta; indica el día y el curso."
+            )
+        dia = mapa_dias.get(partes[1])
+        if dia is None:
+            raise ValueError(
+                f"{nombre}: día inválido en CURSOS_INTENSIVOS: {partes[1]!r}. "
+                "Usa L (lunes), M (martes), W (miércoles), J (jueves) o V (viernes)."
+            )
+        curso = normalizar_codigo_curso(partes[2])
+        if not curso:
+            raise ValueError(f"{nombre}: falta el código del curso en CURSOS_INTENSIVOS.")
+        if curso in solicitudes and solicitudes[curso] != dia:
+            raise ValueError(
+                f"{nombre}: {curso} tiene dos días intensivos distintos. "
+                "Indica un solo día por curso."
+            )
+        solicitudes[curso] = dia
+    if not solicitudes:
+        raise ValueError(f"{nombre}: CURSOS_INTENSIVOS debe ser 0 o 1,DIA,CURSO.")
+    return solicitudes
+
+
+def es_patron_intensivo(patron):
+    """Una sesión semanal de más de un bloque (incluye cursos de 2 créditos)."""
+    return len(patron['days']) == 1 and any(c > 1 for c in patron['days'].values())
+
+
 def mins_to_str(m):
     h, mins = divmod(int(m), 60)
     am_pm = "AM" if h < 12 else "PM"
@@ -585,10 +646,12 @@ class Profesor:
         self.compensacion = excel_bool(compensacion)
         self.acepta_grandes = int(acepta_grandes) if pd.notnull(acepta_grandes) and acepta_grandes != '' else 0
         
-        try:
-            self.cursos_intensivos = int(cursos_intensivos)
-        except:
-            self.cursos_intensivos = 0
+        self.cursos_intensivos = parsear_cursos_intensivos(cursos_intensivos, self.nombre)
+
+    def dia_intensivo_para(self, seccion_cod):
+        # Quitar únicamente el sufijo de sección: MATE6026-01 -> MATE6026.
+        curso = normalizar_codigo_curso(seccion_cod.rsplit('-', 1)[0])
+        return self.cursos_intensivos.get(curso)
 
     def prioridad_curso(self, curso_cod):
         for idx, pref in enumerate(self.preferencias):
@@ -754,6 +817,8 @@ class TabuScheduler:
                 seccion.profesor_fijo = candidatos_seccion if es_fija else None
                 self.secciones.append(seccion)
 
+        # Validar las referencias contra los cursos y candidatos reales del Excel.
+        self._validar_solicitudes_intensivas(cursos_agrupados)
         self._preasignar_profesores_robusto()
 
         # --- Carga de Graduados (doble rol) ---
@@ -996,32 +1061,51 @@ class TabuScheduler:
 
         return buscar(0)
 
+    def _validar_solicitudes_intensivas(self, cursos_agrupados):
+        cursos = {normalizar_codigo_curso(c): datos for c, datos in cursos_agrupados.items()}
+        for nombre, obj in self.profesores.items():
+            for curso, dia in obj.cursos_intensivos.items():
+                contexto = f"{nombre}: CURSOS_INTENSIVOS ({curso}, {dia})"
+                if curso not in cursos:
+                    raise ValueError(f"{contexto}: el curso no existe en la hoja Cursos.")
+                elegibles = [s for s in self.secciones
+                    if normalizar_codigo_curso(s.cod.rsplit('-', 1)[0]) == curso
+                    and nombre in s.cands]
+                if not elegibles:
+                    raise ValueError(
+                        f"{contexto}: el profesor no figura entre los candidatos de ninguna "
+                        "sección de ese curso. Revisa CANDIDATOS y DEMANDA."
+                    )
+                creditos = cursos[curso]['creditos']
+                if not any(es_patron_intensivo(p) and set(p['days']) == {dia}
+                           for p in PATRONES.get(creditos, [])):
+                    raise ValueError(
+                        f"{contexto}: no hay un patrón intensivo definido para "
+                        f"un curso de {creditos} créditos en ese día."
+                    )
+                if obj.pref_dias_set and dia not in obj.pref_dias_set:
+                    raise ValueError(f"{contexto}: el día solicitado no está permitido en PREF_DIAS.")
+
+    def _incumplimientos_cursos_intensivos(self, seccion, prof, patron):
+        """Regla compartida por generación, costo, auditoría y validación final."""
+        obj = self.profesores.get(prof)
+        if obj is None:
+            return []
+        dia = obj.dia_intensivo_para(seccion.cod)
+        intensivo = es_patron_intensivo(patron)
+        if dia is None:
+            return ["curso no señalado en CURSOS_INTENSIVOS: debe usar horario normal"] if intensivo else []
+        if not intensivo or set(patron['days']) != {dia}:
+            return [f"CURSOS_INTENSIVOS exige este curso intensivo únicamente el {dia}"]
+        return []
+
     def _patrones_validos_para_profesor(self, seccion, prof):
         patrones = PATRONES.get(seccion.creditos, PATRONES[3])
-
         if prof not in self.profesores:
             return patrones
-
+        patrones = [p for p in patrones
+                    if not self._incumplimientos_cursos_intensivos(seccion, prof, p)]
         prof_obj = self.profesores[prof]
-
-        puede_ser_intensivo = any(
-            any(c >= 3 for c in p["days"].values())
-            for p in PATRONES.get(seccion.creditos, PATRONES[3])
-        )
-
-        if prof_obj.cursos_intensivos == 0:
-            patrones = [
-                p for p in patrones
-                if not any(c >= 3 for c in p["days"].values())
-            ]
-        elif prof_obj.cursos_intensivos == 1 and puede_ser_intensivo:
-            patrones_int = [
-                p for p in patrones
-                if any(c >= 3 for c in p["days"].values())
-            ]
-            if patrones_int:
-                patrones = patrones_int
-
         if prof_obj.pref_dias_set:
             patrones = [p for p in patrones if set(p['days']).issubset(prof_obj.pref_dias_set)]
         return patrones
@@ -1055,6 +1139,16 @@ class TabuScheduler:
                 obligadas[candidatos[0]].append(s)
 
         for p, obj in self.profesores.items():
+            for curso, dia in obj.cursos_intensivos.items():
+                secciones_curso = [s for s in posibles[p]
+                    if normalizar_codigo_curso(s.cod.rsplit('-', 1)[0]) == curso]
+                if not any(self._horas_validas_para_profesor(s, p, patron)
+                           for s in secciones_curso
+                           for patron in self._patrones_validos_para_profesor(s, p)):
+                    problemas.append(
+                        f"{p}: {curso} intensivo el {dia} no cabe con PREF_HORAS, "
+                        "HORA_ENTRADA, HORA_SALIDA y la grilla institucional."
+                    )
             carga_fija = sum(self.get_sec_creditos(s, p) for s in obligadas[p])
             carga_posible = sum(self.get_sec_creditos(s, p) for s in posibles[p])
             if carga_fija > obj.carga_max + 0.5:
@@ -1234,16 +1328,8 @@ class TabuScheduler:
             if prof in carga_prof:
                 carga_prof[prof] += self.get_sec_creditos(s, prof)
             
-            es_intensivo = any(c >= 3 for c in patron['days'].values())
-            puede_ser_intensivo = any(any(c >= 3 for c in p['days'].values()) for p in PATRONES.get(s.creditos, PATRONES[3]))
-            
-            if prof != "GRADUADOS" and prof in self.profesores:
-                prof_obj = self.profesores[prof]
-                if prof_obj.cursos_intensivos == 0 and es_intensivo:
-                    conflicts += 10000
-                elif prof_obj.cursos_intensivos == 1 and puede_ser_intensivo and not es_intensivo:
-                    conflicts += 10000
-
+            conflicts += 10000 * len(self._incumplimientos_cursos_intensivos(s, prof, patron))
+            if prof in self.profesores:
                 conflicts += self._penalidad_preferencias_horarias(prof, patron, ini)
 
 
@@ -1372,15 +1458,10 @@ class TabuScheduler:
             if prof in carga_prof:
                 carga_prof[prof] += self.get_sec_creditos(s, prof)
                 
-            es_intensivo = any(c >= 3 for c in patron['days'].values())
-            puede_ser_intensivo = any(any(c >= 3 for c in p['days'].values()) for p in PATRONES.get(s.creditos, PATRONES[3]))
-
-            if prof != "GRADUADOS" and prof in self.profesores:
+            for motivo in self._incumplimientos_cursos_intensivos(s, prof, patron):
+                conflictos_list.append(f"Sección {s.cod}, Prof {prof}: {motivo}.")
+            if prof in self.profesores:
                 prof_obj = self.profesores[prof]
-                if prof_obj.cursos_intensivos == 0 and es_intensivo:
-                    conflictos_list.append(f"Sección {s.cod}: Prof {prof} tiene clase intensiva pero solicitó NO intensivos.")
-                elif prof_obj.cursos_intensivos == 1 and puede_ser_intensivo and not es_intensivo:
-                    conflictos_list.append(f"Sección {s.cod}: Prof {prof} NO tiene clase intensiva pero solicitó SÍ intensivos.")
                 if prof_obj.acepta_grandes == 0 and s.es_grande:
                     conflictos_list.append(f"Sección {s.cod}: Prof {prof} no acepta grandes.")
                 for motivo in self._incumplimientos_disponibilidad(prof, patron, ini):
@@ -1534,7 +1615,9 @@ class TabuScheduler:
                (a2['profesor'] in a1['seccion'].cands or a1['profesor'] == "GRADUADOS" or a2['profesor'] == "TBA"):
                 a1['profesor'], a2['profesor'] = a2['profesor'], a1['profesor']
                 a1['salon'], a2['salon'] = a2['salon'], a1['salon']
-                if all(not self._incumplimientos_disponibilidad(a['profesor'], a['patron'], a['ini']) for a in (a1, a2)):
+                if all(a['patron'] in self._patrones_validos_para_profesor(a['seccion'], a['profesor'])
+                       and not self._incumplimientos_disponibilidad(a['profesor'], a['patron'], a['ini'])
+                       for a in (a1, a2)):
                     return nuevo, self._costo_total(nuevo)
                 nuevo = deepcopy(sol)
         
@@ -2436,12 +2519,13 @@ def generar_plantilla():
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df_cursos = pd.DataFrame({
-            'CODIGO': ['MATE3171', 'MATE3172', 'MATE4999'],
-            'CREDITOS': [3, 3, 3],
-            'DEMANDA': [120, 150, 180],
-            'CUPO': [30, 30, 30],
-            'CANDIDATOS': ['PEREZ, GONZALEZ', 'RODRIGUEZ', 'PEREZ (2x60), GONZALEZ (2)'],
-            'TIPO_SALON': ['1', '1,3', '1']   # Ejemplo con múltiples tipos
+            'CODIGO': ['MATE6026', 'MATE3171', 'MATE3172', 'MATE4999'],
+            'CREDITOS': [3, 3, 3, 3],
+            'DEMANDA': [30, 60, 30, 60],
+            'CUPO': [30, 30, 30, 30],
+            'CANDIDATOS': ['PEREZ (1)', 'PEREZ (1), GONZALEZ (1)',
+                           'GONZALEZ (1)', 'PEREZ (1), GONZALEZ (1)'],
+            'TIPO_SALON': ['1', '1', '1,3', '1']
         })
         df_cursos.to_excel(writer, sheet_name='Cursos', index=False)
         
@@ -2449,16 +2533,16 @@ def generar_plantilla():
             'NOMBRE': ['PEREZ', 'GONZALEZ'],
             'CARGA_MIN': [9, 6],
             'CARGA_MAX': [15, 12],
-            'PREF_DIAS': ['LMV', 'MJ'],
-            'PREF_HORAS': ['AM', 'PM'],
+            'PREF_DIAS': ['LMWJV', 'LMWJV'],
+            'PREF_HORAS': ['ANY', 'PM'],
             'HORA_ENTRADA': ['08:00', '13:00'],
-            'HORA_SALIDA': ['17:00', '20:00'],
-            'PREF1': ['MATE3171', 'MATE3172'],
+            'HORA_SALIDA': ['18:30', '18:30'],
+            'PREF1': ['MATE6026', 'MATE3172'],
             'PREF2': ['', ''],
             'PREF3': ['', ''],
             'COMPENSACION': ['NO', 'SI'],
             'ACEPTA_GRANDES': [0, 1],
-            'CURSOS_INTENSIVOS': [0, 1]
+            'CURSOS_INTENSIVOS': ['1,W,MATE6026', 0]
         })
         df_profes.to_excel(writer, sheet_name='Profesores', index=False)
         
@@ -2487,6 +2571,12 @@ def main():
         zona = st.selectbox("Zona Campus", ["CENTRAL", "PERIFERICA"])
         iteraciones = st.slider("Iteraciones Fase 1 (Factibilidad)", 500, 5000, 3000)
         file = st.file_uploader("Subir Protocolo Excel", type=['xlsx'])
+        st.caption(
+            "Profesores → CURSOS_INTENSIVOS: 0/vacío = todas sus materias normales; "
+            "1,W,MATE6026 = solo MATE6026 intensiva el miércoles. "
+            "Días: L, M, W, J, V. Para varias materias, separa las solicitudes con ;. "
+            "El valor 1 solo debe reemplazarse por 1,DIA,CURSO."
+        )
         st.download_button(
             label="📥 Descargar Plantilla",
             data=generar_plantilla(),
