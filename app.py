@@ -2679,12 +2679,6 @@ def main():
         zona = st.selectbox("Zona Campus", ["CENTRAL", "PERIFERICA"])
         iteraciones = st.slider("Iteraciones Fase 1 (Factibilidad)", 500, 5000, 3000)
         file = st.file_uploader("Subir Protocolo Excel", type=['xlsx'])
-        st.caption(
-            "Profesores → CURSOS_INTENSIVOS: 0/vacío = todas sus materias normales; "
-            "1,W,MATE6026 = solo MATE6026 intensiva el miércoles. "
-            "Días: L, M, W, J, V. Para varias materias, separa las solicitudes con ;. "
-            "El valor 1 solo debe reemplazarse por 1,DIA,CURSO."
-        )
         st.download_button(
             label="📥 Descargar Plantilla",
             data=generar_plantilla(),
