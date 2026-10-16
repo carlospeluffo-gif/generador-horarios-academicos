@@ -1296,7 +1296,6 @@ class TabuScheduler:
 
     def _costo_total(self, sol, solo_duros=False, evaluar_carga_min=True):
         conflicts = 10000 * len(self._errores_estructura_y_aforo(sol))
-        soft_penalty = 0
         occ_prof = {}
         occ_salon = {}
         carga_prof = {p: 0.0 for p in self.profesores}
@@ -1414,6 +1413,10 @@ class TabuScheduler:
         if solo_duros:
             return conflicts
         
+        return conflicts + 2 * self._contar_conflictos_suaves(sol)
+
+    def _contar_conflictos_suaves(self, sol):
+        """Cada salón adicional del mismo tipo tiene una penalidad de dos puntos."""
         salones_por_prof_tipo = {}
         for asign in sol:
             prof = asign['profesor']
@@ -1424,11 +1427,7 @@ class TabuScheduler:
                 if key not in salones_por_prof_tipo:
                     salones_por_prof_tipo[key] = set()
                 salones_por_prof_tipo[key].add(salon)
-        for (prof, tipo), salones in salones_por_prof_tipo.items():
-            if len(salones) > 1:
-                soft_penalty += (len(salones) - 1) * 2
-        
-        return conflicts + soft_penalty
+        return sum(max(0, len(salones) - 1) for salones in salones_por_prof_tipo.values())
 
     def _obtener_conflictos(self, sol):
         conflictos_list = self._errores_estructura_y_aforo(sol)
@@ -1772,7 +1771,7 @@ class TabuScheduler:
                     mejor, costo_mejor = vecino, costo
         return mejor, costo_mejor
 
-    def _compactar_solucion(self, sol, iteraciones=2000):
+    def _compactar_solucion(self, sol, iteraciones=2000, progreso=None):
         if self._costo_total(sol, solo_duros=True) > 0:
             return sol
         
@@ -1791,12 +1790,14 @@ class TabuScheduler:
                     mejor = deepcopy(actual)
                     mejor_costo = costo_actual
             temp *= 0.995
+            if progreso is not None and ((it + 1) % 10 == 0 or it == iteraciones - 1):
+                progreso(it + 1, iteraciones, mejor)
         return mejor
 
     # --------------------------------------------------------------------------
     # FASE DE REPARACIÓN: BÚSQUEDA ACOTADA, SIN GARANTÍA DE FACTIBILIDAD
     # --------------------------------------------------------------------------
-    def _reparar_solucion(self, sol, max_intentos=15):
+    def _reparar_solucion(self, sol, max_intentos=15, progreso=None):
         """
         Intenta reparar una solución con conflictos duros mediante:
         - Destrucción de secciones conflictivas + aleatorias.
@@ -1815,6 +1816,8 @@ class TabuScheduler:
         temp_rep = 200.0
 
         for intento in range(max_intentos):
+            if progreso is not None:
+                progreso(intento, max_intentos, mejor_sol, f"Intento {intento + 1}/{max_intentos}")
             # Identificar secciones conflictivas
             conflictivas = set()
             for idx, asign in enumerate(mejor_sol):
@@ -1842,8 +1845,10 @@ class TabuScheduler:
             if nuevo_costo < mejor_costo:
                 mejor_sol = nuevo
                 mejor_costo = nuevo_costo
-                if mejor_costo == 0:
-                    break
+            if progreso is not None:
+                progreso(intento, max_intentos, mejor_sol, f"Intento {intento + 1}/{max_intentos}: reinserción terminada")
+            if mejor_costo == 0:
+                break
 
             # Si aún no es factible, aplicar recocido simulado enfocado en duros
             if mejor_costo > 0:
@@ -1860,6 +1865,9 @@ class TabuScheduler:
                             if mejor_costo == 0:
                                 break
                     temp_rep *= 0.995
+                    if progreso is not None and ((it + 1) % 10 == 0 or it == max_iter_rep - 1):
+                        progreso(intento, max_intentos, mejor_sol,
+                                 f"Intento {intento + 1}/{max_intentos} · iteración {it + 1}/{max_iter_rep}")
                 if mejor_costo == 0:
                     break
         return mejor_sol
@@ -2004,13 +2012,53 @@ class TabuScheduler:
             errores.append("La evaluación institucional todavía detecta conflictos fuertes.")
         return list(dict.fromkeys(errores))
 
-    def optimizar(self, iteraciones=3000, bar=None, status_text=None):
+    def _emitir_progreso(self, fase, iteracion, iteraciones, estado, sol,
+                         inicio_fase, inicio_total, progreso=None, detalle=""):
+        ahora = time.perf_counter()
+        costo_total = self._costo_total(sol)
+        suaves = self._contar_conflictos_suaves(sol)
+        datos = {
+            'fase': fase, 'iteracion': iteracion, 'iteraciones': iteraciones,
+            'estado': estado, 'detalle': detalle,
+            'fraccion': 1.0 if estado == 'completada' else min(1.0, iteracion / max(1, iteraciones)),
+            'conflictos_fuertes': int(self._costo_total(sol, solo_duros=True) // 10000),
+            'conflictos_suaves': suaves, 'costo_suave': 2 * suaves,
+            'costo_total': costo_total, 'fitness': 10000 / (10000 + costo_total),
+            'tiempo_fase': ahora - inicio_fase, 'tiempo_total': ahora - inicio_total,
+        }
+        if fase == 'fase2':
+            datos['costo_compactacion'] = self._costo_compactacion(sol)
+        self.progreso_fases[fase] = datos
+        if progreso is not None:
+            progreso(datos)
+        return datos
+
+    def optimizar(self, iteraciones=3000, bar=None, status_text=None, progreso=None,
+                  iteraciones_compactacion=2000):
+        inicio_total = time.perf_counter()
+        self.progreso_fases = {}
+
+        def notificar(fase, it, limite, estado, sol, inicio_fase, detalle=""):
+            datos = self._emitir_progreso(fase, it, limite, estado, sol,
+                inicio_fase, inicio_total, progreso, detalle)
+            # Compatibilidad con llamadas anteriores que pasan bar y status_text.
+            if status_text is not None:
+                status_text.markdown(formatear_progreso_optimizacion(datos))
+            if bar is not None:
+                bar.progress(datos['fraccion'])
+
+        inicio_fase1 = time.perf_counter()
+        notificar('fase1', 0, iteraciones, 'en curso', self.mejor_solucion, inicio_fase1,
+                  "Evaluando el horario inicial.")
         problemas = self.validar_factibilidad_inicial()
         if problemas:
+            notificar('fase1', 0, iteraciones, 'error', self.mejor_solucion, inicio_fase1,
+                      "Los datos tienen restricciones incompatibles.")
             raise ValueError("Datos incompatibles:\n" + "\n".join(problemas))
         temp_inicial = 5000.0
         self.historial_costos = [self.mejor_costo]
         costo_actual = self._costo_total(self.solucion)
+        iteraciones_hechas = 0
         for it in range(iteraciones):
             if self._costo_total(self.mejor_solucion, solo_duros=True) == 0:
                 break
@@ -2030,50 +2078,60 @@ class TabuScheduler:
                     self.solucion = vecino
                     costo_actual = costo_vecino
             self.historial_costos.append(self.mejor_costo)
-            if it % 10 == 0 or it == iteraciones - 1:
-                if status_text:
-                    duros = int(self._costo_total(self.mejor_solucion, solo_duros=True) // 10000)
-                    costo_total = self.mejor_costo
-                    fitness_actual = 10000 / (10000 + costo_total)
-                    costo_suave = costo_total - (duros * 10000)
-                    if costo_total > 0:
-                        pct_suave = (costo_suave / costo_total) * 100
-                    else:
-                        pct_suave = 0.0
-                    status_text.markdown(
-                        f"**🔄 Fase 1 Gen {it+1}/{iteraciones}** | "
-                        f"Conflictos Duros: {duros} | Costo Total: {costo_total:.2f} | "
-                        f"Fitness: {fitness_actual:.5f} | % Suave: {pct_suave:.1f}%"
-                    )
-                if bar:
-                    bar.progress((it+1)/(iteraciones+2000))
+            iteraciones_hechas = it + 1
+            if it % 10 == 0 or it == iteraciones - 1 or self._costo_total(self.mejor_solucion, solo_duros=True) == 0:
+                notificar('fase1', iteraciones_hechas, iteraciones, 'en curso',
+                          self.mejor_solucion, inicio_fase1)
+
+        if self._costo_total(self.mejor_solucion, solo_duros=True) == 0:
+            detalle = ("El horario inicial ya tiene cero conflictos fuertes; no se necesitaron iteraciones."
+                       if iteraciones_hechas == 0 else "Se alcanzaron cero conflictos fuertes.")
+        else:
+            detalle = "Se alcanzó el límite de iteraciones; continúa la reparación."
+        notificar('fase1', iteraciones_hechas, iteraciones, 'completada',
+                  self.mejor_solucion, inicio_fase1, detalle)
         
         # --- FASE DE REPARACIÓN AGRESIVA REFORZADA ---
         if self._costo_total(self.mejor_solucion, solo_duros=True) > 0:
-            if status_text:
-                status_text.markdown("**🔧 Fase de Reparación ...**")
-            self.mejor_solucion = self._reparar_solucion(self.mejor_solucion, max_intentos=20)
+            inicio_reparacion = time.perf_counter()
+            notificar('reparacion', 0, 20, 'en curso', self.mejor_solucion, inicio_reparacion)
+            def reportar_reparacion(it, limite, sol, detalle):
+                notificar('reparacion', it, limite, 'en curso', sol, inicio_reparacion, detalle)
+            self.mejor_solucion = self._reparar_solucion(
+                self.mejor_solucion, max_intentos=20, progreso=reportar_reparacion)
             self.mejor_costo = self._costo_total(self.mejor_solucion)
             self.historial_costos.append(self.mejor_costo)
-            if bar:
-                bar.progress(0.95)
+            reparada = self._costo_total(self.mejor_solucion, solo_duros=True) == 0
+            intento = self.progreso_fases['reparacion']['iteracion'] + 1
+            notificar('reparacion', intento, 20, 'completada' if reparada else 'error',
+                      self.mejor_solucion, inicio_reparacion,
+                      "Cero conflictos fuertes." if reparada else "Persisten conflictos fuertes; la fase 2 no se ejecutará.")
         
         # Fase de compactación
         if self._costo_total(self.mejor_solucion, solo_duros=True) == 0:
-            if status_text:
-                status_text.markdown("**✨ Fase 2: Compactación de horarios (mejorando organización)...**")
-            self.mejor_solucion = self._compactar_solucion(self.mejor_solucion, iteraciones=2000)
+            inicio_fase2 = time.perf_counter()
+            notificar('fase2', 0, iteraciones_compactacion, 'en curso',
+                      self.mejor_solucion, inicio_fase2)
+            def reportar_compactacion(it, limite, sol):
+                notificar('fase2', it, limite, 'en curso', sol, inicio_fase2)
+            self.mejor_solucion = self._compactar_solucion(self.mejor_solucion,
+                iteraciones=iteraciones_compactacion, progreso=reportar_compactacion)
             self.mejor_costo = self._costo_total(self.mejor_solucion)
-            if bar:
-                bar.progress(1.0)
+            notificar('fase2', iteraciones_compactacion, iteraciones_compactacion, 'validando',
+                      self.mejor_solucion, inicio_fase2, "Comprobando todas las restricciones antes de publicar.")
         
         errores = self.validar_solucion_final(self.mejor_solucion)
         if errores:
+            if 'fase2' in self.progreso_fases:
+                notificar('fase2', iteraciones_compactacion, iteraciones_compactacion, 'error',
+                          self.mejor_solucion, inicio_fase2, "La validación final detectó errores. Exportación bloqueada.")
             raise ValueError(
                 "La búsqueda no encontró un horario válido. No se publica ni exporta. "
                 "Esto no demuestra que el problema global sea imposible. Conflictos:\n"
                 + "\n".join(errores[:50])
             )
+        notificar('fase2', iteraciones_compactacion, iteraciones_compactacion, 'completada',
+                  self.mejor_solucion, inicio_fase2, "Compactación y validación final terminadas.")
         return self.mejor_solucion, 0, self.historial_costos
 
 # ==============================================================================
@@ -2565,7 +2623,57 @@ def generar_plantilla():
 # ==============================================================================
 # 8. UI PRINCIPAL
 # ==============================================================================
+TITULOS_PROGRESO = {
+    'fase1': '🔄 Fase 1: Factibilidad',
+    'reparacion': '🔧 Reparación de conflictos fuertes',
+    'fase2': '✨ Fase 2: Compactación de horarios',
+}
+
+
+def formatear_progreso_optimizacion(datos):
+    titulo = TITULOS_PROGRESO[datos['fase']]
+    texto = (
+        f"**{titulo} · {datos['estado'].capitalize()}**  \n"
+        f"**Iteración:** {datos['iteracion']}/{datos['iteraciones']} | "
+        f"**Conflictos fuertes:** {datos['conflictos_fuertes']} | "
+        f"**Conflictos suaves:** {datos['conflictos_suaves']}  \n"
+        f"**Costo total:** {datos['costo_total']:.2f} | "
+        f"**Penalidad suave:** {datos['costo_suave']:.2f} | "
+        f"**Fitness:** {datos['fitness']:.5f}  \n"
+        f"**Tiempo de fase:** {datos['tiempo_fase']:.1f} s | "
+        f"**Tiempo total:** {datos['tiempo_total']:.1f} s"
+    )
+    if 'costo_compactacion' in datos:
+        texto += f" | **Costo de compactación:** {datos['costo_compactacion']:.2f}"
+    if datos['detalle']:
+        texto += f"  \n{datos['detalle']}"
+    return texto
+
+
+def crear_paneles_progreso(resumenes=None, inicio_ejecucion=None):
+    """Cada fase conserva su panel al empezar la siguiente y tras un rerun."""
+    espacios = {fase: st.empty() for fase in TITULOS_PROGRESO}
+    for fase in ('fase1', 'fase2'):
+        with espacios[fase].container():
+            st.markdown(f"**{TITULOS_PROGRESO[fase]} · Pendiente**")
+            st.progress(0.0)
+
+    def actualizar(datos):
+        datos = dict(datos)
+        if inicio_ejecucion is not None:
+            datos['tiempo_total'] = time.perf_counter() - inicio_ejecucion
+        st.session_state.setdefault('progreso_fases', {})[datos['fase']] = datos
+        with espacios[datos['fase']].container():
+            st.markdown(formatear_progreso_optimizacion(datos))
+            st.progress(datos['fraccion'])
+
+    for datos in (resumenes or {}).values():
+        actualizar(datos)
+    return actualizar
+
+
 def main():
+    progreso_dibujado = False
     with st.sidebar:
         st.markdown("### ∑ Configuración")
         zona = st.selectbox("Zona Campus", ["CENTRAL", "PERIFERICA"])
@@ -2600,8 +2708,13 @@ def main():
     else:
         if st.button("🚀 INICIAR OPTIMIZACIÓN ABSOLUTA"):
             for clave in ('master', 'scheduler', 'mejor_sol', 'conflicts', 'historial',
-                          'elapsed_time', 'cargas_finales', 'detailed_conflicts'):
+                          'elapsed_time', 'cargas_finales', 'detailed_conflicts', 'progreso_fases'):
                 st.session_state.pop(clave, None)
+            start_time = time.perf_counter()
+            preparacion = st.empty()
+            preparacion.info("Preparación: leyendo el Excel y construyendo el horario inicial...")
+            actualizar_progreso = crear_paneles_progreso(inicio_ejecucion=start_time)
+            progreso_dibujado = True
             try:
                 with st.spinner("Balanceando cargas, consolidando secciones y resolviendo..."):
                     xls = pd.ExcelFile(file)
@@ -2617,9 +2730,11 @@ def main():
                     if 'Graduados' in xls.sheet_names:
                         df_grad = pd.read_excel(xls, 'Graduados')
 
+                    preparacion.info("Preparación: balanceando cargas y comprobando disponibilidad y salones...")
                     scheduler = TabuScheduler(df_cursos, df_profes, df_salones, zona, df_grad)
                     problemas_factibilidad = scheduler.problemas_factibilidad
                     if problemas_factibilidad:
+                        preparacion.error("Preparación detenida: revisa las restricciones indicadas.")
                         st.error("El archivo tiene restricciones imposibles antes de optimizar.")
                         for problema in problemas_factibilidad[:50]:
                             st.write(f"- {problema}")
@@ -2627,12 +2742,11 @@ def main():
                             st.write(f"... y {len(problemas_factibilidad) - 50} problemas adicionales.")
                         return
                     
-                    start_time = time.time()
-                    bar = st.progress(0)
-                    status = st.empty()
-                    mejor_sol, conflictos, historial = scheduler.optimizar(iteraciones, bar, status)
+                    preparacion.success(f"Preparación completada en {time.perf_counter() - start_time:.1f} s.")
+                    mejor_sol, conflictos, historial = scheduler.optimizar(
+                        iteraciones, progreso=actualizar_progreso)
                     
-                    st.session_state.elapsed_time = time.time() - start_time
+                    st.session_state.elapsed_time = time.perf_counter() - start_time
                     st.session_state.conflicts = conflictos
                     st.session_state.historial = historial
                     st.session_state.scheduler = scheduler
@@ -2661,8 +2775,12 @@ def main():
                     st.session_state.detailed_conflicts = scheduler._obtener_conflictos(mejor_sol)
 
             except Exception as e:
+                preparacion.error("El proceso se detuvo. Revisa el detalle del error.")
                 st.error(f"Error durante la optimización: {e}")
                 return
+
+    if not progreso_dibujado and st.session_state.get('progreso_fases'):
+        crear_paneles_progreso(st.session_state.progreso_fases)
 
     if 'master' in st.session_state:
         errores_finales = st.session_state.scheduler.validar_solucion_final(st.session_state.mejor_sol)
