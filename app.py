@@ -699,6 +699,8 @@ class TabuScheduler:
     MINUTOS_HORA_ACADEMICA = 50
     MAX_DOCENCIA_SIN_DESCANSO = 3 * MINUTOS_HORA_ACADEMICA
     DESCANSO_MINIMO = 60  # Minutos reales entre el final y el siguiente inicio.
+    # Recurso adicional exclusivamente para 3 créditos, 75 minutos en Ma-Ju.
+    INICIOS_ALTERNATIVOS_MJ_CENTRAL = (540, 840, 1020)  # 09:00, 14:00, 17:00.
 
     def __init__(self, df_cursos, df_profes, df_salones, zona, df_grad=None):
         self.zona = zona
@@ -855,6 +857,75 @@ class TabuScheduler:
         self.mejor_costo = self._costo_total(self.solucion)
         self.historial_costos = [self.mejor_costo]
 
+    def _inicios_alternativos_para_patron(self, seccion, patron):
+        """Las horas en punto son excepciones solo del patrón Ma-Ju de 75 min."""
+        if (self.zona == 'CENTRAL' and seccion.creditos == 3
+                and patron['days'] == {'Ma': 1.5, 'Ju': 1.5}):
+            return self.INICIOS_ALTERNATIVOS_MJ_CENTRAL
+        return ()
+
+    def _inicios_permitidos_para_patron(self, seccion, patron):
+        # self.bloques sigue siendo la grilla ordinaria; no se amplía en LMV.
+        return list(dict.fromkeys(
+            self.bloques + list(self._inicios_alternativos_para_patron(seccion, patron))))
+
+    def _es_inicio_alternativo(self, seccion, patron, ini):
+        return ini in self._inicios_alternativos_para_patron(seccion, patron)
+
+    def _ordenar_horas_preferidas(self, seccion, patron, horas):
+        horas = list(horas)
+        random.shuffle(horas)
+        horas.sort(key=lambda h: self._es_inicio_alternativo(seccion, patron, h))
+        return horas
+
+    def _contar_inicios_alternativos(self, sol):
+        # Se cuenta la sección semanal; el mismo inicio se repite Ma y Ju.
+        return sum(self._es_inicio_alternativo(a['seccion'], a['patron'], a['ini'])
+                   for a in sol if a)
+
+    def _indices_mj_encadenados(self, sol):
+        """Secciones del mismo profesor/salón separadas por 15 min en Ma-Ju.
+
+        Ambas sesiones deben ser de 75 minutos y pertenecer al patrón
+        Ma-Ju de 3 créditos. La restricción de descanso se evalúa aparte:
+        un tercer bloque consecutivo no se vuelve válido por encadenarse.
+        """
+        grupos = {}
+        for i, asign in enumerate(sol):
+            if (not asign or asign['profesor'] not in self.profesores
+                    or asign['salon'] == 'TBA'
+                    or not self._inicios_alternativos_para_patron(
+                        asign['seccion'], asign['patron'])):
+                continue
+            clave = (asign['profesor'], asign['salon'])
+            grupos.setdefault(clave, []).append((asign['ini'], i))
+        encadenados = set()
+        for eventos in grupos.values():
+            eventos.sort()
+            for (ini_a, idx_a), (ini_b, idx_b) in zip(eventos, eventos[1:]):
+                if ini_b - ini_a == 90:  # 75 min de clase + 15 min de cambio.
+                    encadenados.update((idx_a, idx_b))
+        return encadenados
+
+    def _contar_inicios_alternativos_aislados(self, sol):
+        encadenados = self._indices_mj_encadenados(sol)
+        return sum(self._es_inicio_alternativo(a['seccion'], a['patron'], a['ini'])
+                   for i, a in enumerate(sol) if a and i not in encadenados)
+
+    def _costo_suave_horario(self, sol):
+        """Menos inicios alternativos aislados; los pares MJ son preferidos.
+
+        Un inicio en punto que forma un par de 75 + 15 + 75 con el mismo
+        docente y salón no recibe penalidad por excepción. La compactación
+        favorece ese par. Toda la penalidad suave sigue siendo < 10000.
+        """
+        n = max(1, len(sol))
+        peso_excepcion = 2 * n + 1
+        penalidad = (peso_excepcion * self._contar_inicios_alternativos_aislados(sol)
+                     + 2 * self._contar_conflictos_suaves(sol))
+        cota = n * peso_excepcion + 2 * n + 1
+        return 9999 * penalidad / cota
+
     def _rachas_docencia_sin_descanso(self, intervalos):
         """Agrupa docencia mientras no haya un descanso de 60 minutos.
 
@@ -914,7 +985,7 @@ class TabuScheduler:
                 errores.append(f'{s.cod}: salón desconocido: {salon}.')
             if a['patron'] not in PATRONES.get(s.creditos, []):
                 errores.append(f'{s.cod}: patrón no definido para {s.creditos} créditos.')
-            if a['ini'] not in self.bloques:
+            if a['ini'] not in self._inicios_permitidos_para_patron(s, a['patron']):
                 errores.append(f'{s.cod}: inicio fuera de la grilla institucional.')
         for salon in self.mega_salones:
             for dia in ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']:
@@ -1066,7 +1137,7 @@ class TabuScheduler:
 
     def _horas_validas_para_profesor(self, seccion, prof, patron):
         horas = []
-        for ini in self.bloques:
+        for ini in self._inicios_permitidos_para_patron(seccion, patron):
             if self._incumplimientos_disponibilidad(prof, patron, ini):
                 continue
             valido = True
@@ -1538,7 +1609,7 @@ class TabuScheduler:
         if solo_duros:
             return conflicts
         
-        return conflicts + 2 * self._contar_conflictos_suaves(sol)
+        return conflicts + self._costo_suave_horario(sol)
 
     def _contar_conflictos_suaves(self, sol):
         """Cada salón adicional del mismo tipo tiene una penalidad de dos puntos."""
@@ -1650,17 +1721,19 @@ class TabuScheduler:
         return conflictos_list
 
     def _construir_solucion_greedy(self):
-        # Construir juntas las clases de cada docente. Una elección válida para
-        # una sección puede dejar sin espacio a sus otras clases obligatorias.
+        # Buscar juntas las materias de cada docente. Antes de admitir una
+        # excepción se intenta colocar el grupo completo con cero excepciones.
         grupos = {}
         for i, s in enumerate(self.secciones):
             grupos.setdefault(s.prof_preasignado, []).append(i)
         dificultad = {}
         for prof, indices in grupos.items():
+            # Los salones forman parte del dominio: colocar primero los
+            # docentes con menos combinaciones de hora, patrón y salón.
             opciones = [sum(len(self._horas_validas_para_profesor(self.secciones[i], prof, p))
                            for p in self._patrones_validos_para_profesor(self.secciones[i], prof))
+                        * len(self._salones_validos_para(self.secciones[i], prof))
                         for i in indices]
-            # Menos alternativas por clase y más clases: colocar antes.
             dificultad[prof] = math.prod(opciones) ** (1 / len(indices)) / len(indices)
 
         mejor, mejor_costo = None, float('inf')
@@ -1673,63 +1746,77 @@ class TabuScheduler:
                 indices = grupos[prof]
                 nodos_grupo = 0
 
-                def buscar_grupo(pendientes):
+                def buscar_grupo(pendientes, limite_excepciones, usadas=0):
                     nonlocal nodos_grupo
                     if not pendientes:
                         return True
                     nodos_grupo += 1
                     if nodos_grupo > 2000:
-                        return False  # Presupuesto local; la reparación podrá continuar.
+                        return False
                     dominios = []
                     for i in pendientes:
                         s = self.secciones[i]
                         opciones = []
                         patrones = list(self._patrones_validos_para_profesor(s, prof))
                         random.shuffle(patrones)
+                        salones = self._salones_validos_para(s, prof, sol, i)
+                        random.shuffle(salones)
+                        salones.sort(key=lambda sl: self.salon_capacidad[sl])
                         for patron in patrones:
-                            horas = self._horas_validas_para_profesor(s, prof, patron)
-                            random.shuffle(horas)
-                            salones = self._salones_validos_para(s, prof, sol, i)
-                            random.shuffle(salones)
-                            salones.sort(key=lambda sl: self.salon_capacidad[sl])
+                            horas = self._ordenar_horas_preferidas(s, patron,
+                                self._horas_validas_para_profesor(s, prof, patron))
                             for ini in horas:
+                                es_alternativa = self._es_inicio_alternativo(s, patron, ini)
+                                if usadas + es_alternativa > limite_excepciones:
+                                    continue
                                 for salon in salones:
                                     a = {'seccion': s, 'profesor': prof, 'salon': salon,
                                          'patron': patron, 'ini': ini}
                                     if self._asignacion_local_valida(i, a, sol):
                                         opciones.append(a)
-                        # Si otra clase se quedó sin opciones, deshacer la
-                        # elección anterior antes de seguir con otro docente.
                         if not opciones:
                             return False
+                        opciones.sort(key=lambda a: self._es_inicio_alternativo(
+                            a['seccion'], a['patron'], a['ini']))
                         dominios.append((i, opciones))
                     i, opciones = min(dominios,
                         key=lambda par: (len(par[1]), -self.secciones[par[0]].creditos))
                     restantes = [j for j in pendientes if j != i]
                     for a in opciones:
                         sol[i] = a
-                        if buscar_grupo(restantes):
+                        extra = self._es_inicio_alternativo(a['seccion'], a['patron'], a['ini'])
+                        if buscar_grupo(restantes, limite_excepciones, usadas + extra):
                             return True
                         sol[i] = None
                         if nodos_grupo > 2000:
                             break
                     return False
 
-                if not buscar_grupo(indices):
+                max_excepciones = sum(any(
+                    self._inicios_alternativos_para_patron(self.secciones[i], patron)
+                    for patron in self._patrones_validos_para_profesor(self.secciones[i], prof))
+                    for i in indices)
+                colocado = False
+                # Cero, una, dos... excepciones: nunca empezar usándolas todas.
+                for limite in range(max_excepciones + 1):
+                    nodos_grupo = 0
+                    if buscar_grupo(indices, limite):
+                        colocado = True
+                        break
                     for i in indices:
                         sol[i] = None
+                if not colocado:
                     for i in indices:
                         self._asignar_seccion(i, prof, sol, [bool(a) for a in sol])
 
-            # Solo si se agotó la construcción se conservan asignaciones
-            # temporales para el reparador. Nunca pasan la validación si chocan.
             for i, a in enumerate(sol):
                 if a is None:
-                    sol[i] = self._crear_asignacion_temporal(self.secciones[i], prof=self.secciones[i].prof_preasignado)
-            costo = self._costo_total(sol, solo_duros=True)
+                    sol[i] = self._crear_asignacion_temporal(self.secciones[i],
+                        prof=self.secciones[i].prof_preasignado)
+            costo = self._costo_total(sol)
             if costo < mejor_costo:
                 mejor, mejor_costo = sol, costo
-            if costo == 0:
+            if self._costo_total(sol, solo_duros=True) == 0:
                 break
         return mejor or []
 
@@ -1743,7 +1830,10 @@ class TabuScheduler:
                     for h in self._horas_validas_para_profesor(seccion, prof, p)]
         if opciones:
             compatibles = [(p, h) for p, h in opciones if p == patron and (ini is None or h == ini)]
-            patron, ini = random.choice(compatibles or opciones)
+            candidatas = compatibles or opciones
+            ordinarias = [(p, h) for p, h in candidatas
+                          if not self._es_inicio_alternativo(seccion, p, h)]
+            patron, ini = random.choice(ordinarias or candidatas)
         elif ini is None:
             ini = random.choice(self.bloques)  # Temporal inviable; la auditoría impide publicarlo.
         if salon == "TBA":
@@ -1755,21 +1845,24 @@ class TabuScheduler:
         s = self.secciones[idx]
         patrones = list(self._patrones_validos_para_profesor(s, prof))
         random.shuffle(patrones)
-        for patron in patrones:
-            horas = self._horas_validas_para_profesor(s, prof, patron)
-            random.shuffle(horas)
-            salones = self._salones_validos_para(s, prof, sol, idx)
-            random.shuffle(salones)
-            # Evitar ocupar el único salón de 40 con una clase pequeña si
-            # existe otro adecuado. No se altera ninguna compatibilidad.
-            salones.sort(key=lambda sl: self.salon_capacidad[sl])
-            for hora in horas:
-                for salon in salones:
-                    a = {'seccion': s, 'profesor': prof, 'salon': salon, 'patron': patron, 'ini': hora}
-                    if self._asignacion_local_valida(idx, a, sol):
-                        sol[idx] = a
-                        asignado[idx] = True
-                        return True
+        salones = self._salones_validos_para(s, prof, sol, idx)
+        random.shuffle(salones)
+        salones.sort(key=lambda sl: self.salon_capacidad[sl])
+        # Primero todos los patrones ordinarios; después los inicios de recurso.
+        for alternativas in (False, True):
+            for patron in patrones:
+                horas = self._ordenar_horas_preferidas(s, patron,
+                    self._horas_validas_para_profesor(s, prof, patron))
+                for hora in horas:
+                    if self._es_inicio_alternativo(s, patron, hora) != alternativas:
+                        continue
+                    for salon in salones:
+                        a = {'seccion': s, 'profesor': prof, 'salon': salon,
+                             'patron': patron, 'ini': hora}
+                        if self._asignacion_local_valida(idx, a, sol):
+                            sol[idx] = a
+                            asignado[idx] = True
+                            return True
         return False
 
     def _mutar_solucion(self, sol):
@@ -1807,20 +1900,14 @@ class TabuScheduler:
                 continue
 
             patron = random.choice(patrones)
-            horas_posibles = set(self._horas_validas_para_profesor(s, prof, patron))
-            for dia, contrib in patron['days'].items():
-                duracion = contrib * 50
-                horas_dia = [h for h in self.bloques if h >= self.limite_operativo[0] and h + duracion <= self.limite_operativo[1]]
-                if dia in ["Ma", "Ju"]:
-                    horas_dia = [h for h in horas_dia if not (max(h, self.hora_universal[0]) < min(h+duracion, self.hora_universal[1]))]
-                if s.creditos == 3 and contrib >= 3:
-                    horas_dia = [h for h in horas_dia if h >= 930]
-                horas_posibles = horas_posibles.intersection(set(horas_dia))
-                if not horas_posibles:
-                    break
+            horas_posibles = self._horas_validas_para_profesor(s, prof, patron)
             if not horas_posibles:
                 continue
-            hora = random.choice(list(horas_posibles))
+            ordinarias = [h for h in horas_posibles
+                          if not self._es_inicio_alternativo(s, patron, h)]
+            # Reservar los primeros intentos para la grilla ordinaria; los
+            # restantes pueden explorar también los recursos adicionales.
+            hora = random.choice(ordinarias if _ < 20 and ordinarias else horas_posibles)
             
 
             salones_cand = self._salones_validos_para(s, prof, sol, idx)
@@ -1855,7 +1942,9 @@ class TabuScheduler:
                     if conflicto:
                         break
             if not conflicto:
-                costo = 0
+                propuesta = {'seccion': s, 'profesor': prof, 'patron': patron,
+                             'ini': hora, 'salon': salon}
+                costo = self._costo_total(sol[:idx] + [propuesta] + sol[idx+1:])
                 mejores_opciones.append((costo, prof, patron, hora, salon))
 
         if not mejores_opciones:
@@ -1911,7 +2000,11 @@ class TabuScheduler:
                     brecha = clases[i+1][0] - clases[i][1]
                     if brecha > 30:
                         penalty += brecha * 2
-        return penalty
+        # Las horas en punto que completan un par del mismo docente/salón
+        # no se penalizan. Los inicios alternativos aislados siguen siendo
+        # el último recurso, antes de optimizar días, salones y huecos.
+        aisladas = self._contar_inicios_alternativos_aislados(sol)
+        return aisladas + penalty / (1 + penalty)
 
     def _mutar_compactacion(self, sol):
         idx = random.randrange(len(sol))
@@ -1922,6 +2015,32 @@ class TabuScheduler:
         patrones = self._patrones_validos_para_profesor(s, prof)
         salones = self._salones_validos_para(s, prof, sol, idx)
         mejor, costo_mejor = sol, self._costo_compactacion(sol)
+
+        def considerar(a):
+            nonlocal mejor, costo_mejor
+            if self._asignacion_local_valida(idx, a, sol):
+                vecino = sol[:idx] + [a] + sol[idx+1:]
+                costo = self._costo_compactacion(vecino)
+                if costo < costo_mejor:
+                    mejor, costo_mejor = vecino, costo
+
+        # Probar explícitamente los vecinos a 90 minutos de otra clase MJ.
+        # No depender del azar para descubrir pares como 14:00 y 15:30.
+        for patron in patrones:
+            if not self._inicios_alternativos_para_patron(s, patron):
+                continue
+            horas = set(self._horas_validas_para_profesor(s, prof, patron))
+            for j, otra in enumerate(sol):
+                if (j == idx or otra['profesor'] != prof
+                        or otra['salon'] not in salones
+                        or not self._inicios_alternativos_para_patron(
+                            otra['seccion'], otra['patron'])):
+                    continue
+                for ini in (otra['ini'] - 90, otra['ini'] + 90):
+                    if ini in horas:
+                        considerar({'seccion': s, 'profesor': prof,
+                                    'salon': otra['salon'], 'patron': patron, 'ini': ini})
+
         for _ in range(20):
             if not patrones or not salones:
                 break
@@ -1929,13 +2048,8 @@ class TabuScheduler:
             horas = self._horas_validas_para_profesor(s, prof, patron)
             if not horas:
                 continue
-            a = {'seccion': s, 'profesor': prof, 'salon': random.choice(salones),
-                 'patron': patron, 'ini': random.choice(horas)}
-            if self._asignacion_local_valida(idx, a, sol):
-                vecino = sol[:idx] + [a] + sol[idx+1:]
-                costo = self._costo_compactacion(vecino)
-                if costo < costo_mejor:
-                    mejor, costo_mejor = vecino, costo
+            considerar({'seccion': s, 'profesor': prof, 'salon': random.choice(salones),
+                        'patron': patron, 'ini': random.choice(horas)})
         return mejor, costo_mejor
 
     def _compactar_solucion(self, sol, iteraciones=2000, progreso=None):
@@ -2058,20 +2172,14 @@ class TabuScheduler:
                 continue
 
             patron = random.choice(patrones)
-            horas_posibles = set(self._horas_validas_para_profesor(s, prof, patron))
-            for dia, contrib in patron['days'].items():
-                duracion = contrib * 50
-                horas_dia = [h for h in self.bloques if h >= self.limite_operativo[0] and h + duracion <= self.limite_operativo[1]]
-                if dia in ["Ma", "Ju"]:
-                    horas_dia = [h for h in horas_dia if not (max(h, self.hora_universal[0]) < min(h+duracion, self.hora_universal[1]))]
-                if s.creditos == 3 and contrib >= 3:
-                    horas_dia = [h for h in horas_dia if h >= 930]
-                horas_posibles = horas_posibles.intersection(set(horas_dia))
-                if not horas_posibles:
-                    break
+            horas_posibles = self._horas_validas_para_profesor(s, prof, patron)
             if not horas_posibles:
                 continue
-            hora = random.choice(list(horas_posibles))
+            ordinarias = [h for h in horas_posibles
+                          if not self._es_inicio_alternativo(s, patron, h)]
+            # Reservar los primeros intentos para la grilla ordinaria; los
+            # restantes pueden explorar también los recursos adicionales.
+            hora = random.choice(ordinarias if _ < 20 and ordinarias else horas_posibles)
             
 
             salones_cand = self._salones_validos_para(s, prof, sol, idx)
@@ -2087,7 +2195,7 @@ class TabuScheduler:
         
         if not mejores_opciones:
             return nuevo, self._costo_total(nuevo, solo_duros=True)
-        mejores_opciones.sort(key=lambda x: x[0])
+        mejores_opciones.sort(key=lambda x: (x[0], self._es_inicio_alternativo(s, x[2], x[3])))
         mejor = mejores_opciones[0]
         nuevo[idx] = {'seccion': s, 'profesor': mejor[1], 'salon': mejor[4], 'patron': mejor[2], 'ini': mejor[3]}
         return nuevo, mejor[0]
@@ -2189,7 +2297,11 @@ class TabuScheduler:
             'estado': estado, 'detalle': detalle,
             'fraccion': 1.0 if estado == 'completada' else min(1.0, iteracion / max(1, iteraciones)),
             'conflictos_fuertes': int(self._costo_total(sol, solo_duros=True) // 10000),
-            'conflictos_suaves': suaves, 'costo_suave': 2 * suaves,
+            'conflictos_suaves': suaves,
+            'inicios_alternativos_mj': self._contar_inicios_alternativos(sol),
+            'inicios_alternativos_aislados': self._contar_inicios_alternativos_aislados(sol),
+            'secciones_mj_encadenadas': len(self._indices_mj_encadenados(sol)),
+            'costo_suave': self._costo_suave_horario(sol),
             'costo_total': costo_total, 'fitness': 10000 / (10000 + costo_total),
             'tiempo_fase': ahora - inicio_fase, 'tiempo_total': ahora - inicio_total,
         }
@@ -2810,6 +2922,11 @@ def formatear_progreso_optimizacion(datos):
         f"**Tiempo de fase:** {datos['tiempo_fase']:.1f} s | "
         f"**Tiempo total:** {datos['tiempo_total']:.1f} s"
     )
+    if 'inicios_alternativos_mj' in datos:
+        texto += f" | **Secciones con inicio alternativo MJ:** {datos['inicios_alternativos_mj']}"
+    if 'secciones_mj_encadenadas' in datos:
+        texto += (f" | **Secciones MJ encadenadas:** {datos['secciones_mj_encadenadas']}"
+                  f" | **Alternativas aisladas:** {datos['inicios_alternativos_aislados']}")
     if 'costo_compactacion' in datos:
         texto += f" | **Costo de compactación:** {datos['costo_compactacion']:.2f}"
     if datos['detalle']:
@@ -2951,6 +3068,12 @@ def main():
                 st.write(f"- {error}")
             return
         st.success(f"✅ Optimización completada en {st.session_state.elapsed_time:.2f} segundos.")
+        alternativas_mj = st.session_state.scheduler._contar_inicios_alternativos(st.session_state.mejor_sol)
+        if alternativas_mj:
+            encadenadas_mj = len(st.session_state.scheduler._indices_mj_encadenados(st.session_state.mejor_sol))
+            st.info(f"Se usaron inicios alternativos de martes y jueves en {alternativas_mj} secciones. "
+                    f"Hay {encadenadas_mj} secciones MJ encadenadas con 15 minutos de cambio, "
+                    "con el mismo docente y salón. Los descansos obligatorios siguen vigentes.")
         pendientes = sum(a['profesor'] == 'POR ASIGNAR' for a in st.session_state.mejor_sol)
         if pendientes:
             st.warning(f"Hay {pendientes} secciones con el docente provisional POR ASIGNAR. "
