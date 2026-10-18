@@ -562,10 +562,40 @@ PATRONES = {
         {"name": "Ma-Mi-Ju-Vi", "days": {"Ma": 1, "Mi": 1, "Ju": 1, "Vi": 2}},
     ]
 }
+def duracion_sesion_minutos(horas_academicas):
+    """Tiempo de calendario: 50, 110, 170...; la sesión de 1.5 sigue en 75.
+
+    Los bloques enteros incluyen 10 minutos entre períodos de 50 minutos.
+    No confundir esta reserva con los minutos de docencia o con los créditos.
+    """
+    horas = float(horas_academicas)
+    if not math.isfinite(horas) or horas <= 0:
+        raise ValueError("La duración académica debe ser positiva y finita.")
+    if horas == 1.5:
+        return 75
+    if not horas.is_integer():
+        raise ValueError("Usa bloques académicos enteros o una sesión de 1.5 (75 minutos).")
+    return int(horas) * 60 - 10
+
+
+def segmentos_docencia_sesion(inicio, horas_academicas):
+    """Devuelve los intervalos impartidos; los recesos internos no son docencia.
+
+    El salón se reserva durante toda duracion_sesion_minutos(). Las pausas
+    de 10 minutos no reinician el descanso obligatorio de una hora.
+    """
+    duracion_sesion_minutos(horas_academicas)  # Validar la misma plantilla.
+    horas = float(horas_academicas)
+    if horas == 1.5:
+        return [(inicio, inicio + 75)]
+    return [(inicio + 60 * i, inicio + 60 * i + 50)
+            for i in range(int(horas))]
+
+
 def format_horario(patron, h_ini):
     parts = []
     for dia, contrib in patron['days'].items():
-        mins_duracion = int(contrib * 50)
+        mins_duracion = duracion_sesion_minutos(contrib)
         h_fin = h_ini + mins_duracion
         parts.append(f"{dia}: {mins_to_str(h_ini)}-{mins_to_str(h_fin)}")
     return " | ".join(parts)
@@ -956,8 +986,8 @@ class TabuScheduler:
                 continue
             for dia, contrib in asign['patron']['days'].items():
                 ini = asign['ini']
-                fin = ini + int(contrib * self.MINUTOS_HORA_ACADEMICA)
-                por_profesor_dia.setdefault((asign['profesor'], dia), []).append((ini, fin))
+                por_profesor_dia.setdefault((asign['profesor'], dia), []).extend(
+                    segmentos_docencia_sesion(ini, contrib))
 
         errores = []
         for (profesor, dia), intervalos in por_profesor_dia.items():
@@ -992,7 +1022,7 @@ class TabuScheduler:
                 eventos = []
                 for a in sol:
                     if a['salon'] == salon and dia in a['patron']['days']:
-                        fin = a['ini'] + int(a['patron']['days'][dia] * 50)
+                        fin = a['ini'] + duracion_sesion_minutos(a['patron']['days'][dia])
                         eventos.extend([(a['ini'], a['seccion'].cupo), (fin, -a['seccion'].cupo)])
                 ocupacion = 0
                 for _, delta in sorted(eventos):
@@ -1018,6 +1048,7 @@ class TabuScheduler:
             if not grupo or grupo.intersection(self.mega_salones):
                 continue
             obligadas = [s for s in self.secciones if opciones[s.cod] and opciones[s.cod].issubset(grupo)]
+            # Cota inferior de docencia: la ocupación con recesos puede ser mayor.
             necesarios = sum(s.creditos * 50 for s in obligadas)
             disponibles = len(grupo) * minutos_salon
             if necesarios > disponibles:
@@ -1050,8 +1081,8 @@ class TabuScheduler:
             for dia, contrib in patron['days'].items():
                 if dia not in a['patron']['days']:
                     continue
-                fin = ini + int(contrib * 50)
-                fin_otro = a['ini'] + int(a['patron']['days'][dia] * 50)
+                fin = ini + duracion_sesion_minutos(contrib)
+                fin_otro = a['ini'] + duracion_sesion_minutos(a['patron']['days'][dia])
                 if max(ini, a['ini']) >= min(fin, fin_otro):
                     continue
                 if a['profesor'] == prof and prof != 'GRADUADOS':
@@ -1078,7 +1109,7 @@ class TabuScheduler:
                 for a in grupo:
                     if dia in a['patron']['days']:
                         eventos.extend([(a['ini'], a['seccion'].cupo),
-                            (a['ini'] + int(a['patron']['days'][dia] * 50), -a['seccion'].cupo)])
+                            (a['ini'] + duracion_sesion_minutos(a['patron']['days'][dia]), -a['seccion'].cupo)])
                 ocupacion = 0
                 for _, delta in sorted(eventos):
                     ocupacion += delta
@@ -1118,7 +1149,7 @@ class TabuScheduler:
             return []
         errores = []
         for dia, contrib in patron['days'].items():
-            fin = ini + int(contrib * 50)
+            fin = ini + duracion_sesion_minutos(contrib)
             if obj.pref_dias_set and dia not in obj.pref_dias_set:
                 errores.append(f"PREF_DIAS: {dia} no está permitido")
             if obj.pref_horas == 'AM' and fin > 720:
@@ -1142,7 +1173,7 @@ class TabuScheduler:
                 continue
             valido = True
             for dia, contrib in patron['days'].items():
-                fin = ini + int(contrib * 50)
+                fin = ini + duracion_sesion_minutos(contrib)
                 if ini < self.limite_operativo[0] or fin > self.limite_operativo[1]:
                     valido = False
                 if dia in ['Ma', 'Ju'] and max(ini, self.hora_universal[0]) < min(fin, self.hora_universal[1]):
@@ -1154,44 +1185,51 @@ class TabuScheduler:
         return horas
 
     def _caben_secciones_obligatorias(self, secciones, prof, max_nodos=10000):
-        # Prueba local de imposibilidad. Ignora salones y otros docentes:
-        # si ni siquiera así caben, tampoco cabe el horario completo.
+        # Prueba local: reservar el calendario completo y contar solo docencia.
+        # Ignora salones y otros docentes, por lo que no prueba factibilidad global.
         dominios = []
         for s in secciones:
             opciones = []
             for patron in self._patrones_validos_para_profesor(s, prof):
                 for ini in self._horas_validas_para_profesor(s, prof, patron):
-                    opciones.append([(dia, ini, ini + int(c * 50)) for dia, c in patron['days'].items()])
+                    opciones.append([
+                        (dia, ini, ini + duracion_sesion_minutos(c),
+                         segmentos_docencia_sesion(ini, c))
+                        for dia, c in patron['days'].items()])
             if not opciones:
                 return False
             dominios.append(opciones)
         dominios.sort(key=len)
         ocupados = {dia: [] for dia in ['Lu', 'Ma', 'Mi', 'Ju', 'Vi']}
+        docencia = {dia: [] for dia in ocupados}
         nodos = 0
 
         def buscar(i):
             nonlocal nodos
             nodos += 1
             if nodos > max_nodos:
-                return None  # Límite de búsqueda: no demuestra imposibilidad.
+                return None  # No demuestra imposibilidad al agotar la búsqueda.
             if i == len(dominios):
                 return True
             for opcion in dominios[i]:
-                if any(max(ini, a) < min(fin, b) for dia, ini, fin in opcion for a, b in ocupados[dia]):
+                if any(max(ini, a) < min(fin, b)
+                       for dia, ini, fin, segmentos in opcion
+                       for a, b in ocupados[dia]):
                     continue
-                # La factibilidad inicial debe respetar también el descanso.
                 if any(
                     minutos > self.MAX_DOCENCIA_SIN_DESCANSO
-                    for dia, ini, fin in opcion
+                    for dia, ini, fin, segmentos in opcion
                     for _, _, minutos in self._rachas_docencia_sin_descanso(
-                        ocupados[dia] + [(ini, fin)])
+                        docencia[dia] + segmentos)
                 ):
                     continue
-                for dia, ini, fin in opcion:
+                for dia, ini, fin, segmentos in opcion:
                     ocupados[dia].append((ini, fin))
+                    docencia[dia].extend(segmentos)
                 resultado = buscar(i + 1)
-                for dia, _, _ in opcion:
+                for dia, _, _, segmentos in opcion:
                     ocupados[dia].pop()
+                    del docencia[dia][-len(segmentos):]
                 if resultado is not False:
                     return resultado
             return False
@@ -1548,7 +1586,7 @@ class TabuScheduler:
 
 
             for dia, contrib in patron['days'].items():
-                fin = ini + int(contrib * 50)
+                fin = ini + duracion_sesion_minutos(contrib)
                 if dia in ["Ma", "Ju"] and max(ini, self.hora_universal[0]) < min(fin, self.hora_universal[1]):
                     conflicts += 10000
                 if s.creditos == 3 and contrib >= 3 and ini < 930:
@@ -1594,11 +1632,11 @@ class TabuScheduler:
                 for r in recibe:
                     for dia_d, contrib_d in d['patron']['days'].items():
                         ini_d = d['ini']
-                        fin_d = ini_d + int(contrib_d * 50)
+                        fin_d = ini_d + duracion_sesion_minutos(contrib_d)
                         for dia_r, contrib_r in r['patron']['days'].items():
                             if dia_d == dia_r:
                                 ini_r = r['ini']
-                                fin_r = ini_r + int(contrib_r * 50)
+                                fin_r = ini_r + duracion_sesion_minutos(contrib_r)
                                 if max(ini_d, ini_r) < min(fin_d, fin_r):
                                     conflicts += 10000
         # ------------------------------------------------------------
@@ -1665,7 +1703,7 @@ class TabuScheduler:
             
             
             for dia, contrib in patron['days'].items():
-                fin = ini + int(contrib * 50)
+                fin = ini + duracion_sesion_minutos(contrib)
                 if dia in ["Ma", "Ju"] and max(ini, self.hora_universal[0]) < min(fin, self.hora_universal[1]):
                     conflictos_list.append(f"Sección {s.cod}: violación de hora universal el {dia}")
                 if s.creditos == 3 and contrib >= 3 and ini < 930:
@@ -1709,11 +1747,11 @@ class TabuScheduler:
                 for r in recibe:
                     for dia_d, contrib_d in d['patron']['days'].items():
                         ini_d = d['ini']
-                        fin_d = ini_d + int(contrib_d * 50)
+                        fin_d = ini_d + duracion_sesion_minutos(contrib_d)
                         for dia_r, contrib_r in r['patron']['days'].items():
                             if dia_d == dia_r:
                                 ini_r = r['ini']
-                                fin_r = ini_r + int(contrib_r * 50)
+                                fin_r = ini_r + duracion_sesion_minutos(contrib_r)
                                 if max(ini_d, ini_r) < min(fin_d, fin_r):
                                     conflictos_list.append(f"Graduado {grad}: conflicto de doble rol entre {d['seccion'].cod} y {r['seccion'].cod} el {dia_d}")
         conflictos_list.extend(self._evaluar_salon_por_profesor(sol)[1])
@@ -1921,8 +1959,8 @@ class TabuScheduler:
                     if asign2['profesor'] == prof:
                         for dia2, contrib2 in asign2['patron']['days'].items():
                             if dia2 in patron['days']:
-                                fin_actual = hora + int(patron['days'][dia2] * 50)
-                                fin_exist = asign2['ini'] + int(contrib2 * 50)
+                                fin_actual = hora + duracion_sesion_minutos(patron['days'][dia2])
+                                fin_exist = asign2['ini'] + duracion_sesion_minutos(contrib2)
                                 if max(hora, asign2['ini']) < min(fin_actual, fin_exist):
                                     conflicto = True
                                     break
@@ -1931,8 +1969,8 @@ class TabuScheduler:
                     if asign2['salon'] == salon:
                         for dia2, contrib2 in asign2['patron']['days'].items():
                             if dia2 in patron['days']:
-                                fin_actual = hora + int(patron['days'][dia2] * 50)
-                                fin_exist = asign2['ini'] + int(contrib2 * 50)
+                                fin_actual = hora + duracion_sesion_minutos(patron['days'][dia2])
+                                fin_exist = asign2['ini'] + duracion_sesion_minutos(contrib2)
                                 if max(hora, asign2['ini']) < min(fin_actual, fin_exist):
                                     if salon in self.mega_salones and s.es_fusionable and asign2['seccion'].es_fusionable:
                                         if s.cupo + asign2['seccion'].cupo <= self.salon_capacidad.get(salon, 0):
@@ -1993,7 +2031,7 @@ class TabuScheduler:
                 for asign in asigns:
                     if dia in asign['patron']['days']:
                         ini = asign['ini']
-                        fin = ini + int(asign['patron']['days'][dia] * 50)
+                        fin = ini + duracion_sesion_minutos(asign['patron']['days'][dia])
                         clases.append((ini, fin))
                 clases.sort()
                 for i in range(len(clases)-1):
@@ -2275,7 +2313,7 @@ class TabuScheduler:
                 eventos = []
                 for a in sol:
                     if a['salon'] == salon and dia in a['patron']['days']:
-                        fin = a['ini'] + int(a['patron']['days'][dia] * 50)
+                        fin = a['ini'] + duracion_sesion_minutos(a['patron']['days'][dia])
                         eventos.extend([(a['ini'], a['seccion'].cupo), (fin, -a['seccion'].cupo)])
                 ocupacion = 0
                 for _, delta in sorted(eventos):
@@ -2435,7 +2473,7 @@ def generar_heatmap_plotly(scheduler, solucion):
             if dia not in dias_semana:
                 continue
             dia_idx = dias_semana.index(dia)
-            duracion = int(contrib * 50)
+            duracion = duracion_sesion_minutos(contrib)
             for minuto in range(ini, ini + duracion, 30):
                 if minuto in horas_del_dia:
                     hora_idx = horas_del_dia.index(minuto)
@@ -2643,7 +2681,7 @@ def generar_calendario_visual(solucion, scheduler, filtro_prof=None, filtro_salo
                     continue
                 dia_idx = dias_individual.index(dia_abr)
                 y_ini = h_ini_mins / 60
-                y_fin = (h_ini_mins + int(duracion_bloques * 50)) / 60
+                y_fin = (h_ini_mins + duracion_sesion_minutos(duracion_bloques)) / 60
                 if y_fin <= hora_inicio or y_ini >= hora_fin:
                     continue
                 key = (dia_abr, h_ini_mins)
@@ -2662,7 +2700,7 @@ def generar_calendario_visual(solucion, scheduler, filtro_prof=None, filtro_salo
                 fig.add_annotation(x=(x0 + x1) / 2, y=(y_ini + y_fin) / 2, text=texto,
                                    showarrow=False, align="center",
                                    font=dict(color="white", size=10))
-                if int(duracion_bloques * 50) > 50:
+                if duracion_sesion_minutos(duracion_bloques) > 50:
                     fig.add_shape(type="line", x0=x0, x1=x1, y0=y_fin - 0.03, y1=y_fin - 0.03,
                                   line=dict(color="#ffffff", width=3))
                     fig.add_annotation(
@@ -2708,7 +2746,7 @@ def generar_calendario_visual(solucion, scheduler, filtro_prof=None, filtro_salo
                 x_end = x_start + ancho_card
 
                 y_ini = h_ini_mins / 60
-                y_fin = (h_ini_mins + int(duracion_bloques * 50)) / 60
+                y_fin = (h_ini_mins + duracion_sesion_minutos(duracion_bloques)) / 60
 
                 # Dibujar Tarjeta
                 fig.add_shape(type="rect", x0=x_start, x1=x_end, y0=y_ini, y1=y_fin,
