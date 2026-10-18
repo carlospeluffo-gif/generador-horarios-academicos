@@ -695,6 +695,11 @@ def compatible_tipo(tipos_permitidos_curso, salon_tipo):
 # 4. MOTOR DE OPTIMIZACIÓN MEJORADO (CON REPARACIÓN AGRESIVA REFORZADA)
 # ==============================================================================
 class TabuScheduler:
+    # Hasta tres horas académicas de docencia antes de un descanso completo.
+    MINUTOS_HORA_ACADEMICA = 50
+    MAX_DOCENCIA_SIN_DESCANSO = 3 * MINUTOS_HORA_ACADEMICA
+    DESCANSO_MINIMO = 60  # Minutos reales entre el final y el siguiente inicio.
+
     def __init__(self, df_cursos, df_profes, df_salones, zona, df_grad=None):
         self.zona = zona
         
@@ -850,6 +855,53 @@ class TabuScheduler:
         self.mejor_costo = self._costo_total(self.solucion)
         self.historial_costos = [self.mejor_costo]
 
+    def _rachas_docencia_sin_descanso(self, intervalos):
+        """Agrupa docencia mientras no haya un descanso de 60 minutos.
+
+        Suma minutos impartidos, sin contar los huecos cortos. Un descanso
+        de al menos DESCANSO_MINIMO reinicia la cuenta. Los solapamientos
+        se cuentan una vez aquí y se rechazan por la regla de cruces.
+        Devuelve (inicio, final, minutos_docencia) por cada racha.
+        """
+        ordenados = sorted(intervalos)
+        if not ordenados:
+            return
+        inicio_racha, fin_racha = ordenados[0]
+        minutos = fin_racha - inicio_racha
+        for ini, fin in ordenados[1:]:
+            if ini - fin_racha >= self.DESCANSO_MINIMO:
+                yield inicio_racha, fin_racha, minutos
+                inicio_racha, fin_racha, minutos = ini, fin, fin - ini
+            else:
+                minutos += max(0, fin - max(ini, fin_racha))
+                fin_racha = max(fin_racha, fin)
+        yield inicio_racha, fin_racha, minutos
+
+    def _incumplimientos_descanso_docente(self, sol):
+        """Regla fuerte compartida por generación, costo y auditoría final."""
+        por_profesor_dia = {}
+        for asign in sol:
+            if not asign or asign['profesor'] not in self.profesores:
+                continue
+            for dia, contrib in asign['patron']['days'].items():
+                ini = asign['ini']
+                fin = ini + int(contrib * self.MINUTOS_HORA_ACADEMICA)
+                por_profesor_dia.setdefault((asign['profesor'], dia), []).append((ini, fin))
+
+        errores = []
+        for (profesor, dia), intervalos in por_profesor_dia.items():
+            for ini, fin, minutos in self._rachas_docencia_sin_descanso(intervalos):
+                if minutos > self.MAX_DOCENCIA_SIN_DESCANSO:
+                    errores.append(
+                        f"Profesor {profesor} el {dia}: acumula {minutos} minutos de docencia "
+                        f"({minutos / self.MINUTOS_HORA_ACADEMICA:g} horas académicas) "
+                        f"entre {mins_to_str(ini)} y {mins_to_str(fin)} sin un descanso "
+                        f"de al menos {self.DESCANSO_MINIMO} minutos. "
+                        f"Máximo permitido: {self.MAX_DOCENCIA_SIN_DESCANSO} minutos "
+                        "(3 horas académicas)."
+                    )
+        return errores
+
     def _errores_estructura_y_aforo(self, sol):
         errores = []
         for a in sol:
@@ -944,6 +996,10 @@ class TabuScheduler:
                     return False
                 if base in self.graduados_reciben.get(a['profesor'], []):
                     return False
+        if prof in self.profesores:
+            asignaciones_profesor = [a for a in otras if a['profesor'] == prof] + [asign]
+            if self._incumplimientos_descanso_docente(asignaciones_profesor):
+                return False
         if salon in self.mega_salones:
             grupo = [a for a in otras if a['salon'] == salon] + [asign]
             for dia in patron['days']:
@@ -1051,6 +1107,14 @@ class TabuScheduler:
                 return True
             for opcion in dominios[i]:
                 if any(max(ini, a) < min(fin, b) for dia, ini, fin in opcion for a, b in ocupados[dia]):
+                    continue
+                # La factibilidad inicial debe respetar también el descanso.
+                if any(
+                    minutos > self.MAX_DOCENCIA_SIN_DESCANSO
+                    for dia, ini, fin in opcion
+                    for _, _, minutos in self._rachas_docencia_sin_descanso(
+                        ocupados[dia] + [(ini, fin)])
+                ):
                     continue
                 for dia, ini, fin in opcion:
                     ocupados[dia].append((ini, fin))
@@ -1234,7 +1298,7 @@ class TabuScheduler:
                 problemas.append(f"{p}: carga candidata total {carga_posible:g} < CARGA_MIN {obj.carga_min:g} (tolerancia original 0.5).")
             if self._caben_secciones_obligatorias(obligadas[p], p) is False:
                 codigos = ', '.join(s.cod for s in obligadas[p])
-                problemas.append(f"{p}: sus secciones obligatorias no caben sin cruces con su disponibilidad, patrones y grilla institucional: {codigos}.")
+                problemas.append(f"{p}: sus secciones obligatorias no caben sin cruces y respetando los descansos obligatorios, su disponibilidad, patrones y grilla institucional: {codigos}.")
 
         for s in self.secciones:
             if getattr(s, 'profesor_pendiente_permitido', False):
@@ -1372,7 +1436,10 @@ class TabuScheduler:
             T *= 0.995
 
     def _costo_total(self, sol, solo_duros=False, evaluar_carga_min=True):
-        conflicts = 10000 * len(self._errores_estructura_y_aforo(sol))
+        conflicts = 10000 * (
+            len(self._errores_estructura_y_aforo(sol))
+            + len(self._incumplimientos_descanso_docente(sol))
+        )
         occ_prof = {}
         occ_salon = {}
         carga_prof = {p: 0.0 for p in self.profesores}
@@ -1489,6 +1556,7 @@ class TabuScheduler:
 
     def _obtener_conflictos(self, sol):
         conflictos_list = self._errores_estructura_y_aforo(sol)
+        conflictos_list.extend(self._incumplimientos_descanso_docente(sol))
         occ_prof = {}
         occ_salon = {}
         carga_prof = {p: 0.0 for p in self.profesores}
