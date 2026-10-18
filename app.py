@@ -596,6 +596,48 @@ def format_horario(patron, h_ini):
         parts.append(f"{dia}: {mins_to_str(h_ini)}-{mins_to_str(h_fin)}")
     return " | ".join(parts)
 
+def exportar_uso_salones(df):
+    """Excel del horario validado: listado general y una hoja por salón."""
+    out = io.BytesIO()
+    datos = df.sort_values('Salón', kind='stable').copy()
+    with pd.ExcelWriter(out, engine='xlsxwriter') as writer:
+        libro = writer.book
+        encabezado = libro.add_format({
+            'bold': True, 'font_color': 'white', 'bg_color': '#0F6F3A',
+            'text_wrap': True, 'valign': 'vcenter', 'border': 1})
+        texto = libro.add_format({'text_wrap': True, 'valign': 'top'})
+        anchos = {'ID': 19, 'Asignatura': 16, 'Estudiantes (Cupo)': 21,
+                  'Créditos Reales': 18, 'Persona': 44, 'Días': 20,
+                  'Horario': 80, 'Salón': 15}
+
+        def escribir_hoja(nombre, tabla):
+            tabla.to_excel(writer, sheet_name=nombre, index=False)
+            hoja = writer.sheets[nombre]
+            hoja.freeze_panes(1, 0)
+            if len(tabla.columns):
+                hoja.autofilter(0, 0, len(tabla), len(tabla.columns) - 1)
+            hoja.set_default_row(45)
+            hoja.set_row(0, 30)
+            for columna, titulo in enumerate(tabla.columns):
+                hoja.write(0, columna, titulo, encabezado)
+                hoja.set_column(columna, columna, anchos.get(titulo, 22), texto)
+
+        escribir_hoja('Uso de salones', datos)
+        usados = {'uso de salones'}
+        for salon, tabla in datos.groupby('Salón', sort=False, dropna=False):
+            limpio = re.sub(r'[\[\]:*?/\\]', '_', str(salon)).strip().strip("'")
+            base = ('Salon_' + (limpio or 'Sin_nombre'))[:31]
+            nombre = base
+            numero = 2
+            while nombre.casefold() in usados:
+                sufijo = f'_{numero}'
+                nombre = base[:31 - len(sufijo)] + sufijo
+                numero += 1
+            usados.add(nombre.casefold())
+            escribir_hoja(nombre, tabla)
+    return out.getvalue()
+
+
 def exportar_todo(df):
     out = io.BytesIO()
     with pd.ExcelWriter(out, engine='xlsxwriter') as writer:
@@ -3142,6 +3184,13 @@ def main():
                     subset = df_master[df_master['Asignatura'] == c]
                     st.table(subset[['ID', 'Estudiantes (Cupo)', 'Persona', 'Días', 'Horario', 'Salón']])
             with f3:
+                st.download_button(
+                    "💾 EXPORTAR USO DE TODOS LOS SALONES",
+                    data=exportar_uso_salones(df_master),
+                    file_name="Uso_de_Salones_UPRM.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="descargar_uso_salones",
+                    use_container_width=True)
                 lista_salones = sorted(df_master['Salón'].unique())
                 if lista_salones:
                     sl = st.selectbox("Seleccionar Salón", lista_salones)
